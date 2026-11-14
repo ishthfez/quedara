@@ -21,6 +21,21 @@
   const sub = {}; try { Object.assign(sub, JSON.parse(sessionStorage.getItem('halaqat_sub') || '{}')); } catch (e) { /* ignore */ }
   const saveSub = () => { try { sessionStorage.setItem('halaqat_sub', JSON.stringify(sub)); } catch (e) { /* ignore */ } };
 
+  /* «الاشتراكات» بلا بحث تعرض حتى 300 طالب دفعة واحدة؛ على الهاتف تكفي 60 حتى يُطلب المزيد (البحث يضيّقها) */
+  const feesBase = adminViews.fees;
+  let feesAll = false, feesN = -1;
+  if (feesBase) adminViews.fees = () => {
+    const h = feesBase(), cap = matchMedia('(max-width:860px)').matches ? 60 : 300;
+    const i = h.indexOf('<div class="tbl"><table>'), end = i < 0 ? -1 : h.indexOf('</table>', i);
+    if (end < 0 || h.indexOf('<div class="tbl"><table>', end) > -1) return h; // العرض المجمّع بالحلقات يبقى كما هو
+    const parts = h.slice(i, end).split('<tr>'), N = parts.length - 2;
+    if (N !== feesN) { feesAll = false; feesN = N; }
+    if (feesAll || N <= cap) return h;
+    return h.slice(0, i) + parts.slice(0, 2 + cap).join('<tr>') + '</table></div>'
+      + `<p class="muted" style="margin:.6rem 0 0">يظهر أول ${cap} طالبًا. اكتب في مربعات البحث للتضييق، أو <button type="button" class="btn sm" data-feesall>عرض المزيد</button></p>`
+      + h.slice(h.indexOf('</div>', end) + 6);
+  };
+  document.addEventListener('click', e => { if (e.target.closest('[data-feesall]')) { feesAll = true; render(); } });
   /* القسم الجامع يعرض شريط تبويباته ثم محتوى التبويب المختار (بالدالة الأصلية لكل قسم) */
   const ORIG = {};
   Object.entries(GROUPS).forEach(([g, subs]) => {
@@ -66,7 +81,42 @@
     badge('fees', (db.collections || []).filter(c => c.status === 'sent').length);
   }
 
+  /* ===== سرعة الانتقال بين الأقسام =====
+     تثبيت رؤوس الجداول كان يقيس كل جدول ثم يعدّله واحدًا بعد الآخر، فيعيد المتصفح حساب الصفحة كلها مرة لكل جدول
+     (في «الأماكن والحلقات» 22 جدولًا ← أكثر من ثانية على الهاتف). صار: كل القياسات أولًا ثم كل التعديلات،
+     والجداول القصيرة (أقل من 12 صفًا) لا تحتاج تثبيتًا أصلًا. */
+  const LEAD = new Set(['', '#', 'م', 'الكود', 'مسلسل']);
+  function fastFreeze() {
+    const jobs = [];
+    document.querySelectorAll('main .tbl table').forEach(tbl => {
+      if (tbl.rows.length < 12) return;
+      const { rows, grid, H } = tableGrid(tbl);
+      if (!H || H >= rows.length || !grid[H]) return;
+      jobs.push({ tbl, rows, grid, H });
+    });
+    /* القياس: مرة واحدة لكل الجداول */
+    jobs.forEach(j => {
+      j.w = j.grid[j.H].map(x => x?.td.offsetWidth || 0);
+      j.h = j.rows.slice(0, j.H).map(r => r.offsetHeight);
+      j.sig = j.rows.length + ':' + j.w.join(',') + ':' + j.h.join(',');
+    });
+    /* التعديل: بلا أي قياس بينها */
+    jobs.forEach(({ tbl, rows, grid, H, w, h, sig }) => {
+      if (tbl._frz === sig) return;
+      tbl._frz = sig; tbl.classList.add('frz');
+      let n = 0; while (n < 3 && grid[0][n] && LEAD.has(grid[0][n].td.textContent.trim())) n++;
+      n = Math.min(n + 1, grid[H].length - 1);
+      const off = [0]; for (let c = 0; c < n; c++) off.push(off[c] + (grid[H][c]?.cs === 1 ? w[c] : 0));
+      let top = 0;
+      rows.forEach((tr, ri) => {
+        [...tr.cells].forEach(td => { td.classList.remove('stk-h', 'stk-hl', 'stk-c'); td.style.top = td.style.right = ''; });
+        if (ri < H) { [...tr.cells].forEach(td => { td.classList.add('stk-h'); td.style.top = top + 'px'; if (ri + (td.rowSpan || 1) >= H) td.classList.add('stk-hl'); }); top += h[ri]; }
+      });
+      grid.forEach(r => r.forEach(x => { if (x?.first && x.c0 + x.cs <= n) { x.td.classList.add('stk-c'); x.td.style.right = off[x.c0] + 'px'; } }));
+    });
+  }
   setTimeout(() => {
+    if (typeof freezeTables === 'function' && typeof tableGrid === 'function') freezeTables = fastFreeze;
     const base = render;
     render = function () {
       /* قسم صار تبويبًا: يُفتح القسم الجامع على هذا التبويب */
