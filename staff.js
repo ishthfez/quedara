@@ -163,10 +163,12 @@
     const same = db.halaqat.filter(x => x.teacherId === h.teacherId && x.placeId === h.placeId);
     return 'حلقة ' + t.name + (same.length > 1 ? ' — ' + (timeText(h) || '#' + (same.indexOf(h) + 1)) : '');
   };
-  /* ===== «الطلاب»: أول 200 طالب فقط حتى يُطلب الكل (جدول 1,680 طالبًا يجمّد الهاتف) ===== */
-  const LIMIT = 200; let showAll = false, lastN = -1;
+  /* ===== «الطلاب»: أول 200 طالب (60 على الهاتف) حتى يُطلب الكل (جدول 1,680 طالبًا يجمّد الهاتف) ===== */
+  /* على الهاتف 60 فقط: كل صف يكلّف المعالج، والبحث بالمكان أو الحلقة يضيّق القائمة */
+  let LIMIT = 200, showAll = false, lastN = -1;
   const baseStudents = adminViews.students;
   adminViews.students = () => {
+    LIMIT = matchMedia('(max-width:860px)').matches ? 60 : 200;
     let h = baseStudents();
     const i = h.indexOf('<div class="tbl"><table>'), end = i < 0 ? -1 : h.indexOf('</table>', i);
     if (end < 0) return h;
