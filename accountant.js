@@ -76,9 +76,10 @@
   const byAr = (a, b) => a.t.localeCompare(b.t, 'ar');
   window.QLSuggest = Object.assign(window.QLSuggest || {}, {
     'acc-places': () => db.places.map(p => ({ v: p.id, t: p.name })).sort(byAr),
-    'acc-halaqat': () => db.halaqat.map(h => ({ v: h.id, t: halaqaLabel(h), g: placeName(h) || 'بلا مكان' }))
+    /* تتابع: بعد تحديد المكان لا تظهر إلا حلقاته، وبعد تحديد الحلقة أو المكان لا يظهر إلا طلابهما */
+    'acc-halaqat': () => db.halaqat.filter(h => has(placeName(h), st.qp)).map(h => ({ v: h.id, t: halaqaLabel(h), g: placeName(h) || 'بلا مكان' }))
       .sort((a, b) => (a.g === 'بلا مكان') - (b.g === 'بلا مكان') || a.g.localeCompare(b.g, 'ar') || byAr(a, b)),
-    'acc-students': () => db.students.filter(statusOk).map(s => ({ v: s.id, t: s.name })).sort(byAr)
+    'acc-students': () => db.students.filter(s => { if (!statusOk(s)) return false; if (!st.qh.trim() && !st.qp.trim()) return true; const h = halOf(s); return !!h && (has(halaqaLabel(h), st.qh) || has(h.name, st.qh)) && has(placeName(h), st.qp); }).map(s => ({ v: s.id, t: s.name })).sort(byAr)
   });
   /* اختيار حلقة من القائمة يفتح طلابها مباشرة */
   document.addEventListener('qpick', e => { if (e.target.dataset?.aq === 'qh') { st.open.add(e.detail.value); refresh(); } });
