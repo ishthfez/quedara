@@ -150,9 +150,10 @@
   const byAr = (a, b) => a.t.localeCompare(b.t, 'ar');
   window.QLSuggest = Object.assign(window.QLSuggest || {}, {
     'fee-places': () => db.places.map(p => ({ v: p.id, t: p.name })).sort(byAr),
-    'fee-halaqat': () => db.halaqat.map(h => ({ v: h.id, t: halaqaLabel(h), g: placeName(h) || 'بلا مكان' }))
+    /* تتابع: بعد تحديد المكان لا تظهر إلا حلقاته، وبعد تحديد الحلقة أو المكان لا يظهر إلا طلابهما */
+    'fee-halaqat': () => db.halaqat.filter(h => has(placeName(h), st.qp)).map(h => ({ v: h.id, t: halaqaLabel(h), g: placeName(h) || 'بلا مكان' }))
       .sort((a, b) => (a.g === 'بلا مكان') - (b.g === 'بلا مكان') || a.g.localeCompare(b.g, 'ar') || byAr(a, b)),
-    'fee-students': () => db.students.map(s => ({ v: s.id, t: s.name })).sort(byAr)
+    'fee-students': () => db.students.filter(s => { if (!st.qh.trim() && !st.qp.trim()) return true; const h = halOf(s); return !!h && halOk(h); }).map(s => ({ v: s.id, t: s.name })).sort(byAr)
   });
   /* اختيار حلقة من القائمة يفتح طلابها مباشرة */
   document.addEventListener('qpick', e => { if (e.target.dataset?.fq === 'qh') { st.open.add(e.detail.value); refresh(); } });
