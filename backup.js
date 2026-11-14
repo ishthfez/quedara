@@ -46,10 +46,19 @@
     loadStatus();
     return statusCard() + `<div class="card"><h2>نسخة فورية</h2>
         <p class="muted" style="margin:0 0 .7rem">نسخة كاملة من الخادم الآن (دون صور الطلاب)، بنفس صيغة نسخ Drive فتصلح للاسترجاع. مفيدة قبل أي تعديل كبير.</p>
-        <button type="button" class="btn primary" data-bknow>تنزيل نسخة كاملة الآن</button></div>
+        <button type="button" class="btn primary" data-bknow>تنزيل نسخة كاملة الآن</button>
+        <p class="muted" style="font-size:.82rem;margin:.9rem 0 .4rem">لحالة خاصة فقط: جهاز سُجّلت عليه بيانات دون إنترنت ولم تصل إلى الخادم بعد — تحفظ ما على هذا الجهاز بصيغة التطبيق القديمة (تُدمج من «الإعدادات» ← «دمج نسخة احتياطية»).</p>
+        <button type="button" class="btn sm" data-act="export">تصدير بيانات هذا الجهاز فقط</button></div>
       <div class="card"><h2>استرجاع نسخة احتياطية</h2>
         <p class="muted" style="margin:0 0 .7rem">اختر ملف نسخة (يبدأ اسمه بـ <code dir="ltr">qulearn-</code>) نزّلته من مجلد «نسخ قرآن احتياطية» على Google Drive أو من «تنزيل نسخة كاملة الآن». تظهر لك محتوياته قبل أي تغيير.</p>
         <div class="bar" style="margin:0"><label class="btn" style="margin:0">اختيار ملف النسخة<input type="file" accept=".json,application/json" data-rsfile hidden></label></div></div>`;
+  };
+  /* الإعدادات: التصدير القديم (من الجهاز) انتقل إلى هذا القسم، ومكانه زر يفتحه */
+  const baseSettings = adminViews.settings;
+  adminViews.settings = () => {
+    const h = baseSettings();
+    return !CLOUD ? h : h.replace('<button class="btn" data-act="export">تصدير نسخة احتياطية</button>', '<button class="btn" data-act="tab" data-v="backup">النسخ الاحتياطية…</button>')
+      .replace('النسخة الاحتياطية مفيدة للأرشفة.', 'النسخ الاحتياطية (التلقائية إلى Drive، والفورية، والاسترجاع) في قسم «النسخ الاحتياطية».');
   };
   async function downloadNow(btn) {
     try {
