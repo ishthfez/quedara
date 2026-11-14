@@ -6,7 +6,8 @@
      days  = كل عدد من الأيام، none = لا يُطلب
    عند انتهاء المدة تظهر شاشة قفل تطلب كلمة المرور (بدل الخروج الكامل) حتى لا يضيع ما سُجّل دون إنترنت ولم يُرسل بعد.
    وفيها «تسجيل الخروج» لتبديل المستخدم.
-   + واجهة الجوال: مربعات العدادات مربعان في كل صف. */
+   + واجهة الجوال: مربعات العدادات مربعان في كل صف.
+   + مزامنة أسرع (كل 30 ثانية) والتطبيق أمام المستخدم. */
 (() => {
   const css = document.createElement('style');
   css.textContent = `
@@ -128,6 +129,16 @@
     }
     db.settings.session_policy = out; save(); render(); toast('حُفظت مدة بقاء تسجيل الدخول');
   });
+  /* ===== مزامنة أسرع: كل 30 ثانية والتطبيق أمام المستخدم (بدل دقيقتين) =====
+     فما يضيفه المدير (حلقة، مكان، طالب…) يظهر عند الآخرين خلال نصف دقيقة تقريبًا.
+     لا تحدث أثناء الكتابة أو مع نافذة مفتوحة حتى لا تُعاد رسم الصفحة، والسؤال عن التغييرات طلب صغير جدًا. */
+  setInterval(() => {
+    if (!CLOUD || document.hidden || locked || !session || ui.refreshing || document.querySelector('.overlay')) return;
+    const a = document.activeElement;
+    if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest('main')) return;
+    if (Date.now() - (ui.syncedAt || 0) < 25000) return;
+    try { cloudRefresh(true); } catch (e) { /* ignore */ }
+  }, 30000);
   /* للاختبار والتشخيص */
   window.QLSession = { reason, lock, policy, markLogin };
 })();
