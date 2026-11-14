@@ -119,7 +119,7 @@ async function provision(items, onProgress) {
 /* ---------------- التحويل بين بيانات التطبيق وجداول الخادم ---------------- */
 const nz = v => (v === '' || v === undefined ? null : v);
 const num = v => (v === '' || v === undefined || v === null || isNaN(+v) ? null : +v);
-const ROLE_COLL = { admin: 'admins', supervisor: 'supervisors', teacher: 'teachers', student: 'students', accountant: 'accountants' };
+const ROLE_COLL = { admin: 'admins', supervisor: 'supervisors', teacher: 'teachers', student: 'students', accountant: 'accountants', placeadmin: 'placeadmins' };
 
 function memberRow(m, role) {
   return {
@@ -138,7 +138,7 @@ function groups(db) {
   /* priv_*: إعدادات خاصة بالمدير (مثل فئات الاشتراكات وخصوماتها) لا يقرؤها غيره على الخادم */
   add('settings', 'settings', ['key'], ['org', 'theme', 'logo', 'block_msgs', 'col_labels', 'session_policy', 'priv_fees', 'priv_perms'].filter(k => db.settings?.[k] !== undefined).map(k => ({ key: k, value: db.settings[k] ?? null })));
   add('places', 'places', ['id'], (db.places || []).map(p => ({ id: p.id, name: p.name, type: p.type || 'مسجد', address: p.address || '' })));
-  add('staff', 'members', ['id'], ['admin', 'supervisor', 'teacher', 'accountant'].flatMap(r => (db[ROLE_COLL[r]] || []).map(m => memberRow(m, r))));
+  add('staff', 'members', ['id'], ['admin', 'supervisor', 'teacher', 'accountant', 'placeadmin'].flatMap(r => (db[ROLE_COLL[r]] || []).map(m => memberRow(m, r))));
   add('halaqat', 'halaqat', ['id'], (db.halaqat || []).map(h => ({ id: h.id, name: h.name || '', teacher_id: nz(h.teacherId), supervisor_id: nz(h.supervisorId), place_id: nz(h.placeId), time: h.time || null })));
   add('students', 'members', ['id'], (db.students || []).map(m => memberRow(m, 'student')));
   add('member_admin', 'member_admin', ['member_id'], (db.teachers || []).filter(t => t.admin && Object.keys(t.admin).length).map(t => ({ member_id: t.id, data: t.admin })));
@@ -152,7 +152,7 @@ function groups(db) {
   if (db.payroll) {
     add('pay_settings', 'pay_settings', ['id'], [{ id: 1, data: P.settings || {} }]);
     add('pay_employees', 'pay_employees', ['id'], (P.employees || []).map(e => ({ id: e.id, code: nz(e.code), name: e.name, role: nz(e.role), sys: nz(e.sys), status: e.status === 'متوقف' ? 'متوقف' : 'نشط', basic: num(e.basic), rate: num(e.rate), incentive: num(e.incentive), transport: num(e.transport), hours: num(e.hours), place: nz(e.place), note: nz(e.note) })));
-    /* صف المرتب يُعرَّف بالموظف والشهر: لو أنشأ جهازان الشهر نفسه يُحدَّث الصف الموجود بدل رفضه */
+    /* صف المرتب يُعرَّف بالموظف والشهر: لو أنشأ جهازان الشهر نفسه يُحدَّث الصف الموجود بدل رفضه */
     add('pay_rows', 'pay_rows', ['id'], lastByKey(P.rows || [], r => r.y + '|' + r.m + '|' + r.eid).map(r => ({ id: r.id, y: +r.y, m: +r.m, emp_id: r.eid, name: nz(r.name), role: nz(r.role), base: num(r.base), extra: num(r.extra), exc: num(r.exc), abs_p: num(r.absP), abs_n: num(r.absN), mtg_p: num(r.mtgP), mtg_n: num(r.mtgN), d_test: num(r.dTest), d_rec: num(r.dRec), d_books: num(r.dBooks), basic: num(r.basic), rate: num(r.rate), incentive: num(r.incentive), transport: num(r.transport), note: r.note || '' })), 'y,m,emp_id');
     add('pay_closed', 'pay_closed', ['y', 'm'], (P.closed || []).map(k => { const [y, m] = String(k).split('-').map(Number); return { y, m }; }).filter(x => x.y && x.m));
     add('absences', 'absences', ['id'], lastByKey(P.absences || [], a => (a.date ? a.eid + '|' + a.date : a.id)).map(a => ({ id: a.id, y: +a.y, m: +a.m, date: a.date || null, emp_id: a.eid, name: nz(a.name), place: nz(a.place), perm: a.perm || '', reason: nz(a.reason), proof: a.proof || '', note: nz(a.note), by_member: isUuid(a.byMember) ? a.byMember : null, by_name: nz(a.by) })), 'emp_id,date');
@@ -186,7 +186,7 @@ function stableUuid(s) {
 }
 function ensureUuids(db) {
   const map = new Map(), fix = o => { if (o && !isUuid(o.id)) { const n = o.id ? stableUuid(o.id) : uuid(); map.set(o.id, n); o.id = n; } };
-  ['admins', 'supervisors', 'teachers', 'students', 'places', 'halaqat', 'attendance', 'records', 'news', 'pending', 'fees'].forEach(k => (db[k] || []).forEach(fix));
+  ['admins', 'supervisors', 'teachers', 'accountants', 'placeadmins', 'students', 'places', 'halaqat', 'attendance', 'records', 'news', 'pending', 'fees'].forEach(k => (db[k] || []).forEach(fix));
   const P = db.payroll;
   if (P) ['employees', 'rows', 'absences'].forEach(k => (P[k] || []).forEach(fix));
   if (!map.size) return false;
@@ -203,12 +203,12 @@ function ensureUuids(db) {
 
 /* ---------------- السحب من الخادم ---------------- */
 function emptyDb() {
-  return { settings: { org: 'إدارة الحلقات القرآنية' }, admins: [], supervisors: [], teachers: [], accountants: [], students: [], places: [], halaqat: [], attendance: [], records: [], news: [], fields: { students: [], teachers: [] }, pending: [] };
+  return { settings: { org: 'إدارة الحلقات القرآنية' }, admins: [], supervisors: [], teachers: [], accountants: [], placeadmins: [], students: [], places: [], halaqat: [], attendance: [], records: [], news: [], fields: { students: [], teachers: [] }, pending: [] };
 }
 /* ---------------- المزامنة بالتغييرات فقط ----------------
    أول جلب في الجلسة (وكل 30 دقيقة) كامل، وما بينهما يُجلب فقط ما تغيّر منذ آخر مرة (عمود sync_ts)
-   مع سجل المحذوفات (sync_deleted). الصور لا تُنزَّل مع المزامنة، بل عند الحاجة فقط.
-   إن لم يُنفَّذ ملف sync_incremental.sql على الخادم بعد، يعمل التطبيق بالجلب الكامل كما كان. */
+   مع سجل المحذوفات (sync_deleted). الصور لا تُنزَّل مع المزامنة، بل عند الحاجة فقط.
+   إن لم يُنفَّذ ملف sync_incremental.sql على الخادم بعد، يعمل التطبيق بالجلب الكامل كما كان. */
 const SYNC_TABLES = {
   settings: ['key'], places: ['id'], members: ['id'], member_admin: ['member_id'], halaqat: ['id'], attendance: ['id'],
   records: ['id'], news: ['id'], custom_fields: ['kind', 'key'], pay_settings: ['id'], pay_employees: ['id'],
@@ -225,6 +225,8 @@ const pkOf = (t, r) => SYNC_TABLES[t].map(k => r[k]).join('|');
 function tablesFor(role) {
   /* المحاسب: الطلاب والحلقات والأماكن والاشتراكات والإعلانات فقط */
   if (role === 'accountant') return ['settings', 'places', 'members', 'halaqat', 'news', 'fees', 'collections'];
+  /* الإداري: حلقات أماكنه وطلابها (للاطلاع) وقوائم التحصيل التي يرسلها */
+  if (role === 'placeadmin') return ['settings', 'places', 'members', 'halaqat', 'attendance', 'records', 'news', 'custom_fields', 'collections'];
   const t = ['settings', 'places', 'members', 'member_admin', 'halaqat', 'attendance', 'records', 'news', 'custom_fields'];
   if (role === 'admin') t.push('pay_settings', 'pay_employees', 'pay_rows', 'pay_closed', 'absences', 'pending_columns', 'fees', 'collections');
   else if (role === 'supervisor') t.push('absences');
@@ -359,6 +361,7 @@ const ALLOWED = {
   teacher: ['attendance', 'records'],
   supervisor: ['attendance', 'records', 'absences'],
   accountant: ['students', 'fees'],
+  placeadmin: [], // يطّلع فقط؛ والتحصيل عبر دالة الخادم
   student: []
 };
 /* مقارنة لا تتأثر بترتيب الحقول: قاعدة البيانات تعيد ترتيب حقول JSON (مثل إعدادات المرتبات)،
@@ -398,7 +401,7 @@ async function push(db) {
     const role = auth.member?.role;
     const ds = diff(db);
     for (const gr of ds) {
-      /* صف يعرفه الخادم يُحدَّث بمعرّفه (ولو تغيّر صاحبه بالدمج)، والصف الجديد بمفتاحه الطبيعي (الموظف والشهر) */
+      /* صف يعرفه الخادم يُحدَّث بمعرّفه (ولو تغيّر صاحبه بالدمج)، والصف الجديد بمفتاحه الطبيعي (الموظف والشهر) */
       const prev = snap[gr.name] || {}, pk = gr.pk.join(',');
       const parts = [[gr.up.filter(r => rowKey(gr.pk, r) in prev), pk], [gr.up.filter(r => !(rowKey(gr.pk, r) in prev)), gr.conflict || pk]];
       for (const [list, conflict] of parts) for (let i = 0; i < list.length; i += 500) {
@@ -406,7 +409,7 @@ async function push(db) {
       }
       gr.up.forEach(r => { snap[gr.name] = snap[gr.name] || {}; snap[gr.name][rowKey(gr.pk, r)] = JSON.stringify(r); });
     }
-    /* الصور تُرسل وحدها وفقط إن تغيّرت فعلًا؛ وصورة لم تُحمَّل بعد لا تُمسح أبدًا */
+    /* الصور تُرسل وحدها وفقط إن تغيّرت فعلًا؛ وصورة لم تُحمَّل بعد لا تُمسح أبدًا */
     if (role === 'admin') for (const m of db.students || []) {
       if (m.photo === undefined) continue;
       const cur = m.photo || '', hv = hashStr(cur), known = photoSent.get(m.id);
