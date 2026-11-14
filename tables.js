@@ -44,10 +44,37 @@
   /* المسميات الأخرى (إداري، سكرتير…) وعدد كل منها، مرتبة بالأكثر */
   const titleCounts = () => { const m = new Map(); titledList().forEach(e => { const k = clsOf(e).kind; m.set(k, (m.get(k) || 0) + 1); }); return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ar')); };
   function picker(cur) {
-    const opts = [['unclassified', 'غير مصنف', unclassCount()], ...KINDS.map(([k, l]) => [k, l, (db[k] || []).length])];
+    const opts = [['staff', 'الموظفون', staffList().length], ...KINDS.map(([k, l]) => [k, l, (db[k] || []).length])];
     const o = ([k, l, n]) => `<option value="${esc(k)}" ${k === cur ? 'selected' : ''}>${esc(l)} (${n})</option>`;
     const tc = titleCounts();
-    return `<select class="msubsel" data-msubsel aria-label="فئة الأعضاء">${opts.map(o).join('')}${tc.length ? `<optgroup label="مسميات أخرى">${tc.length > 1 ? o(['titled', 'كل المسميات الأخرى', tc.reduce((a, x) => a + x[1], 0)]) : ''}${tc.map(([t, n]) => o(['t:' + t, t, n])).join('')}</optgroup>` : ''}</select>`;
+    return `<select class="msubsel" data-msubsel aria-label="فئة الأعضاء">${opts.map(o).join('')}${tc.length ? `<optgroup label="مسميات أخرى">${tc.length > 1 ? o(['titled', 'كل المسميات الأخرى', tc.reduce((a, x) => a + x[1], 0)]) : ''}${tc.map(([t, n]) => o(['t:' + t, t, n])).join('')}</optgroup>` : ''}${o(['unclassified', 'غير مصنف', unclassCount()])}</select>`;
+  }
+  /* ===== «الموظفون»: كل من سوى الطلاب في جدول واحد =====
+     المديرون والمشرفون والمعلمون والمحاسبون (ومعهم أصحاب المسميات الأخرى الذين لهم حساب)،
+     وأصحاب المسميات الأخرى الذين ليس لهم حساب بعد (من المرتبات) مع زر «إنشاء حساب». */
+  const STAFF_KINDS = [['admins', 'مدير'], ['supervisors', 'مشرف'], ['teachers', 'معلم'], ['accountants', 'محاسب']];
+  const empOfMember = id => { const c = clsRead(); const eid = Object.keys(c).find(k => c[k]?.memberId === id); return eid ? payEmps().find(e => e.id === eid) : null; };
+  function staffList() {
+    const out = [];
+    STAFF_KINDS.forEach(([k, l], gi) => (db[k] || []).forEach(m => out.push({ m, k, gi, type: k === 'accountants' && m.info?.title ? m.info.title : l, emp: empOfMember(m.id) })));
+    titledList().filter(e => !accOf(e)).forEach(e => out.push({ e, gi: 4, type: clsOf(e).kind, emp: e }));
+    return out.sort((a, b) => a.gi - b.gi || String(a.type).localeCompare(String(b.type), 'ar') || (a.m || a.e).name.localeCompare((b.m || b.e).name, 'ar'));
+  }
+  function staffView() {
+    const list = staffList();
+    const acc = x => {
+      if (!x.m) return x.e.status === 'متوقف' ? '<span class="muted">—</span>' : `<span class="tag">بلا حساب</span> <button type="button" class="btn sm primary" data-ttlacc="${esc(x.e.id)}">إنشاء حساب</button>`;
+      if (!CLOUD) return '<span class="tag tag-ok">له حساب</span>';
+      return x.m.hasLogin ? `<span class="tag tag-ok">متاح</span> <button type="button" class="btn sm" data-act="cloudPw" data-k="${x.k}" data-id="${esc(x.m.id)}">كلمة جديدة</button>`
+        : `<span class="tag">بلا حساب</span> <button type="button" class="btn sm primary" data-act="cloudPw" data-k="${x.k}" data-id="${esc(x.m.id)}">إنشاء حساب</button>`;
+    };
+    const rows = list.map((x, i) => { const n = (x.m || x.e).name, st = x.emp?.status === 'متوقف';
+      return `<tr><td>${i + 1}</td><td>${esc(n)}${st ? ' <span class="tag tag-no">متوقف</span>' : ''}</td><td>${esc(x.type)}</td><td>${esc(x.emp?.role || '—')}</td><td>${esc(x.emp?.place || '—')}</td><td>${acc(x)}</td>
+        <td>${x.m ? `<button type="button" class="btn sm" data-act="editName" data-id="${esc(x.m.id)}" data-k="${x.k}">الاسم</button>` : ''}</td></tr>`; }).join('');
+    const cnt = k => list.filter(x => x.k === k).length, other = list.filter(x => !x.m).length;
+    return `<div class="card"><div class="bar">${picker('staff')}</div>
+      <div class="note">كل العاملين عدا الطلاب: ${cnt('admins')} مدير، ${cnt('supervisors')} مشرف، ${cnt('teachers')} معلم، ${cnt('accountants')} محاسب وإداري${other ? `، و${other} بمسميات أخرى بلا حساب بعد` : ''}. للإضافة والحذف والإجراءات الجماعية اختر الفئة من القائمة.</div>
+      ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الاسم</th><th>الصفة</th><th>الوظيفة في المرتبات</th><th>المكان</th><th>الحساب</th><th></th></tr>${rows}</table></div>` : empty('لا يوجد موظفون بعد.')}</div>`;
   }
   function titledView(only) {
     const list = titledList().filter(e => !only || clsOf(e).kind === only).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
@@ -107,6 +134,8 @@
       if (td) td.insertAdjacentHTML('beforeend', ` <span class="tag ttltag">${esc(t)}</span>`);
     });
   }
+  /* «الموظفون» هو الافتراضي عند فتح «الأعضاء» (ما لم يكن قد اختير غيره في هذه الجلسة) */
+  try { if (!JSON.parse(ss.get('halaqat_tab') || '{}').msub) ui.msub = 'staff'; } catch (e) { ui.msub = 'staff'; }
   const baseMembers = adminViews.members;
   adminViews.members = () => {
     /* مسمى لم يعد له أحد (أُعيد تصنيف آخر أفراده): الانتقال إلى «كل المسميات الأخرى» أو «غير مصنف» */
@@ -114,6 +143,8 @@
     if ((String(ui.msub).startsWith('t:') && !tc.some(([t]) => 't:' + t === ui.msub)) || (ui.msub === 'titled' && tc.length < 2)) {
       ui.msub = tc.length === 1 ? 't:' + tc[0][0] : tc.length ? 'titled' : 'unclassified'; saveTab();
     }
+    if (!ui.msub) ui.msub = 'staff';
+    if (ui.msub === 'staff') return memWrap(staffView());
     if (ui.msub === 'titled') return memWrap(titledView());
     if (String(ui.msub).startsWith('t:')) return memWrap(titledView(ui.msub.slice(2)));
     const cur = ['unclassified', ...KINDS.map(k => k[0])].includes(ui.msub) ? ui.msub : 'teachers';
