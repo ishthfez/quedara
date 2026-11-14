@@ -41,7 +41,7 @@
   function people() {
     const out = [];
     /* حساب المدير حساب إداري للنظام وليس موظفًا، فلا يظهر هنا إلا إن رُبط بموظف في المرتبات (يُدار من «الأعضاء ← المديرون») */
-    KINDS.forEach(([k, l], gi) => (db[k] || []).forEach(m => { const e = empOf(m); if (k !== 'admins' || e) out.push({ m, k, gi, e, type: k === 'supervisors' && gen(m) ? 'مشرف عام' : l }); }));
+    KINDS.forEach(([k, l], gi) => (db[k] || []).forEach(m => { const e = empOf(m); if (k !== 'admins' || e) out.push({ m, k, gi, e, type: k === 'supervisors' ? (gen(m) ? 'مشرف عام' : /دار/.test(e?.role || '') ? 'مشرف دار' : l) : l }); }));
     /* موظفو المرتبات الذين لم يُصنَّفوا بعد */
     emps().filter(e => !clsOf(e)).forEach(e => out.push({ m: null, k: '', gi: 9, e, type: 'غير مصنف' }));
     return out.sort((a, b) => a.gi - b.gi || ((a.m || a.e).name).localeCompare((b.m || b.e).name, 'ar'));
@@ -70,7 +70,7 @@
     }).join('');
     return `<div class="card"><div class="bar"><select data-stfk style="width:auto;font-weight:700" aria-label="الفئة">${F.filter(([k]) => k !== 'admins' || cnt(k)).map(([k, l]) => `<option value="${k}" ${k === st.k ? 'selected' : ''}>${l} (${cnt(k)})</option>`).join('')}</select>
         <input type="search" data-stfq value="${esc(st.q)}" placeholder="بحث بالاسم أو المكان…" style="flex:1 1 14rem;max-width:22rem" aria-label="بحث في الموظفين">
-        <span class="grow"></span><button class="btn" data-act="tab" data-v="members">الأعضاء والحسابات</button><button class="btn primary" data-act="addTeacher">+ معلم</button></div>
+        <span class="grow"></span>${cnt('un') ? `<button class="btn primary" data-act="clsAuto">إنشاء صفات غير المصنفين (${cnt('un')})</button>` : ''}<button class="btn" data-act="tab" data-v="members">الأعضاء والحسابات</button><button class="btn primary" data-act="addTeacher">+ معلم</button></div>
       <div class="note">كل العاملين في مكان واحد: الصفة ونوع الحساب، والوظيفة في المرتبات، والحلقات أو النطاق، والحالة. «الملف» يعرض البيانات والحلقات والمرتب والغياب والحساب. تعديل الاسم من أي مكان يسري على الحساب والمرتبات معًا.</div>
       ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الاسم</th><th>الصفة</th><th>الوظيفة في المرتبات</th><th>الحلقات / النطاق</th><th>الطلاب</th><th>الحالة</th><th></th></tr>${rows}</table></div>` : empty('لا يوجد أحد في هذه الفئة.')}</div>`;
   }
