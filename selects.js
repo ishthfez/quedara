@@ -3,6 +3,7 @@
    كل قائمة منسدلة عناصرها أشخاص أو حلقات أو أماكن (تُعرف من قيمها: معرّفات الأعضاء والحلقات والأماكن وموظفي المرتبات):
      - تُرتّب من الألف إلى الياء (أحمد = احمد)، وتبقى «— اختر —» وما يشبهها أولًا و«غير ذلك…» آخرًا.
      - يصير فوقها مربع تُكتب فيه أي كلمة من الاسم فتظهر المطابقة فورًا (بالنقر أو الأسهم ثم Enter).
+     - الضغط على المربع يفتح القائمة دائمًا. ومربعات البحث التي لها مصدر (data-suggest) تفتح قائمة اقتراحات بالطريقة نفسها.
    القائمة الأصلية تبقى في الصفحة مخفية وتتلقى الاختيار، فكل ما يعتمد عليها في التطبيق يعمل كما هو.
    القوائم ذات الترتيب المقصود (الشهور، الصفوف، الأجزاء، الفئات، الحالة…) لا تُمس. للاستثناء: data-nosearch. */
 (() => {
@@ -82,30 +83,36 @@
     sel._qc = inp; inp._sel = sel;
     sync(sel);
   }
-  function build(sel, q) {
+  /* عناصر القائمة: من خيارات القائمة الأصلية، أو من مصدر مسمّى لمربعات البحث (data-suggest) */
+  const SOURCES = (window.QLSuggest = window.QLSuggest || {});
+  function itemsOf(inp) {
+    if (inp._sel) return [...inp._sel.options].filter(o => !(o.disabled && o.value)).map(o => ({ v: o.value, t: o.text, g: o.parentNode.tagName === 'OPTGROUP' ? o.parentNode.label : null }));
+    const src = SOURCES[inp.dataset.suggest];
+    try { return src ? src() : []; } catch (e) { return []; }
+  }
+  function build(inp, q) {
     const qs = N(q).split(' ').filter(Boolean);
     const out = [];
     let gLabel = null;
-    for (const o of sel.options) {
-      if (o.disabled && o.value) continue;
-      const g = o.parentNode.tagName === 'OPTGROUP' ? o.parentNode.label : null;
-      const key = N(o.text);
-      if (qs.length && (!o.value || !qs.every(k => key.includes(k)))) continue;
-      if (g !== gLabel) { gLabel = g; if (g) out.push({ grp: g }); }
-      out.push({ o });
+    for (const it of itemsOf(inp)) {
+      if (qs.length && (!it.v || !qs.every(k => N(it.t).includes(k)))) continue;
+      if (it.g !== gLabel) { gLabel = it.g; if (it.g) out.push({ grp: it.g }); }
+      out.push({ o: it });
     }
     return out;
   }
+  const isBox = el => !!el && (el.classList?.contains('qcombo-in') || (el.tagName === 'INPUT' && el.dataset?.suggest !== undefined));
   const mark = (t, q) => { const ws = q.trim().split(/\s+/).filter(Boolean); let h = esc(t); ws.forEach(w => { const i = h.indexOf(esc(w)); if (i > -1) h = h.slice(0, i) + '<mark>' + h.slice(i, i + esc(w).length) + '</mark>' + h.slice(i + esc(w).length); }); return h; };
   function show(inp, q) {
-    const sel = inp._sel; open = inp;
+    const cur = inp._sel ? inp._sel.value : null; open = inp;
     if (!list) { list = document.createElement('div'); list.id = 'qclist'; list.setAttribute('role', 'listbox'); document.body.appendChild(list); list.addEventListener('mousedown', e => e.preventDefault()); list.addEventListener('click', e => { const d = e.target.closest('[data-i]'); if (d) pick(+d.dataset.i); }); }
-    const all = build(sel, q), shown = [];
+    const all = build(inp, q), shown = [];
     let n = 0;
     for (const x of all) { if (x.o) { if (n >= MAXSHOW) break; n++; } shown.push(x); }
     items = shown.map(x => x.o || null);
-    hi = items.findIndex(o => o && o.value === sel.value && !q); if (hi < 0) hi = items.findIndex(o => o && (q ? o.value : true));
-    list.innerHTML = shown.length ? shown.map((x, i) => x.grp ? `<div class="grp">${esc(x.grp)}</div>` : `<div data-i="${i}" role="option" class="${i === hi ? 'on' : ''} ${x.o.value === sel.value ? 'sel' : ''}">${q ? mark(x.o.text, q) : esc(x.o.text)}</div>`).join('')
+    hi = items.findIndex(o => o && cur !== null && o.v === cur && !q);
+    if (hi < 0) hi = inp._sel || q ? items.findIndex(o => o && (q ? o.v : true)) : -1;
+    list.innerHTML = shown.length ? shown.map((x, i) => x.grp ? `<div class="grp">${esc(x.grp)}</div>` : `<div data-i="${i}" role="option" class="${i === hi ? 'on' : ''} ${cur !== null && x.o.v === cur ? 'sel' : ''}">${q ? mark(x.o.t, q) : esc(x.o.t)}</div>`).join('')
       + (all.filter(x => x.o).length > n ? `<div class="none">… و${all.filter(x => x.o).length - n} غيرها — اكتب لتضييق البحث</div>` : '')
       : '<div class="none">لا نتائج</div>';
     place();
@@ -121,29 +128,41 @@
   }
   function close(restore = true) {
     if (list) list.remove(); list = null;
-    if (open && restore) open.value = labelOf(open._sel);
+    if (open && restore && open._sel) open.value = labelOf(open._sel);
     open = null; items = []; hi = -1;
   }
   function pick(i) {
     const o = items[i], inp = open; if (!o || !inp) return;
-    const sel = inp._sel, changed = sel.value !== o.value;
-    sel.value = o.value; inp.value = o.text; close(false);
-    if (changed) { sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); }
+    if (inp._sel) {
+      const sel = inp._sel, changed = sel.value !== o.v;
+      sel.value = o.v; inp.value = o.t; close(false);
+      if (changed) { sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); }
+    } else {
+      /* مربع بحث: يُكتب الاختيار فيه ويُبلَّغ به (qpick) */
+      inp.value = o.t; close(false);
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      inp.dispatchEvent(new CustomEvent('qpick', { bubbles: true, detail: { value: o.v, text: o.t } }));
+      close(false);
+    }
   }
   const move = d => {
     if (!items.length) return;
     let i = hi; do { i = (i + d + items.length) % items.length; } while (!items[i] && i !== hi);
     hi = i; list.querySelectorAll('[data-i]').forEach(x => x.classList.toggle('on', +x.dataset.i === hi)); list.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
   };
-  document.addEventListener('focusin', e => { const inp = e.target; if (inp.classList?.contains('qcombo-in')) { inp.select(); show(inp, ''); } });
+  /* الضغط على المربع يفتح القائمة دائمًا (حتى لو كان المؤشر فيه من قبل)، والكتابة تصفّيها */
+  const openFor = inp => { if (inp._sel) { inp.select(); show(inp, ''); } else show(inp, inp.value); };
+  document.addEventListener('focusin', e => { if (isBox(e.target)) openFor(e.target); });
+  document.addEventListener('click', e => { if (isBox(e.target) && !(list && open === e.target)) openFor(e.target); });
   document.addEventListener('focusout', e => { if (e.target === open) setTimeout(() => { if (document.activeElement !== open) close(); }, 120); });
-  document.addEventListener('input', e => { if (e.target.classList?.contains('qcombo-in')) show(e.target, e.target.value); });
+  document.addEventListener('input', e => { if (isBox(e.target) && document.activeElement === e.target) show(e.target, e.target.value); });
   document.addEventListener('keydown', e => {
-    const inp = e.target; if (!inp.classList?.contains('qcombo-in')) return;
-    if (!list && (e.key === 'ArrowDown' || e.key === 'Enter')) { show(inp, ''); e.preventDefault(); return; }
+    const inp = e.target; if (!isBox(inp)) return;
+    if (!list && (e.key === 'ArrowDown' || (e.key === 'Enter' && inp._sel))) { openFor(inp); e.preventDefault(); return; }
+    if (!list) return;
     if (e.key === 'ArrowDown') { move(1); e.preventDefault(); }
     else if (e.key === 'ArrowUp') { move(-1); e.preventDefault(); }
-    else if (e.key === 'Enter') { if (hi > -1) pick(hi); e.preventDefault(); e.stopPropagation(); }
+    else if (e.key === 'Enter') { if (hi > -1) { pick(hi); e.preventDefault(); e.stopPropagation(); } else if (inp._sel) e.preventDefault(); else close(false); }
     else if (e.key === 'Escape') { close(); inp.blur(); e.stopPropagation(); }
   }, true);
   document.addEventListener('mousedown', e => { if (list && !e.target.closest('#qclist') && e.target !== open) close(); });
@@ -167,5 +186,5 @@
     .observe(document.body, { childList: true, subtree: true });
   /* قيمة تُضبط برمجيًا دون حدث «change»: يُحدَّث النص المعروض */
   setInterval(() => document.querySelectorAll('select.qcombo-sel').forEach(sync), 700);
-  window.QLSelects = { scan, isNameSelect, nameIds };
+  window.QLSelects = { scan, isNameSelect, nameIds, sources: SOURCES };
 })();

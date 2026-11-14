@@ -23,7 +23,8 @@
      - الاسم: الطلاب المطابقون (ومع الحلقة أو المكان: داخلها فقط، والحلقات التي فيها مطابقون تُفتح تلقائيًا). */
   const halOf = s => byId(db.halaqat, s.halaqaId);
   const statusOk = s => !(st.f === 'off' && !stOff(s)) && !(st.f === 'on' && stOff(s));
-  const has = (txt, q) => !q || norm(txt).includes(norm(q));
+  /* كل كلمات البحث موجودة في النص (بأي ترتيب)، كما في قائمة الاقتراحات */
+  const has = (txt, q) => { if (!q) return true; const t = norm(txt); return norm(q).split(' ').filter(Boolean).every(w => t.includes(w)); };
   const nameOk = s => has(s.name, st.qn);
   const studentsOf = h => db.students.filter(s => s.halaqaId === h.id && statusOk(s)).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
   const chip = h => { const pn = placeName(h); return pn ? `<span class="tag" role="button" tabindex="0" data-apl="${esc(pn)}" title="عرض حلقات هذا المكان" style="cursor:pointer">${esc(pn)}</span>` : '<span class="tag">بلا مكان</span>'; };
@@ -69,7 +70,18 @@
     if (!list.length) return empty(st.qn || st.f ? 'لا توجد نتائج مطابقة.' : 'لا يوجد طلاب بعد.');
     return `<p class="muted" style="margin:.2rem 0 .6rem">${list.length} طالبًا</p>${studentTable(list, true)}`;
   }
-  const box = (k, label, ph) => `<label style="margin:0">${label}<input type="search" data-aq="${k}" value="${esc(st[k])}" placeholder="${ph}" autocomplete="off"></label>`;
+  const SUG = { qn: 'acc-students', qh: 'acc-halaqat', qp: 'acc-places' };
+  const box = (k, label, ph) => `<label style="margin:0">${label}<input type="search" data-aq="${k}" data-suggest="${SUG[k]}" value="${esc(st[k])}" placeholder="${ph}" autocomplete="off"></label>`;
+  /* قوائم الاقتراحات عند الضغط على مربعات البحث (تعرضها selects.js) */
+  const byAr = (a, b) => a.t.localeCompare(b.t, 'ar');
+  window.QLSuggest = Object.assign(window.QLSuggest || {}, {
+    'acc-places': () => db.places.map(p => ({ v: p.id, t: p.name })).sort(byAr),
+    'acc-halaqat': () => db.halaqat.map(h => ({ v: h.id, t: halaqaLabel(h), g: placeName(h) || 'بلا مكان' }))
+      .sort((a, b) => (a.g === 'بلا مكان') - (b.g === 'بلا مكان') || a.g.localeCompare(b.g, 'ar') || byAr(a, b)),
+    'acc-students': () => db.students.filter(statusOk).map(s => ({ v: s.id, t: s.name })).sort(byAr)
+  });
+  /* اختيار حلقة من القائمة يفتح طلابها مباشرة */
+  document.addEventListener('qpick', e => { if (e.target.dataset?.aq === 'qh') { st.open.add(e.detail.value); refresh(); } });
   function studentsView() {
     return `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">الطلاب</h2>
         <select data-af style="width:auto"><option value="">الكل</option><option value="on" ${st.f === 'on' ? 'selected' : ''}>المنتظمون</option><option value="off" ${st.f === 'off' ? 'selected' : ''}>المنقطعون</option></select>
