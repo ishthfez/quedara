@@ -280,8 +280,9 @@ async function pull() {
     const tombF = '&at=gt.' + encodeURIComponent(since) + (chk?.hal ? `&or=(tbl.in.(settings,news,custom_fields${chk.sup ? ',places,absences' : ''}),scope.ov.${encodeURIComponent('{' + [...(chk.ids || []), ...(chk.stu || []), ...chk.hal, ...(chk.pl || [])].join(',') + '}')})` : '');
     const [got, tomb] = await Promise.all([fetchTables(want, f, chk), !scoped || chk.tables.includes('deleted') ? selectAll('sync_deleted', 'rev', tombF) : []]);
     lastChanged = false;
-    for (const t of want) for (const r of got[t]) { raw[t].set(pkOf(t, r), r); lastChanged = true; if (t === 'members') notePhoto(r, true); }
+    /* المحذوفات أولًا ثم الصفوف: ما يُرجعه الخادم الآن موجود فعلًا (ولو حُذف ثم أُعيد في الدقيقة نفسها، كما في الاسترجاع) */
     for (const d of tomb) { const m = raw[d.tbl]; if (m && m.delete(SYNC_TABLES[d.tbl].map(c => d.pk[c]).join('|'))) lastChanged = true; }
+    for (const t of want) for (const r of got[t]) { raw[t].set(pkOf(t, r), r); lastChanged = true; if (t === 'members') notePhoto(r, true); }
     since = backMinute(now);
   } else {
     const now = scoped ? chk.now : inc ? await rpc('sync_now') : null;
