@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#13294b">
+  <title>إدارة الحلقات القرآنية</title>
+  <link rel="icon" href="logo.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="logo.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="splash"><img src="logo.png" alt="إدارة الحلقات القرآنية"><div class="gbar"><i></i></div></div>
+  <div id="app"></div>
+  <div id="toast" class="toast" hidden></div>
+  <script>
+    /* الأرقام إنجليزية دائمًا: كروم يعرض أرقام خانات الأرقام والتاريخ بلغة الصفحة (العربية)، فنجعل لغة هذه الخانات إنجليزية */
+    new MutationObserver(() => document.querySelectorAll('input[type=number]:not([lang]),input[type=date]:not([lang]),input[type=tel]:not([lang])')
+      .forEach(i => { i.lang = i.type === 'date' ? 'en-GB' : 'en'; })).observe(document.documentElement, { childList: true, subtree: true });
+    /* كلمات المرور: حروف إنجليزية وأرقام ورموز فقط؛ الحرف العربي يُحذف فورًا ويظهر تحت الخانة سطر أحمر «اكتب بالإنجليزية» */
+    document.addEventListener('input', e => {
+      const t = e.target;
+      if (!t || t.tagName !== 'INPUT' || !(t.type === 'password' || t.dataset.eye)) return;
+      const v = t.value.replace(/[\u0660-\u0669]/g, c => c.charCodeAt(0) - 1632).replace(/[\u06f0-\u06f9]/g, c => c.charCodeAt(0) - 1776);
+      const clean = v.replace(/[^\x21-\x7E]/g, '');
+      if (clean === t.value) return;
+      const pos = Math.max(0, (t.selectionStart || 0) - (t.value.length - clean.length));
+      t.value = clean; try { t.setSelectionRange(pos, pos); } catch (err) { /* ignore */ }
+      if (clean.length === v.length) return;
+      const host = t.closest('.pwwrap') || t;
+      let w = host.nextElementSibling;
+      if (!w || !w.classList.contains('pw-warn')) {
+        w = document.createElement('small'); w.className = 'pw-warn'; w.setAttribute('role', 'alert'); w.textContent = 'اكتب بالإنجليزية';
+        w.style.cssText = 'display:block;margin-top:.3rem;padding-top:.25rem;border-top:2px solid var(--red,#b3372f);color:var(--red,#b3372f);font-size:.82rem;font-weight:700';
+        host.after(w);
+      }
+      t.style.borderColor = 'var(--red,#b3372f)';
+      clearTimeout(w._h); w._h = setTimeout(() => { w.remove(); t.style.borderColor = ''; }, 3000);
+    }, true);
+  </script>
+  <script src="cloud.js"></script>
+  <script src="payroll.js"></script>
+  <script src="app.js"></script>
+  <script src="app-forms.js"></script>
+  <script src="fees.js"></script>
+  <script src="perms.js"></script>
+  <script src="accountant.js"></script>
+  <script src="collect.js"></script>
+  <script src="tables.js"></script>
+  <script src="app-actions.js"></script>
+</body>
+</html>
