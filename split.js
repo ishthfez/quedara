@@ -45,7 +45,7 @@
     const rows = G.map((g, i) => `<tr><td><input type="checkbox" data-spg="${i}" ${g.on ? 'checked' : ''} ${g.t && g.found.length ? '' : 'disabled'} style="width:auto;margin:0"></td>
       <td>${g.t ? esc(g.t.name) : `<span class="tag tag-no">لم أجد المعلم</span> ${esc(g.tname)}`}</td>
       <td>${g.place ? esc(g.place.name) : `<span class="tag">مكان جديد</span> ${esc(g.pname)}`}</td>
-      <td>${g.target ? `${esc(halaqaLabel(g.target))}${g.target.placeId ? '' : ' <small class="muted">(ستأخذ المكان)</small>'}` : '<span class="tag">ستُنشأ حلقة جديدة</span>'}</td>
+      <td>${!g.t ? '<span class="muted">— لن يُنفَّذ شيء —</span>' : g.target ? `${esc(halaqaLabel(g.target))}${g.target.placeId ? '' : ' <small class="muted">(ستأخذ المكان)</small>'}` : '<span class="tag">حلقة ثانية جديدة للمعلم في هذا المكان</span>'}</td>
       <td>${g.found.length}${g.missing.length ? ` <small class="muted">· لم يُعثر على ${g.missing.length}</small>` : ''}</td></tr>`).join('');
     const miss = G.filter(g => g.missing.length);
     return `<div class="tbl"><table><tr><th></th><th>المعلم</th><th>المكان</th><th>الحلقة</th><th>الطلاب</th></tr>${rows}</table></div>
@@ -68,7 +68,7 @@
   function open() {
     const ov = document.createElement('div'); ov.className = 'overlay';
     ov.innerHTML = `<div class="modal wide"><h2>تقسيم الحلقات على الأماكن بملف</h2>
-      <p class="note">ملف أعمدته: <b>المعلم</b>، <b>المكان</b>، <b>الطالب</b>. لكل معلم ومكان تأخذ حلقته التي فيها أغلب طلاب ذلك المكان المكانَ، أو تُنشأ له حلقة جديدة فيه، ثم يُنقل كل طالب إلى حلقة مكانه. المشرف لا يتغير.</p>
+      <p class="note">ملف أعمدته: <b>المعلم</b>، <b>المكان</b>، <b>الطالب</b>. لكل معلم ومكان تأخذ حلقته التي فيها أغلب طلاب ذلك المكان المكانَ، وإن كان طلابه في مكانين وليس له إلا حلقة واحدة تُنشأ له <b>حلقة ثانية</b> في المكان الآخر ويُنقل إليها طلابه. ألغِ تحديد أي سطر لا تريده (مثل أقلية صغيرة تبقى في حلقتها). المشرف لا يتغير.</p>
       <div class="bar"><label class="btn" style="margin:0">اختيار ملف Excel أو CSV<input type="file" data-spf accept=".xlsx,.csv,.tsv,.txt" hidden></label></div>
       <div data-spout></div>
       <div class="row"><button type="button" class="btn primary" data-spgo disabled>تنفيذ التقسيم</button><button type="button" class="btn" data-close>إغلاق</button></div></div>`;
