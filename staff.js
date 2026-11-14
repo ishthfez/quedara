@@ -162,6 +162,21 @@
     const same = db.halaqat.filter(x => x.teacherId === h.teacherId && x.placeId === h.placeId);
     return 'حلقة ' + t.name + (same.length > 1 ? ' — ' + (timeText(h) || '#' + (same.indexOf(h) + 1)) : '');
   };
+  /* ===== «الطلاب»: أول 200 طالب فقط حتى يُطلب الكل (جدول 1,680 طالبًا يجمّد الهاتف) ===== */
+  const LIMIT = 200; let showAll = false, lastN = -1;
+  const baseStudents = adminViews.students;
+  adminViews.students = () => {
+    let h = baseStudents();
+    const i = h.indexOf('<div class="tbl"><table>'), end = i < 0 ? -1 : h.indexOf('</table>', i);
+    if (end < 0) return h;
+    const parts = h.slice(i, end).split('<tr>'), N = parts.length - 2;
+    if (N !== lastN) { showAll = false; lastN = N; }
+    if (showAll || N <= LIMIT) return h;
+    return h.slice(0, i) + parts.slice(0, 2 + LIMIT).join('<tr>') + '</table></div>'
+      + `<p class="muted" style="margin:.6rem 0 0">يظهر أول ${LIMIT} من ${N} طالبًا. اختر المكان أو الحلقة للتضييق، أو <button type="button" class="btn sm" data-stall>عرض الكل</button></p>`
+      + h.slice(h.indexOf('</div>', end) + 6);
+  };
+  document.addEventListener('click', e => { if (e.target.closest('[data-stall]')) { showAll = true; render(); } });
   setTimeout(() => {
     const base = render;
     render = function () {

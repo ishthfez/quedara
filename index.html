@@ -11,6 +11,20 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="style.css">
+  <style>
+    /* أداء الهاتف: الزجاج الضبابي والتأثيرات المتكررة ثقيلة على المعالج، فتُستبدل بخلفيات شبه معتمة */
+    @media (max-width:860px),(hover:none) and (pointer:coarse){
+      .card,.stat,.modal,.overlay,.side,.content .top,.toast,.shell .scrim{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+      .card,.stat{background:rgba(255,255,255,.94)!important;box-shadow:0 1px 4px rgba(15,25,50,.08)!important}
+      .modal{background:#fff!important}
+      .overlay{background:rgba(10,18,35,.5)!important}
+      .content .top{background:rgba(255,255,255,.97)!important}
+      .side{background:var(--navy-d)!important}
+      body::before{display:none}
+      .logo-wrap,.sheen{animation:none!important}
+    }
+    .gbar i{animation-duration:1.1s!important}
+  </style>
 </head>
 <body>
   <div id="splash"><img src="logo.png" alt="إدارة الحلقات القرآنية"><div class="gbar"><i></i></div></div>
@@ -64,5 +78,9 @@
   <script src="roles.js"></script>
   <script src="staff.js"></script>
   <script src="app-actions.js"></script>
+  <script>
+    /* الشاشة الافتتاحية: تختفي بعد لحظة بدل 3 ثوانٍ */
+    setTimeout(() => { const s = document.getElementById('splash'); if (s) { s.classList.add('hide'); setTimeout(() => s.remove(), 650); } }, 1100);
+  </script>
 </body>
 </html>
