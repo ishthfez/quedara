@@ -47,19 +47,44 @@
     return statusCard() + `<div class="card"><h2>نسخة فورية</h2>
         <p class="muted" style="margin:0 0 .7rem">نسخة كاملة من الخادم الآن (دون صور الطلاب)، بنفس صيغة نسخ Drive فتصلح للاسترجاع. مفيدة قبل أي تعديل كبير.</p>
         <button type="button" class="btn primary" data-bknow>تنزيل نسخة كاملة الآن</button>
-        <p class="muted" style="font-size:.82rem;margin:.9rem 0 .4rem">لحالة خاصة فقط: جهاز سُجّلت عليه بيانات دون إنترنت ولم تصل إلى الخادم بعد — تحفظ ما على هذا الجهاز بصيغة التطبيق القديمة (تُدمج من «الإعدادات» ← «دمج نسخة احتياطية»).</p>
-        <button type="button" class="btn sm" data-act="export">تصدير بيانات هذا الجهاز فقط</button></div>
+        <p class="muted" style="font-size:.82rem;margin:.9rem 0 .4rem">لحالة خاصة فقط: جهاز سُجّلت عليه بيانات دون إنترنت ولم تصل إلى الخادم بعد — «تصدير بيانات هذا الجهاز فقط» يحفظ ما عليه في ملف، و«دمج نسخة احتياطية» يضيف من ذلك الملف إلى قاعدة البيانات ما ليس فيها (دون حذف أو تعديل شيء).</p>
+        <div class="bar" style="margin:0"><button type="button" class="btn sm" data-act="export">تصدير بيانات هذا الجهاز فقط</button><button type="button" class="btn sm" data-act="cloudMerge">دمج نسخة احتياطية</button></div></div>
       <div class="card"><h2>استرجاع نسخة احتياطية</h2>
         <p class="muted" style="margin:0 0 .7rem">اختر ملف نسخة (يبدأ اسمه بـ <code dir="ltr">qulearn-</code>) نزّلته من مجلد «نسخ قرآن احتياطية» على Google Drive أو من «تنزيل نسخة كاملة الآن». تظهر لك محتوياته قبل أي تغيير.</p>
         <div class="bar" style="margin:0"><label class="btn" style="margin:0">اختيار ملف النسخة<input type="file" accept=".json,application/json" data-rsfile hidden></label></div></div>`;
   };
-  /* الإعدادات: التصدير القديم (من الجهاز) انتقل إلى هذا القسم، ومكانه زر يفتحه */
+  /* الإعدادات (وضع الخادم):
+     - التصدير القديم (من الجهاز) و«دمج نسخة احتياطية» انتقلا إلى قسم «النسخ الاحتياطية»، ومكانهما زر يفتحه.
+     - جدول حالة قاعدة البيانات بلا أدوات الجداول (طباعة/Excel/PDF/تكبير)، و«آخر مزامنة» و«تغييرات بانتظار الإرسال» تتحدّث مباشرة.
+     - ملاحظة «رفع بيانات هذا الجهاز» لا تظهر إلا مع زرها. */
   const baseSettings = adminViews.settings;
   adminViews.settings = () => {
-    const h = baseSettings();
-    return !CLOUD ? h : h.replace('<button class="btn" data-act="export">تصدير نسخة احتياطية</button>', '<button class="btn" data-act="tab" data-v="backup">النسخ الاحتياطية…</button>')
-      .replace('النسخة الاحتياطية مفيدة للأرشفة.', 'النسخ الاحتياطية (التلقائية إلى Drive، والفورية، والاسترجاع) في قسم «النسخ الاحتياطية».');
+    let h = baseSettings();
+    if (!CLOUD) return h;
+    h = h.replace('<button class="btn" data-act="export">تصدير نسخة احتياطية</button>', '<button class="btn" data-act="tab" data-v="backup">النسخ الاحتياطية…</button>')
+      .replace('النسخة الاحتياطية مفيدة للأرشفة.', 'النسخ الاحتياطية (التلقائية إلى Drive، والفورية، والاسترجاع) في قسم «النسخ الاحتياطية».')
+      .replace('<button class="btn" data-act="cloudMerge">دمج نسخة احتياطية</button>', '')
+      .replace(/<div class="tbl"><table>(\s*<tr><th style="width:38%">الحالة<\/th>)/, '<div class="tbl" data-pr="1" data-zm="1"><table>$1')
+      .replace('<tr><th>آخر مزامنة</th><td dir="ltr" style="text-align:right">', '<tr><th>آخر مزامنة</th><td dir="ltr" style="text-align:right" data-lastsync>')
+      .replace('<tr><th>تغييرات بانتظار الإرسال</th><td>', '<tr><th>تغييرات بانتظار الإرسال</th><td data-pendingn>');
+    if (!h.includes('data-act="cloudUpload"')) h = h.replace(/<p class="muted" style="font-size:\.85rem;margin:0">«رفع بيانات هذا الجهاز»[^<]*<\/p>/, '');
+    return h;
   };
+  const liveDb = () => {
+    const ls = document.querySelector('[data-lastsync]'), pn = document.querySelector('[data-pendingn]');
+    if (ls && window.Cloud.lastSync) ls.textContent = window.Cloud.lastSync.toLocaleString('en-GB');
+    if (pn) { try { pn.textContent = window.Cloud.pendingCount(db); } catch (e) { /* ignore */ } }
+  };
+  if (window.Cloud) window.Cloud.on(liveDb);
+  new MutationObserver(() => { if (document.querySelector('[data-lastsync]')) liveDb(); }).observe(document.getElementById('app') || document.body, { childList: true });
+  /* تحذير «مسح كل البيانات»: يدل على النسخة الكاملة من الخادم بدل التصدير القديم */
+  document.addEventListener('click', e => {
+    if (!CLOUD || !e.target.closest('[data-act="wipeAll"]')) return;
+    setTimeout(() => {
+      const n = [...document.querySelectorAll('.overlay .note')].pop();
+      if (n) n.innerHTML = n.innerHTML.replace('خذ «تصدير نسخة احتياطية» أولًا.', 'خذ أولًا «تنزيل نسخة كاملة الآن» من قسم «النسخ الاحتياطية».');
+    }, 0);
+  }, true);
   async function downloadNow(btn) {
     try {
       const data = await window.Cloud.rpc('backup_export_admin');
