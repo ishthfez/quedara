@@ -17,7 +17,7 @@
 alter table public.members drop constraint if exists members_role_check;
 alter table public.members add constraint members_role_check check (role in ('admin', 'supervisor', 'teacher', 'student', 'accountant'));
 alter table public.news drop constraint if exists news_audience_check;
-alter table public.news add constraint news_audience_check check (audience in ('all', 'teacher', 'supervisor', 'student', 'admin', 'accountant'));
+alter table public.news add constraint news_audience_check check (audience in ('all', 'teacher', 'supervisor', 'student', 'admin', 'accountant') or audience ~ '^m:[0-9a-f-]{36}$');  -- 'm:<معرّف>' = ملاحظة لموظف بعينه (notes.sql)
 alter table public.news add column if not exists author_id uuid references public.members(id) on delete set null;
 alter table public.news add column if not exists author text;
 alter table public.fees add column if not exists by_member uuid references public.members(id) on delete set null;
@@ -131,7 +131,8 @@ create policy settings_read on public.settings for select to anon, authenticated
 -- 6) الملاحظات: يكتبها الخادم باسم صاحبها ونوع حسابه، وتظهر في إعلانات المدير أو المشرفين
 drop policy if exists news_read on public.news;
 create policy news_read on public.news for select to authenticated
-  using (audience = 'all' or public.is_admin() or public.has_role(audience) or author_id in (select public.my_ids()));
+  using (audience = 'all' or public.is_admin() or public.has_role(audience) or author_id in (select public.my_ids())
+         or audience in (select 'm:' || x::text from public.my_ids() x));  -- ملاحظة لموظف بعينه يقرؤها صاحبها (notes.sql)
 create or replace function public.send_note(aud text, body text) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare me record; nid uuid := gen_random_uuid();
@@ -213,7 +214,7 @@ begin
       union all select 'places' where exists (select 1 from places where sync_ts > since)
       union all select 'members' where exists (select 1 from members where sync_ts > since)
       union all select 'halaqat' where exists (select 1 from halaqat where sync_ts > since)
-      union all select 'news' where exists (select 1 from news where sync_ts > since and (audience in ('all', 'accountant') or author_id = any(me)))
+      union all select 'news' where exists (select 1 from news where sync_ts > since and (audience in ('all', 'accountant') or author_id = any(me) or audience = any(array(select 'm:' || x::text from unnest(me) x))))
       union all select 'fees' where public.has_perm('fees.collect') and exists (select 1 from fees where sync_ts > since)
       union all select 'deleted' where exists (select 1 from sync_deleted where at > since)
     ) q;
@@ -237,7 +238,7 @@ begin
     union all select 'halaqat' where exists (select 1 from halaqat where sync_ts > since and id = any(hal))
     union all select 'attendance' where exists (select 1 from attendance where sync_ts > since and student_id = any(stu))
     union all select 'records' where exists (select 1 from records where sync_ts > since and student_id = any(stu))
-    union all select 'news' where exists (select 1 from news where sync_ts > since and (audience = 'all' or audience = any(roles)))
+    union all select 'news' where exists (select 1 from news where sync_ts > since and (audience = 'all' or audience = any(roles) or audience = any(array(select 'm:' || x::text from unnest(me) x))))
     union all select 'custom_fields' where exists (select 1 from custom_fields where sync_ts > since)
     -- غياب المعلمين عمل مشترك بين المشرفين (حتى لا يُسجَّل الغياب نفسه مرتين)
     union all select 'absences' where sup and exists (select 1 from absences where sync_ts > since)
