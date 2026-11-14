@@ -133,9 +133,25 @@
       db.accountants = db.placeadmins; ui.msub = 'accountants';
       try { h = baseMembers(); } finally { db.accountants = acc; ui.msub = 'placeadmins'; }
       h = h.split('data-k="accountants"').join('data-k="placeadmins"').split('>+ محاسب<').join('>+ إداري<');
+    } else if (cur === 'students') {
+      /* سرعة: قالب القائمة يقارن اسم كل طالب بكل الحسابات (1,680 × 1,750 مقارنة) فيتجمد الهاتف؛
+         تُقارن أسماء الطلاب بحسابات العاملين فقط (الطلاب المكررون لهم «مكرر للمراجعة» و«الأسماء المتشابهة») */
+      const keep = ROLES.slice();
+      ROLES.splice(ROLES.indexOf('student'), 1);
+      try { h = baseMembers(); } finally { ROLES.splice(0, ROLES.length, ...keep); }
     } else h = baseMembers();
-    return withScope(h, cur).replace(SEL, picker(['unclassified', 'staff', ...KINDS.map(k => k[0])].includes(cur) ? cur : 'teachers'));
+    return withScope(h, cur).replace(SEL, fixPicker);
   };
+  /* قائمة الفئات كما بنتها الملفات الأخرى (ومعها «مكرر للمراجعة» وعدد «غير مصنف»)، مع «الإداريون» والأعداد الصحيحة */
+  function fixPicker(sel) {
+    const n = k => (db[k] || []).length;
+    let s = sel.replace(/(<option value="staff"[^>]*>الموظفون \()\d+/, (x, a) => a + staffList().length)
+      .replace(/(<option value="accountants"[^>]*>المحاسبون \()\d+/, (x, a) => a + n('accountants'));
+    if (!/value="placeadmins"/.test(s)) s = s.replace(/<option value="admins"/, `<option value="placeadmins">الإداريون (${n('placeadmins')})</option><option value="admins"`);
+    else s = s.replace(/(<option value="placeadmins"[^>]*>الإداريون \()\d+/, (x, a) => a + n('placeadmins'));
+    if (ui.msub === 'placeadmins') s = s.replace(/ selected(?=[ >])/g, '').replace('<option value="placeadmins"', '<option value="placeadmins" selected');
+    return s;
+  }
 
   /* ===== ما يُستبدل في app-actions.js (يُطبَّق بعد تحميلها) ===== */
   setTimeout(() => {
