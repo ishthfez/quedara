@@ -73,7 +73,7 @@
         <select data-cmon style="width:auto">${monthOpts().map(([y, m]) => `<option value="${y}-${m}" ${y === st.y && m === st.m ? 'selected' : ''}>${MONTHS[m - 1]} ${y}</option>`).join('')}</select>
         <span class="grow"></span>${c ? tag(STATUS[c.status]) : ''}</div>
       ${banner ? `<div class="note">${banner}</div>` : '<p class="muted" style="font-size:.85rem;margin:0 0 .6rem">اكتب ما حصّلته من كل طالب هذا الشهر (والملاحظة إن وُجدت)، ثم «إرسال للمحاسب». الطالب الذي لم يدفع اترك خانته فارغة.</p>'}
-      ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>المستحق</th><th>المحصَّل</th><th>ملاحظة</th><th>الحالة</th></tr>${rows}
+      ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>المستحق</th><th>المحصَّل</th><th>ملاحظة</th><th>الحالة</th></tr>${rows}
         <tr class="sum"><td colspan="3">الإجمالي</td><td>${money(total)}</td><td colspan="2"></td></tr></table></div>` : empty('لا يوجد طلاب في هذه الحلقة.')}
       ${locked || !list.length ? '' : `<div class="row"><button type="button" class="btn primary" data-csend="1">إرسال للمحاسب</button><button type="button" class="btn" data-csend="0">حفظ مسودة</button></div>`}</div>`;
   }
@@ -99,14 +99,16 @@
     const list = colls().filter(F[st.filter][1]).sort((a, b) => String(b.sentAt).localeCompare(String(a.sentAt)));
     const rows = list.map((c, i) => {
       const h = byId(db.halaqat, c.halaqaId), sum = c.lines.reduce((a, l) => a + (+l.amount || 0), 0);
-      return `<tr><td>${i + 1}</td><td>${esc(c.teacherName)}</td><td>${h ? esc(halaqaLabel(h)) : '—'}</td><td>${MONTHS[c.m - 1]} ${c.y}</td><td>${c.lines.length}</td><td>${money(sum)}</td><td>${tag(STATUS[c.status])}</td>
+      /* أسماء الطلاب الذين حدّد المعلم دفعهم، ولكل منهم المبلغ وحالة مراجعته */
+      const names = c.lines.map(l => `<div style="font-size:.86em;line-height:1.7">${esc(sName(l.studentId))} <span class="muted">${money(l.amount)}</span>${l.state === 'ok' ? ' <span class="tag tag-ok" style="font-size:.75em">مؤكد</span>' : l.state === 'issue' ? ' <span class="tag tag-no" style="font-size:.75em">مُعاد</span>' : ''}</div>`).join('');
+      return `<tr><td>${i + 1}</td><td>${esc(c.teacherName)}</td><td>${h ? esc(halaqaLabel(h)) : '—'}</td><td>${MONTHS[c.m - 1]} ${c.y}</td><td><b>${c.lines.length}</b>${names}</td><td>${money(sum)}</td><td>${tag(STATUS[c.status])}</td>
         <td><button type="button" class="btn sm ${c.status === 'sent' ? 'primary' : ''}" data-crev="${c.id}">${c.status === 'sent' ? 'مراجعة' : 'عرض'}</button></td></tr>`;
     }).join('');
     const n = colls().filter(c => c.status === 'sent').length;
     return `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">تحصيل المعلمين${n ? ` <span class="tag tag-no">${n} بانتظار المراجعة</span>` : ''}</h2>
         <select data-cfilter style="width:auto">${Object.entries(F).map(([k, [l]]) => `<option value="${k}" ${k === st.filter ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
       <p class="muted" style="font-size:.85rem;margin:0 0 .6rem">«تأكيد» يسجّل المبلغ دفعةً في «الاشتراكات» باسمك، و«إرجاع» يعيد الاسم للمعلم بملاحظتك ليصححه.</p>
-      ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>المعلم</th><th>الحلقة</th><th>الشهر</th><th>الطلاب</th><th>الإجمالي</th><th>الحالة</th><th></th></tr>${rows}</table></div>` : empty('لا توجد قوائم هنا.')}</div>`;
+      ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>المعلم</th><th>الحلقة</th><th>الشهر</th><th>الطلاب (المبلغ)</th><th>الإجمالي</th><th>الحالة</th><th></th></tr>${rows}</table></div>` : empty('لا توجد قوائم هنا.')}</div>`;
   }
   async function reviewDialog(c) {
     if (!c) return;
@@ -123,7 +125,7 @@
     const ov = document.createElement('div'); ov.className = 'overlay';
     ov.innerHTML = `<div class="modal wide"><h2>تحصيل ${esc(c.teacherName)} — ${MONTHS[c.m - 1]} ${c.y}</h2>
       <p class="muted" style="margin:0 0 .6rem">${h ? esc(halaqaLabel(h)) : ''} · ${c.lines.length} طالبًا · الإجمالي ${money(sum)} جنيه ${tag(STATUS[c.status])}</p>
-      <div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>المستحق</th><th>المحصَّل</th><th>الفرق</th><th>ملاحظة المعلم</th><th>القرار</th><th>ملاحظة المحاسب</th></tr>${rows}</table></div>
+      <div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>المستحق</th><th>المحصَّل</th><th>الفرق</th><th>ملاحظة المعلم</th><th>القرار</th><th>ملاحظة المحاسب</th></tr>${rows}</table></div>
       ${open ? '<label style="margin-top:.6rem">ملاحظة عامة للمعلم (اختيارية)<input data-rall></label>' : c.accNote ? `<p class="note">ملاحظة المحاسب: ${esc(c.accNote)}</p>` : ''}
       <div class="row">${open ? '<button type="button" class="btn primary" data-rsave>تنفيذ القرار</button>' : ''}<button type="button" class="btn" data-close>إغلاق</button></div></div>`;
     document.body.appendChild(ov);
