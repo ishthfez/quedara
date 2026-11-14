@@ -6,7 +6,7 @@
 (() => {
   const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
   const t0 = today();
-  const st = { y: +t0.slice(0, 4), m: +t0.slice(5, 7), qs: '', qh: '', qp: '' };
+  const st = { y: +t0.slice(0, 4), m: +t0.slice(5, 7), qs: '', qh: '', qp: '', open: new Set() };
   const MAX_ROWS = 300;
 
   TABS.admin.splice(TABS.admin.findIndex(t => t[0] === 'payroll') + 1, 0, ['fees', 'الاشتراكات']);
@@ -69,18 +69,20 @@
   const can = p => (window.Perms ? Perms.can(p) : session?.role === 'admin');
   const isAdmin = () => session?.role === 'admin';
 
+  /* كل كلمات البحث موجودة في النص (بأي ترتيب) — كما في قوائم الاقتراحات */
+  const has = (txt, q) => { if (!q || !q.trim()) return true; const t = norm(txt); return norm(q).split(' ').filter(Boolean).every(w => t.includes(w)); };
+  const halOk = h => (has(halaqaLabel(h), st.qh) || has(h.name, st.qh)) && has(placeName(h), st.qp);
   function filtered() {
-    const qs = norm(st.qs), qh = norm(st.qh), qp = norm(st.qp);
     return db.students.filter(s => {
-      if (qs && !norm(s.name).includes(qs)) return false;
-      if (!qh && !qp) return true;
-      const h = halOf(s); if (!h) return false;
-      return (!qh || starts(halaqaLabel(h), qh)) && (!qp || starts(placeName(h), qp));
+      if (!has(s.name, st.qs)) return false;
+      if (!st.qh.trim() && !st.qp.trim()) return true;
+      const h = halOf(s); return !!h && halOk(h);
     }).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
   }
   function results() {
     const list = filtered();
     let expected = 0, got = 0, paidN = 0, partN = 0, noneN = 0, freeN = 0, offN = 0;
+    const grouped = !!(st.qh.trim() || st.qp.trim());
     const row = (s, i) => {
       const D = dueOf(s), fee = D?.due ?? null, paid = paidFor(s.id, st.y, st.m), h = halOf(s), off = stOff(s);
       const state = off ? `<span class="tag tag-no">منقطع</span>${paid ? ' <small class="muted">دفع ' + money(paid) + '</small>' : ''}` : fee === 0 ? '<span class="tag tag-ok">معفى</span>'
@@ -89,10 +91,12 @@
       const catCell = D ? `${esc(D.src)}${D.dl ? `<br><small class="tag">${esc(D.dl)}</small>` : ''}` : '<span class="muted">—</span>';
       const dueCell = D ? (D.off ? `<span title="${money(D.base)} − ${money(D.off)}">${money(D.due)}</span> <small class="muted"><s>${money(D.base)}</s></small>` : money(D.due)) : '—';
       const any = fees().some(f => f.studentId === s.id);
-      return `<tr><td>${i + 1}</td><td>${esc(s.name)}</td><td>${h ? esc(halaqaLabel(h)) : '<span class="muted">—</span>'}</td><td>${h ? esc(placeName(h) || '—') : '<span class="muted">—</span>'}</td>
+      return `<tr><td>${i + 1}</td><td>${esc(s.name)}</td>${grouped ? '' : `<td>${h ? esc(halaqaLabel(h)) : '<span class="muted">—</span>'}</td><td>${h ? esc(placeName(h) || '—') : '<span class="muted">—</span>'}</td>`}
         <td>${catCell}</td><td>${dueCell}</td><td>${paid ? money(paid) : '—'}</td><td>${state}</td>
-        <td class="noprint">${can('fees.collect') ? `<button type="button" class="btn sm primary" data-fee-pay="${esc(s.id)}" ${cloudMissing() || fee === 0 ? 'disabled' : ''}>تحصيل</button>` : ''}${any ? `<button type="button" class="btn sm" data-fee-log="${esc(s.id)}">السجل</button>` : ''}${can('fees.amount') ? `<button type="button" class="btn sm" data-fee-assign="${esc(s.id)}">الفئة</button>` : ''}</td></tr>`;
+        <td class="noprint">${can('fees.collect') ? `<button type="button" class="btn sm primary" data-fee-pay="${esc(s.id)}" ${cloudMissing() || fee === 0 ? 'disabled' : ''}>تحصيل</button>` : ''}${any ? `<button type="button" class="btn sm" data-fee-log="${esc(s.id)}">السجل</button>` : ''}${can('fees.amount') ? `<button type="button" class="btn sm" data-fee-assign="${esc(s.id)}">الفئة</button>` : ''}${accActs(s)}</td></tr>`;
     };
+    const table = (arr, withMore) => `<div class="tbl"><table><tr><th>#</th><th>الطالب</th>${grouped ? '' : '<th>الحلقة</th><th>المكان</th>'}<th>الفئة / الخصم</th><th>المستحق</th><th>المدفوع</th><th>الحالة</th><th class="noprint"></th></tr>${arr.slice(0, MAX_ROWS).map(row).join('')}</table></div>
+        ${withMore && arr.length > MAX_ROWS ? `<p class="muted">يظهر أول ${MAX_ROWS} من ${arr.length} طالبًا؛ اكتب في مربعات البحث للتضييق.</p>` : ''}`;
     list.forEach(s => {
       const fee = feeOf(s), paid = paidFor(s.id, st.y, st.m); got += paid;
       if (stOff(s)) offN++;
@@ -101,22 +105,65 @@
     });
     const stat = (v, l) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
     return `<div class="grid">${stat(money(got), 'المحصَّل في ' + MONTHS[st.m - 1])}${stat(money(expected), 'المتوقع')}${stat(paidN, 'مسدَّد')}${stat(partN, 'جزئي')}${stat(noneN, 'لم يُسدَّد')}${freeN ? stat(freeN, 'معفى') : ''}${offN ? stat(offN, 'منقطع') : ''}</div>
-      ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>الحلقة</th><th>المكان</th><th>الفئة / الخصم</th><th>المستحق</th><th>المدفوع</th><th>الحالة</th><th class="noprint"></th></tr>${list.slice(0, MAX_ROWS).map(row).join('')}</table></div>
-        ${list.length > MAX_ROWS ? `<p class="muted">يظهر أول ${MAX_ROWS} من ${list.length} طالبًا؛ اكتب في مربعات البحث للتضييق.</p>` : ''}`
-        : empty(st.qs || st.qh || st.qp ? 'لا توجد نتائج مطابقة.' : 'لا يوجد طلاب بعد.')}`;
+      ${grouped ? groupedView(list, table) : list.length ? table(list, true) : empty(st.qs || st.qh || st.qp ? 'لا توجد نتائج مطابقة.' : 'لا يوجد طلاب بعد.')}`;
   }
+  /* بالمكان: الأماكن المطابقة وتحت كل منها حلقاتها؛ بالحلقة: الحلقات المطابقة مع كبسولة المكان.
+     كل حلقة سطر يُفتح بالضغط فيظهر جدول اشتراكات طلابها تحته (ومع البحث بالاسم تُفتح التي فيها مطابقون) */
+  function groupedView(list, table) {
+    const byH = new Map(); list.forEach(s => { const id = s.halaqaId; if (!byH.has(id)) byH.set(id, []); byH.get(id).push(s); });
+    const hs = db.halaqat.filter(h => halOk(h) && (!st.qs.trim() || byH.has(h.id))).sort((a, b) => halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'));
+    const chip = h => { const pn = placeName(h); return pn ? `<span class="tag" role="button" tabindex="0" data-fpl="${esc(pn)}" title="عرض حلقات هذا المكان" style="cursor:pointer">${esc(pn)}</span>` : '<span class="tag">بلا مكان</span>'; };
+    const block = (h, withChip) => {
+      const arr = byH.get(h.id) || [], isOpen = st.open.has(h.id) || (!!st.qs.trim() && arr.length > 0);
+      const done = arr.filter(s => { const f = feeOf(s); return f && paidFor(s.id, st.y, st.m) >= f; }).length;
+      return `<div class="ahal${isOpen ? ' open' : ''}"><div class="ahal-h" role="button" tabindex="0" data-fhal="${esc(h.id)}" aria-expanded="${isOpen}"><span class="ahal-ar">${isOpen ? '▾' : '◂'}</span><b>${esc(halaqaLabel(h))}</b>${withChip ? ' ' + chip(h) : ''}<span class="muted ahal-n">${arr.length} طالب · مسدَّد ${done}</span></div>
+        ${isOpen ? `<div class="ahal-b">${arr.length ? table(arr, false) : empty('لا يوجد طلاب في هذه الحلقة.')}</div>` : ''}</div>`;
+    };
+    if (st.qp.trim()) {
+      const places = db.places.filter(p => has(p.name, st.qp)).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+      if (!places.length) return empty('لا يوجد مكان مطابق.');
+      return places.map(p => { const ph = hs.filter(h => h.placeId === p.id);
+        return `<div class="aplace"><h3>${esc(p.name)} <span class="muted" style="font-size:.85rem;font-weight:400">${ph.length} حلقة</span></h3>${ph.length ? ph.map(h => block(h, false)).join('') : '<p class="muted" style="margin:.2rem 0 .6rem">لا توجد حلقات مطابقة في هذا المكان.</p>'}</div>`; }).join('');
+    }
+    return hs.length ? `<p class="muted" style="margin:.2rem 0 .6rem">${hs.length} حلقة — اضغط على الحلقة لعرض طلابها</p>${hs.map(h => block(h, true)).join('')}` : empty('لا توجد حلقة مطابقة.');
+  }
+  /* أعمال المحاسب على الطالب (بعد إخفاء قسم «الطلاب» عنه): نقل، منقطع/منتظم — بحسب صلاحيته */
+  const accActs = s => session?.role === 'accountant' ? `${can('students.move') ? `<button type="button" class="btn sm" data-move="${esc(s.id)}">نقل</button>` : ''}${can('students.status') ? `<button type="button" class="btn sm" data-stat="${esc(s.id)}">${stOff(s) ? 'منتظم' : 'منقطع'}</button>` : ''}` : '';
   function view() {
-    const box = (k, l, ph) => `<label style="margin:0">${l}<input type="search" data-fq="${k}" value="${esc(st[k])}" placeholder="${ph}" autocomplete="off"></label>`;
+    const SUG = { qs: 'fee-students', qh: 'fee-halaqat', qp: 'fee-places' };
+    const box = (k, l, ph) => `<label style="margin:0">${l}<input type="search" data-fq="${k}" data-suggest="${SUG[k]}" value="${esc(st[k])}" placeholder="${ph}" autocomplete="off"></label>`;
     return `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">تحصيل اشتراكات الطلاب</h2>
-        ${isAdmin() ? '<button type="button" class="btn" data-fee-cfg>الفئات والخصومات</button>' : ''}${can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : ''}
+        ${isAdmin() ? '<button type="button" class="btn" data-fee-cfg>الفئات والخصومات</button>' : ''}${can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : ''}${session?.role === 'accountant' && can('students.add') ? '<button type="button" class="btn" data-act="addStudent">+ استمارة طالب</button>' : ''}
         <label style="margin:0">الشهر <select data-fmonth style="width:auto">${monthOpts(st.y, st.m).map(o => `<option value="${o.v}" ${o.sel ? 'selected' : ''}>${o.l}</option>`).join('')}</select></label></div>
       ${cloudMissing() ? '<div class="note" style="color:var(--red)">جدول الاشتراكات غير موجود على الخادم بعد: نفّذ الملف <b>supabase/fees.sql</b> في Supabase ← SQL Editor ثم حدّث الصفحة.</div>' : ''}
-      <div class="three">${box('qs', 'اسم الطالب', 'اكتب جزءًا من الاسم')}${box('qh', 'الحلقة', 'بداية اسم الحلقة')}${box('qp', 'المكان', 'بداية اسم المكان')}</div>
+      <div class="three">${box('qs', 'اسم الطالب', 'اكتب أو اختر الطالب')}${box('qh', 'الحلقة', 'اسم الحلقة أو المعلم')}${box('qp', 'المكان', 'اكتب أو اختر المكان')}</div>
+      <div data-fclearw style="margin:.1rem 0 .4rem">${st.qs || st.qh || st.qp ? '<button type="button" class="btn sm" data-fclear>مسح البحث</button>' : ''}</div>
       <p class="muted" style="font-size:.85rem;margin:.2rem 0 .8rem">المستحق = مبلغ فئة الطالب (أو الفئة الافتراضية لسنّه، أو مبلغه الخاص من استمارته) مطروحًا منه خصمه إن وُجد.${cfg().cats.length ? '' : ' <b>ابدأ بإضافة الفئات من زر «الفئات والخصومات».</b>'}</p>
       <div data-fres>${results()}</div></div>`;
   }
   /* تحديث النتائج وحدها أثناء الكتابة (يبقى المؤشر في المربع) */
-  const refresh = () => { const r = document.querySelector('[data-fres]'); if (r) r.innerHTML = results(); };
+  const refresh = () => {
+    const r = document.querySelector('[data-fres]'); if (r) r.innerHTML = results();
+    const w = document.querySelector('[data-fclearw]'); if (w) w.innerHTML = st.qs || st.qh || st.qp ? '<button type="button" class="btn sm" data-fclear>مسح البحث</button>' : '';
+  };
+  /* قوائم الاقتراحات لمربعات البحث (تعرضها selects.js): الحلقات مجمّعة تحت أماكنها */
+  const byAr = (a, b) => a.t.localeCompare(b.t, 'ar');
+  window.QLSuggest = Object.assign(window.QLSuggest || {}, {
+    'fee-places': () => db.places.map(p => ({ v: p.id, t: p.name })).sort(byAr),
+    'fee-halaqat': () => db.halaqat.map(h => ({ v: h.id, t: halaqaLabel(h), g: placeName(h) || 'بلا مكان' }))
+      .sort((a, b) => (a.g === 'بلا مكان') - (b.g === 'بلا مكان') || a.g.localeCompare(b.g, 'ar') || byAr(a, b)),
+    'fee-students': () => db.students.map(s => ({ v: s.id, t: s.name })).sort(byAr)
+  });
+  /* اختيار حلقة من القائمة يفتح طلابها مباشرة */
+  document.addEventListener('qpick', e => { if (e.target.dataset?.fq === 'qh') { st.open.add(e.detail.value); refresh(); } });
+  document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-fhal],[data-fpl]')) { e.preventDefault(); e.target.click(); } });
+  document.addEventListener('click', e => {
+    const hb = e.target.closest('[data-fhal]');
+    if (hb && !e.target.closest('[data-fpl]')) { const id = hb.dataset.fhal; st.open.has(id) ? st.open.delete(id) : st.open.add(id); refresh(); return; }
+    const pl = e.target.closest('[data-fpl]');
+    if (pl) { st.qp = pl.dataset.fpl; const i = document.querySelector('[data-fq="qp"]'); if (i) i.value = st.qp; refresh(); return; }
+    if (e.target.closest('[data-fclear]')) { st.qs = st.qh = st.qp = ''; st.open.clear(); document.querySelectorAll('[data-fq]').forEach(i => { i.value = ''; }); refresh(); }
+  });
 
   function pay(sid) {
     const s = byId(db.students, sid); if (!s) return;
