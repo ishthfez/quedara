@@ -15,17 +15,21 @@
   const STOP = new Set(['مسجد', 'دار', 'تحفيظ', 'جمعيه', 'الجمعيه']);
   const ptoks = s => toks(s).filter(w => !STOP.has(w));
   const subseq = (a, b) => { let i = 0; for (const w of b) if (w === a[i]) i++; return i === a.length; };
-  /* أقرب شخص للاسم المختصر: تام 5، بداية متصلة للاسم 4، يبدأ بالكلمة نفسها وبقية الكلمات بالترتيب 3، الكلمات بالترتيب 2، كلمة واحدة هي الاسم الأول 1 */
+  /* أقرب شخص للاسم: تام 5، أحد الاسمين بداية متصلة للآخر 4، يبدآن بالكلمة نفسها وكلمات الأقصر بالترتيب في الأطول 3،
+     كلمات الأقصر بالترتيب 2، كلمة واحدة هي الاسم الأول 1. المطابقة في الاتجاهين: الاسم في النص قد يكون أقصر من اسمه في التطبيق أو أطول.
+     ولا يُعتمد إلا مرشح وحيد بأعلى درجة. */
   function matchPerson(q, list) {
-    const Q = toks(q); if (!Q.length) return { cands: [] };
+    const Q0 = toks(q); if (!Q0.length) return { cands: [] };
     const sc = list.map(p => {
-      const T = toks(p.name);
+      const T0 = toks(p.name);
+      if (!T0.length) return { p, s: 0 };
+      const [Q, T] = Q0.length <= T0.length ? [Q0, T0] : [T0, Q0]; /* Q الأقصر */
       let s = 0;
       if (Q.join(' ') === T.join(' ')) s = 5;
       else if (Q.length >= 2 && Q.every((w, i) => T[i] === w)) s = 4;
       else if (Q.length >= 2 && Q[0] === T[0] && subseq(Q, T)) s = 3;
       else if (Q.length >= 2 && subseq(Q, T)) s = 2;
-      else if (Q.length === 1 && T[0] === Q[0]) s = 1;
+      else if (Q0.length === 1 && T0[0] === Q0[0]) s = 1;
       return { p, s };
     }).filter(x => x.s);
     if (!sc.length) return { cands: [] };
