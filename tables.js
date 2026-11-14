@@ -53,11 +53,59 @@
     const list = titledList().filter(e => !only || clsOf(e).kind === only).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
     const titles = [...new Set(['إداري', ...list.map(e => clsOf(e).kind)])];
     const opts = cur => `${Object.entries(CLS_ROLES).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}${titles.map(t => `<option value="t:${esc(t)}" ${cur === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}<option value="__other">غير ذلك (مسمى جديد)…</option>`;
+    const accCell = e => {
+      const m = accOf(e);
+      if (m) return CLOUD ? (m.hasLogin ? `<span class="tag tag-ok">متاح</span> <button type="button" class="btn sm" data-act="cloudPw" data-k="accountants" data-id="${esc(m.id)}">كلمة مرور جديدة</button>`
+        : `<button type="button" class="btn sm primary" data-act="cloudPw" data-k="accountants" data-id="${esc(m.id)}">إنشاء حساب</button>`) : '<span class="tag tag-ok">له حساب</span>';
+      return e.status === 'متوقف' ? '<span class="muted">—</span>' : `<button type="button" class="btn sm primary" data-ttlacc="${esc(e.id)}">إنشاء حساب</button>`;
+    };
     const rows = list.map((e, i) => `<tr><td>${i + 1}</td><td>${esc(e.name)}${e.status === 'متوقف' ? ' <span class="tag">متوقف</span>' : ''}</td><td>${esc(clsOf(e).kind)}</td><td>${esc(e.role || '—')}</td><td>${esc(e.place || '—')}</td>
-      <td><select class="mini" data-cls="${esc(e.id)}" aria-label="تصنيف ${esc(e.name)}">${opts(clsOf(e).kind)}</select></td></tr>`).join('');
-    return `<div class="card"><div class="bar">${picker(only ? 't:' + only : 'titled')}</div>
-      <div class="note">موظفو المرتبات المصنَّفون بمسميات غير «معلم» و«مشرف» و«مدير» (مثل إداري). ليس لهم حساب دخول، ويمكنك تغيير تصنيف أي منهم من عمود «تغيير التصنيف».</div>
-      ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الاسم</th><th>المسمى</th><th>الوظيفة في المرتبات</th><th>المكان</th><th>تغيير التصنيف</th></tr>${rows}</table></div>` : empty('لا يوجد مصنفون بمسميات أخرى.')}</div>`;
+      <td>${accCell(e)}</td><td><select class="mini" data-cls="${esc(e.id)}" aria-label="تصنيف ${esc(e.name)}">${opts(clsOf(e).kind)}</select></td></tr>`).join('');
+    const need = needAcc(list).length;
+    const tools = `<span class="grow"></span>${need ? `<button type="button" class="btn primary" data-ttlaccall="${esc(only || '')}">إنشاء حسابات للكل (${need})</button>` : ''}${CLOUD && list.some(e => accOf(e)?.hasLogin) ? '<button type="button" class="btn" data-act="credsOpen" data-k="accountants">إرسال بيانات الدخول</button>' : ''}`;
+    return `<div class="card"><div class="bar">${picker(only ? 't:' + only : 'titled')}${tools}</div>
+      <div class="note">موظفو المرتبات المصنفون بمسميات غير «معلم» و«مشرف» و«مدير» (مثل إداري). حساب الدخول لأي منهم يكون <b>بصلاحيات المحاسب</b> ويظهر أيضًا في «المحاسبون» ومعه مسماه، ويمكنك تغيير تصنيف أي منهم من عمود «تغيير التصنيف».</div>
+      ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الاسم</th><th>المسمى</th><th>الوظيفة في المرتبات</th><th>المكان</th><th>الحساب</th><th>تغيير التصنيف</th></tr>${rows}</table></div>` : empty('لا يوجد مصنفون بمسميات أخرى.')}</div>`;
+  }
+  /* ===== حسابات أصحاب المسميات الأخرى: حساب دخول بصلاحيات المحاسب =====
+     يُنشأ لكل موظف عضو من نوع «محاسب» (أو يُربط بمحاسب موجود بالاسم نفسه)، ويُحفظ مسماه عليه (info.title)،
+     ويُربط بسجله في المرتبات عبر التصنيف (cls: { kind: المسمى، memberId })؛ فلا يتكرر ولا يحتاج الخادم أي تغيير. */
+  const accOf = e => { const c = clsOf(e); return c?.memberId ? byId(db.accountants || [], c.memberId) : null; };
+  const needAcc = list => list.filter(e => e.status !== 'متوقف' && (!accOf(e) || (CLOUD && !accOf(e).hasLogin)));
+  function linkAcc(e) {
+    const c = clsOf(e); if (!c) return null;
+    db.accountants = db.accountants || [];
+    let m = accOf(e) || db.accountants.find(x => norm(x.name) === norm(e.name));
+    if (!m) { m = { id: uid(), name: e.name, phone: '', pin: genPassK('accountants'), info: {} }; db.accountants.push(m); ui.shown[m.id] = true; }
+    m.info = { ...(m.info || {}), title: c.kind };
+    clsMap()[e.id] = { kind: c.kind, memberId: m.id };
+    return m;
+  }
+  function makeAccs(emps) {
+    if (!emps.length) { toast('لا يوجد من يحتاج حسابًا'); return; }
+    const one = emps.length === 1;
+    ask(one ? `إنشاء حساب دخول لـ «${emps[0].name}» (${clsOf(emps[0]).kind}) بصلاحيات المحاسب؟` : `إنشاء حسابات دخول لـ ${emps.length} موظفًا بصلاحيات المحاسب؟`, () => {
+      const ms = emps.map(linkAcc).filter(Boolean);
+      save(); render();
+      if (CLOUD) cloudMakeLogins(ms.filter(m => !m.hasLogin));
+      else toast(one ? `أُنشئ حساب «${ms[0].name}» — كلمة مروره في «المحاسبون»` : `أُنشئت ${ms.length} حسابات — كلمات المرور في «المحاسبون»`);
+    });
+  }
+  document.addEventListener('click', e => {
+    const one = e.target.closest('[data-ttlacc]');
+    if (one) { const emp = payEmps().find(x => x.id === one.dataset.ttlacc); if (emp) makeAccs([emp]); return; }
+    const all = e.target.closest('[data-ttlaccall]');
+    if (all) { const only = all.dataset.ttlaccall; makeAccs(needAcc(titledList().filter(x => !only || clsOf(x).kind === only))); }
+  });
+  /* «المحاسبون»: مسمى صاحب الحساب بجانب اسمه (إداري، سكرتير…) */
+  function tagTitles() {
+    if (ui.msub !== 'accountants') return;
+    document.querySelectorAll('.memview tr [data-sel]').forEach(cb => {
+      const m = byId(db.accountants || [], cb.dataset.sel), t = m?.info?.title, tr = cb.closest('tr');
+      if (!t || tr.querySelector('.ttltag')) return;
+      const td = [...tr.cells].find(c => c.textContent.trim().startsWith(m.name));
+      if (td) td.insertAdjacentHTML('beforeend', ` <span class="tag ttltag">${esc(t)}</span>`);
+    });
   }
   const baseMembers = adminViews.members;
   adminViews.members = () => {
@@ -91,7 +139,7 @@
   function memWrap(inner) {
     const box = `<div class="msearch"><input type="search" data-msearch value="${esc(mq)}" placeholder="بحث بالاسم أو الهاتف…" aria-label="بحث في الأعضاء" autocomplete="off"><span class="muted" data-mcount></span></div>`;
     const h = /<select class="msubsel"[\s\S]*?<\/select>/.test(inner) ? inner.replace(/<select class="msubsel"[\s\S]*?<\/select>/, m => m + box) : box + inner;
-    setTimeout(applyMSearch, 0);
+    setTimeout(() => { tagTitles(); applyMSearch(); }, 0);
     return `<div class="memview">${h}</div>`;
   }
   function applyMSearch() {
