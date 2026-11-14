@@ -40,7 +40,8 @@
   const stopped = x => x.k === 'teachers' ? (x.m.admin || {}).status === 'موقوف' || x.e?.status === 'متوقف' : x.e?.status === 'متوقف';
   function people() {
     const out = [];
-    KINDS.forEach(([k, l], gi) => (db[k] || []).forEach(m => out.push({ m, k, gi, e: empOf(m), type: k === 'supervisors' && gen(m) ? 'مشرف عام' : l })));
+    /* حساب المدير حساب إداري للنظام وليس موظفًا، فلا يظهر هنا إلا إن رُبط بموظف في المرتبات (يُدار من «الأعضاء ← المديرون») */
+    KINDS.forEach(([k, l], gi) => (db[k] || []).forEach(m => { const e = empOf(m); if (k !== 'admins' || e) out.push({ m, k, gi, e, type: k === 'supervisors' && gen(m) ? 'مشرف عام' : l }); }));
     /* موظفو المرتبات الذين لم يُصنَّفوا بعد */
     emps().filter(e => !clsOf(e)).forEach(e => out.push({ m: null, k: '', gi: 9, e, type: 'غير مصنف' }));
     return out.sort((a, b) => a.gi - b.gi || ((a.m || a.e).name).localeCompare((b.m || b.e).name, 'ar'));
@@ -67,7 +68,7 @@
         <td>${hs.length ? stuIn(hs) : '—'}</td><td>${statusCell(x)}</td>
         <td><button type="button" class="btn sm primary" data-staff="${esc(keyOf(x))}">الملف</button></td></tr>`;
     }).join('');
-    return `<div class="card"><div class="bar"><select data-stfk style="width:auto;font-weight:700" aria-label="الفئة">${F.map(([k, l]) => `<option value="${k}" ${k === st.k ? 'selected' : ''}>${l} (${cnt(k)})</option>`).join('')}</select>
+    return `<div class="card"><div class="bar"><select data-stfk style="width:auto;font-weight:700" aria-label="الفئة">${F.filter(([k]) => k !== 'admins' || cnt(k)).map(([k, l]) => `<option value="${k}" ${k === st.k ? 'selected' : ''}>${l} (${cnt(k)})</option>`).join('')}</select>
         <input type="search" data-stfq value="${esc(st.q)}" placeholder="بحث بالاسم أو المكان…" style="flex:1 1 14rem;max-width:22rem" aria-label="بحث في الموظفين">
         <span class="grow"></span><button class="btn" data-act="tab" data-v="members">الأعضاء والحسابات</button><button class="btn primary" data-act="addTeacher">+ معلم</button></div>
       <div class="note">كل العاملين في مكان واحد: الصفة ونوع الحساب، والوظيفة في المرتبات، والحلقات أو النطاق، والحالة. «الملف» يعرض البيانات والحلقات والمرتب والغياب والحساب. تعديل الاسم من أي مكان يسري على الحساب والمرتبات معًا.</div>

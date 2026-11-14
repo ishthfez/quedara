@@ -84,7 +84,8 @@
   const placeTxt = (k, m, emp) => k === 'placeadmins' ? (placesOf(m).map(id => byId(db.places, id)?.name).filter(Boolean).join('، ') || 'بلا مكان') : (emp?.place || '—');
   function staffList() {
     const out = [];
-    STAFF_KINDS.forEach(([k, l], gi) => (db[k] || []).forEach(m => out.push({ m, k, gi, type: typeOf(k, l, m), emp: empOfMember(m.id) })));
+    /* حساب المدير حساب إداري للنظام وليس موظفًا: لا يظهر إلا إن رُبط بموظف في المرتبات (ويبقى في «المديرون») */
+    STAFF_KINDS.forEach(([k, l], gi) => (db[k] || []).forEach(m => { const emp = empOfMember(m.id); if (k !== 'admins' || emp) out.push({ m, k, gi, type: typeOf(k, l, m), emp }); }));
     return out.sort((a, b) => a.gi - b.gi || String(a.type).localeCompare(String(b.type), 'ar') || a.m.name.localeCompare(b.m.name, 'ar'));
   }
   function picker(cur) {
@@ -103,7 +104,7 @@
       return `<tr><td>${i + 1}</td><td>${esc(x.m.name)}${st ? ' <span class="tag tag-no">متوقف</span>' : ''}</td><td>${esc(x.type)}</td><td>${esc(x.emp?.role || '—')}</td><td>${esc(placeTxt(x.k, x.m, x.emp))}</td><td>${acc(x)}</td>
         <td>${x.k === 'supervisors' || x.k === 'placeadmins' ? `<button type="button" class="btn sm" data-act="memScope" data-id="${esc(x.m.id)}" data-k="${x.k}">النطاق</button>` : ''}<button type="button" class="btn sm" data-act="editName" data-id="${esc(x.m.id)}" data-k="${x.k}">الاسم</button></td></tr>`; }).join('');
     const cnt = k => list.filter(x => x.k === k).length;
-    return `<div class="note">كل العاملين عدا الطلاب: ${cnt('admins')} مدير، ${cnt('supervisors')} مشرف، ${cnt('teachers')} معلم، ${cnt('accountants')} محاسب، ${cnt('placeadmins')} إداري. للإضافة والحذف والإجراءات الجماعية اختر الفئة من القائمة.</div>
+    return `<div class="note">كل العاملين عدا الطلاب${cnt('admins') ? `: ${cnt('admins')} مدير،` : ':'} ${cnt('supervisors')} مشرف، ${cnt('teachers')} معلم، ${cnt('accountants')} محاسب، ${cnt('placeadmins')} إداري. للإضافة والحذف والإجراءات الجماعية اختر الفئة من القائمة. حساب المدير (حساب النظام) في «المديرون».</div>
       ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الاسم</th><th>الصفة</th><th>الوظيفة في المرتبات</th><th>المكان</th><th>الحساب</th><th></th></tr>${rows}</table></div>` : empty('لا يوجد موظفون بعد.')}`;
   }
   function withScope(h, kind) {
