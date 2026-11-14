@@ -5,7 +5,8 @@
      البيانات، والحلقات، والمرتب، والغياب، والحساب، مع أزرار التعديل.
    - الاسم الواحد: تعديل اسم الشخص في «الأعضاء» أو «الموظفون» أو «المرتبات» يسري على الآخر تلقائيًا
      (وعلى كشوف الشهور المفتوحة؛ والشهور المغلقة تبقى كما هي).
-   - الحلقة تُسمّى باسم معلمها دائمًا: الأسماء القديمة الثابتة تُمسح من الحلقات التي لها معلم.
+   - الحلقة تُسمّى باسم معلمها دائمًا: الأسماء القديمة الثابتة تُمسح من الحلقات التي لها معلم،
+     وفي «الاشتراكات» يظهر اسمها كما في «الأماكن والحلقات» («حلقة + المعلم») والمكان في عموده.
    يُحمَّل قبل app-actions.js، وما يعتمد عليها يُطبَّق بعد تحميلها. */
 (() => {
   setTimeout(() => { try { if (!VFILES.includes('./staff.js')) VFILES.push('./staff.js'); } catch (e) { /* ignore */ } }, 0);
@@ -152,6 +153,15 @@
     (db.halaqat || []).forEach(h => { if (h.name && byId(db.teachers, h.teacherId)) { h.name = ''; ch = true; } });
     return ch;
   }
+  /* اسم الحلقة في «الاشتراكات» كما في «الأماكن والحلقات»: «حلقة + المعلم» فقط، لأن المكان يظهر بجانبه في عمود أو كبسولة مستقلة.
+     (إن كان للمعلم حلقتان في المكان نفسه يُضاف وقت الحلقة للتمييز) */
+  const baseLabel = halaqaLabel;
+  halaqaLabel = function (h) {
+    if (ui.tab !== 'fees' || !h) return baseLabel(h);
+    const t = byId(db.teachers, h.teacherId); if (!t) return baseLabel(h);
+    const same = db.halaqat.filter(x => x.teacherId === h.teacherId && x.placeId === h.placeId);
+    return 'حلقة ' + t.name + (same.length > 1 ? ' — ' + (timeText(h) || '#' + (same.indexOf(h) + 1)) : '');
+  };
   setTimeout(() => {
     const base = render;
     render = function () {
