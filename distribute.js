@@ -122,10 +122,15 @@
   }
   function apply(ov) {
     let moved = 0, made = 0, places = 0;
-    const missing = [];
+    const missing = [], newPl = new Map(); /* المكان الجديد يُنشأ مرة واحدة ولو تكرر في النص */
     M.forEach(g => {
       let place = null;
-      if (g.placeSel === 'new') { place = { id: uid(), name: g.place, type: 'مسجد', address: '' }; db.places.push(place); places++; g.placeSel = place.id; }
+      if (g.placeSel === 'new') {
+        const k = norm(g.place);
+        place = newPl.get(k);
+        if (!place) { place = { id: uid(), name: g.place, type: 'مسجد', address: '' }; db.places.push(place); places++; newPl.set(k, place); }
+        g.placeSel = place.id;
+      }
       else if (g.placeSel) place = byId(db.places, g.placeSel);
       const sup = g.supSel ? byId(db.supervisors, g.supSel) : null;
       g.rows.forEach(r => {
