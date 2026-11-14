@@ -74,9 +74,13 @@
       <p class="muted" style="margin:.2rem 0 .7rem;font-size:.88rem">اختر معلم كل حلقة من القائمة (يمكنك الكتابة فيها للبحث)، ويُحفظ الربط فورًا. ${auto ? 'أو اضغط «ربط المعلمين تلقائيًا» لربط ما تطابقت أسماؤه مع معاينة قبل التنفيذ.' : ''}</p>
       <div class="tbl"><table><tr><th>الحلقة</th><th>المكان</th><th>الطلاب</th><th>المعلم</th></tr>${rows}</table></div></div>`;
   }
+  /* داخل جداول «الأماكن والحلقات»: اسم الحلقة «حلقة + المعلم» فقط، بلا المكان والوقت
+     (الجدول تحت مكانه وفيه عمود للوقت)؛ ويبقى الاسم المميِّز في القوائم والصفحات الأخرى */
+  const shortLabel = h => { const t = byId(db.teachers, h.teacherId); return t ? 'حلقة ' + t.name : (h.name || 'حلقة بلا معلم'); };
+  const shorten = html => html.replace(/(data-hstu="([^"]+)"[^>]*><b>)([^<]*)(<\/b>)/g, (m, a, id, lbl, c) => { const h = byId(db.halaqat, id); return h ? a + esc(shortLabel(h)) + c : m; });
   const base = adminViews.halaqat;
   adminViews.halaqat = () => {
-    const h = base();
+    const h = shorten(base());
     if (session?.role !== 'admin') return h; /* قسم المحاسب مبني على قسم المدير: بلا بطاقة المراجعة */
     const c = reviewCard();
     return c ? h.replace(/(<\/p><\/div>)/, '$1' + c) : h;
