@@ -1,6 +1,6 @@
 'use strict';
 /* ============ المحاسب ============
-   أقسامه: الطلاب (إضافة، منقطع/منتظم، نقل بين الحلقات والأماكن)، والاشتراكات (من fees.js)، وملاحظات للإدارة، والإعلانات.
+   أقسامه: الطلاب (إضافة، منقطع/منتظم، نقل بين الحلقات والأماكن)، والأماكن والحلقات (للاطلاع)، والاشتراكات (من fees.js)، وملاحظات للإدارة، والإعلانات.
    كل عمل مربوط بصلاحية يملكها المحاسب افتراضيًا، ويمكن للمدير سحبها منه أو منحها لغيره من قسم «الصلاحيات».
    الخادم يتحقق من كل صلاحية، ولا يسمح لغير المدير بتعديل بيانات الطالب الأخرى. */
 (() => {
@@ -102,8 +102,29 @@
       <div class="card"><h2>ملاحظاتي المرسلة</h2>${mine.length ? mine.map(n => `<div class="news">${esc(n.text)}<br><small>${esc(n.date)} — إلى ${esc(AUD[n.audience] || '')}</small></div>`).join('') : empty('لم ترسل ملاحظات بعد.')}</div>`;
   }
 
+  /* ===== الأماكن والحلقات (للاطلاع): قسم المدير نفسه دون أزرار الإضافة والتعديل والحذف (الخادم لا يسمح بها للمحاسب) ===== */
+  function placesView() {
+    return adminViews.halaqat()
+      .replace(/<button class="btn[^"]*" data-act="(addPlace|addHalaqa|editPlace|delPlace)"[^>]*>[^<]*<\/button>/g, '')
+      .replace(/<td><button class="btn sm" data-act="editHalaqa"[\s\S]*?<\/td>/g, '')
+      .replace(/<th>الطلاب<\/th><th><\/th>/g, '<th>الطلاب</th>')
+      .replace(/data-hstu=/g, 'data-ahstu=')
+      .replace('ابدأ بإضافة مكان، ثم أضف حلقاته.', 'لا توجد أماكن أو حلقات بعد.');
+  }
+  /* طلاب الحلقة للمحاسب: الاسم والفئة والسن والحالة (بلا الحضور والحفظ وملف الطالب) */
+  function halaqaStudentsAcc(h) {
+    if (!h) return;
+    const list = db.students.filter(s => s.halaqaId === h.id).sort((a, b) => (stOff(a) - stOff(b)) || a.name.localeCompare(b.name, 'ar'));
+    const off = list.filter(stOff).length;
+    const info = [['المعلم', tName(h.teacherId)], ['المشرف', supName(h.supervisorId)], ['المكان', placeName(h) || '—'], ['الوقت', timeText(h) || '—'], ['الطلاب', `${list.length - off} منتظم${off ? ` و${off} منقطع` : ''}`]];
+    openInfo(halaqaLabel(h), `<div class="tbl" style="margin-bottom:.8rem"><table>${info.map(([l, v]) => `<tr><th style="width:30%">${l}</th><td>${esc(v)}</td></tr>`).join('')}</table></div>
+      ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>الفئة</th><th>السن</th><th>الحالة</th></tr>${list.map((s, i) => `<tr><td>${i + 1}</td><td>${esc(s.name)}</td><td>${CATS[s.cat || 'child']}</td><td>${ageOf(s) === '' ? '—' : ageOf(s)}</td><td>${statusCell(s)}</td></tr>`).join('')}</table></div>` : empty('لا يوجد طلاب في هذه الحلقة بعد.')}`);
+  }
+  document.addEventListener('click', e => { const b = e.target.closest('[data-ahstu]'); if (b) halaqaStudentsAcc(byId(db.halaqat, b.dataset.ahstu)); });
+  TABS.accountant.splice(TABS.accountant.findIndex(t => t[0] === 'students') + 1, 0, ['halaqat', 'الأماكن والحلقات']);
+
   TAB_ICONS.notes = svg('<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>');
-  VIEWS.accountant = { students: studentsView, fees: () => window.FeesView(), notes: notesView, news: () => newsView('accountant') };
+  VIEWS.accountant = { students: studentsView, halaqat: placesView, fees: () => window.FeesView(), notes: notesView, news: () => newsView('accountant') };
 
   /* ===== الإجراءات ===== */
   function move(s) {
