@@ -302,7 +302,7 @@ async function pull() {
     const base = { id: m.id, name: m.name, phone: m.phone || '', userId: m.user_id || null, hasLogin: !!m.login_email, extra: m.extra || {} };
     if (m.role === 'teacher') db.teachers.push({ ...base, personal: m.info?.personal || {}, tech: m.info?.tech || {}, admin: adm.get(m.id) || {} });
     else if (m.role === 'student') db.students.push({ ...base, halaqaId: m.halaqa_id || '', cat: m.cat || 'child', info: m.info || {}, hasPhoto: inc ? !!m.has_photo : !!m.photo, photo: photoCache.get(m.id) });
-    else db[ROLE_COLL[m.role]].push(base);
+    else db[ROLE_COLL[m.role]].push({ ...base, info: m.info || {} }); // المدير والمشرف والمحاسب: بياناتهم الإضافية (مثل مسمى الموظف) تبقى ولا تُمسح عند التعديل
   });
   db.halaqat = halaqat.map(h => ({ id: h.id, name: h.name || '', teacherId: h.teacher_id || '', supervisorId: h.supervisor_id || '', placeId: h.place_id || '', time: h.time || undefined }));
   db.attendance = attendance.map(a => ({ id: a.id, studentId: a.student_id, date: a.date, status: a.status }));
