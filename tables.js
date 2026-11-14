@@ -12,6 +12,10 @@
     main .tbl:not(.paytbl) th,main .tbl:not(.paytbl) td{white-space:nowrap}
     main .tbl:not(.paytbl) th{text-align:center}
     .msubsel{width:auto;min-width:13rem;font-weight:700}
+    .msearch{display:flex;align-items:center;gap:.5rem;flex:1 1 15rem;max-width:24rem}
+    .msearch input{flex:1;min-width:0}
+    .msearch [data-mcount]{white-space:nowrap;font-size:.85rem}
+    .memview > .msearch{margin-bottom:.7rem}
     .btn.icon-only .cnt{font-size:.72rem;font-weight:700;margin-inline-start:.1rem}
     .btn.icon-only:has(.cnt){width:auto;padding:0 .5rem;gap:.1rem}
     main .tbl td.csel,main .tbl th.csel{background:var(--gold-l) !important;box-shadow:inset 0 0 0 1px var(--gold)}
@@ -62,8 +66,8 @@
     if ((String(ui.msub).startsWith('t:') && !tc.some(([t]) => 't:' + t === ui.msub)) || (ui.msub === 'titled' && tc.length < 2)) {
       ui.msub = tc.length === 1 ? 't:' + tc[0][0] : tc.length ? 'titled' : 'unclassified'; saveTab();
     }
-    if (ui.msub === 'titled') return `<div class="memview">${titledView()}</div>`;
-    if (String(ui.msub).startsWith('t:')) return `<div class="memview">${titledView(ui.msub.slice(2))}</div>`;
+    if (ui.msub === 'titled') return memWrap(titledView());
+    if (String(ui.msub).startsWith('t:')) return memWrap(titledView(ui.msub.slice(2)));
     const cur = ['unclassified', ...KINDS.map(k => k[0])].includes(ui.msub) ? ui.msub : 'teachers';
     let h = baseMembers()
       .replace(/<button class="btn[^"]*" data-act="msub"[^>]*>[^<]*<\/button>/g, '')
@@ -74,8 +78,61 @@
     /* بطاقة «مصنفون بمسميات أخرى» أسفل «غير مصنف» صار لها اختيار مستقل في القائمة */
     const i = h.indexOf('<div class="card"><h2>مصنّفون بمسميات أخرى');
     if (i > -1) h = h.slice(0, i);
-    return `<div class="memview">${h.split('>له حساب دخول<').join('>متاح<')}</div>`;
+    return memWrap(h.split('>له حساب دخول<').join('>متاح<'));
   };
+  /* ===== بحث حي في الأعضاء: يصفّي صفوف الجدول مع كل حرف (الاسم والهاتف وبقية الأعمدة النصية) =====
+     - يتجاهل اختلاف الكتابة (أ/ا، ة/ه، ى/ي، عبد الله/عبدالله) والأرقام العربية؛ كل الكلمات المكتوبة يجب أن تتطابق.
+     - «تحديد الكل» يحدد الظاهر فقط، والمحدد الذي يخفيه البحث يُلغى تحديده (فلا يُحذف ما لا تراه).
+     - الطباعة وExcel وPDF تشمل الصفوف الظاهرة فقط. */
+  let mq = '', mfocus = false;
+  const digitsEn = v => String(v || '').replace(/[٠-٩]/g, c => c.charCodeAt(0) - 1632).replace(/[۰-۹]/g, c => c.charCodeAt(0) - 1776);
+  const skey = v => norm(digitsEn(v));
+  const rowKey = r => r.dataset.sk || (r.dataset.sk = skey([...r.cells].map(td => { const c = td.cloneNode(true); c.querySelectorAll('select,button,input,.noprint').forEach(x => x.remove()); return c.textContent; }).join(' ')));
+  function memWrap(inner) {
+    const box = `<div class="msearch"><input type="search" data-msearch value="${esc(mq)}" placeholder="بحث بالاسم أو الهاتف…" aria-label="بحث في الأعضاء" autocomplete="off"><span class="muted" data-mcount></span></div>`;
+    const h = /<select class="msubsel"[\s\S]*?<\/select>/.test(inner) ? inner.replace(/<select class="msubsel"[\s\S]*?<\/select>/, m => m + box) : box + inner;
+    setTimeout(applyMSearch, 0);
+    return `<div class="memview">${h}</div>`;
+  }
+  function applyMSearch() {
+    const view = document.querySelector('.memview'); if (!view) return;
+    const toks = skey(mq).split(' ').filter(Boolean);
+    let shown = 0, total = 0;
+    const hidden = [];
+    view.querySelectorAll('.tbl table').forEach(t => [...t.rows].forEach(r => {
+      if (!r.querySelector('td')) return;
+      total++;
+      const ok = !toks.length || toks.every(k => rowKey(r).includes(k));
+      r.hidden = !ok; if (ok) shown++;
+      else { const cb = r.querySelector('[data-sel]'); if (cb && ui.sel?.has(cb.dataset.sel)) hidden.push(cb.dataset.sel); }
+    }));
+    const c = view.querySelector('[data-mcount]');
+    if (c) c.textContent = toks.length ? (shown ? `${shown} من ${total}` : 'لا نتائج') : '';
+    const inp = view.querySelector('[data-msearch]');
+    if (inp && mfocus && document.activeElement !== inp) { inp.focus(); const n = inp.value.length; try { inp.setSelectionRange(n, n); } catch (e) { /* ignore */ } }
+    if (hidden.length) { hidden.forEach(id => ui.sel.delete(id)); render(); }
+  }
+  document.addEventListener('input', e => { if ('msearch' in (e.target.dataset || {})) { mq = e.target.value; applyMSearch(); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && 'msearch' in (e.target.dataset || {}) && e.target.value) { e.target.value = mq = ''; applyMSearch(); } });
+  document.addEventListener('focusin', e => { if ('msearch' in (e.target.dataset || {})) mfocus = true; });
+  document.addEventListener('focusout', e => { if ('msearch' in (e.target.dataset || {})) setTimeout(() => { mfocus = document.activeElement?.dataset?.msearch !== undefined; }, 0); });
+  /* «تحديد الكل» أثناء البحث: الظاهر فقط */
+  document.addEventListener('change', e => {
+    if (!mq.trim() || !('selall' in (e.target.dataset || {})) || !e.target.closest('.memview')) return;
+    e.stopImmediatePropagation();
+    const vis = [...document.querySelectorAll('.memview tr:not([hidden]) [data-sel]')].map(x => x.dataset.sel);
+    ui.sel = e.target.checked ? new Set([...(ui.sel || []), ...vis]) : new Set([...(ui.sel || [])].filter(id => !vis.includes(id)));
+    render();
+  }, true);
+  /* الطباعة وExcel وPDF: الصفوف الظاهرة فقط إن كان البحث قد أخفى بعضها */
+  document.addEventListener('DOMContentLoaded', () => {
+    const base = window.tableGrid; if (typeof base !== 'function') return;
+    window.tableGrid = tbl => {
+      if (!tbl || ![...tbl.rows].some(r => r.hidden)) return base(tbl);
+      const c = tbl.cloneNode(true); [...c.rows].forEach(r => { if (r.hidden) r.remove(); });
+      return base(c);
+    };
+  });
   document.addEventListener('change', e => {
     if (!('msubsel' in (e.target.dataset || {}))) return;
     ui.msub = e.target.value; ui.sel = new Set(); saveTab(); render();
