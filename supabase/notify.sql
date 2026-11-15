@@ -7,6 +7,7 @@
 --  2) notify_dues(students, y, m, note): تذكير بسداد اشتراك شهر معيّن لطالب أو أكثر.
 --     يرسله المدير، ومن له صلاحية التحصيل (المحاسب)، ومعلم الطالب، والإداري في مكان الطالب.
 --     التذكير نفسه للطالب نفسه لا يتكرر في اليوم نفسه.
+--  3) notify_students(students, body): إشعار حر لطلاب بعينهم (المعلم لطلاب حلقاته، وكذلك المشرف والإداري والمحاسب والمدير).
 --  يُنفَّذ بعد notes.sql و roles.sql، مرة واحدة في Supabase ← SQL Editor ← Run. آمن للتكرار.
 -- =====================================================================
 
@@ -62,5 +63,32 @@ begin
 end $$;
 revoke all on function public.notify_dues(uuid[], int, int, text) from public, anon;
 grant execute on function public.notify_dues(uuid[], int, int, text) to authenticated;
+
+-- 3) إشعار عام من المعلم (أو المشرف أو الإداري أو المحاسب أو المدير) لطلاب بعينهم: رسالة حرة تصل كلًّا منهم في «الإعلانات»
+create or replace function public.notify_students(students uuid[], body text)
+returns int language plpgsql security definer set search_path = public as $$
+declare me record; s uuid; n int := 0; txt text := trim(coalesce(body, '')); ok boolean;
+begin
+  if length(txt) < 2 or length(txt) > 1000 then raise exception 'نص الإشعار غير صالح'; end if;
+  if coalesce(array_length(students, 1), 0) = 0 or array_length(students, 1) > 2000 then raise exception 'عدد الطلاب غير صالح'; end if;
+  if public.is_blocked() then raise exception 'حسابك موقوف'; end if;
+  select id, name, role into me from members where user_id = auth.uid() and role <> 'student'
+    order by (role = 'admin') desc, (role = 'teacher') desc limit 1;
+  if me.id is null then raise exception 'غير مصرح'; end if;
+  foreach s in array students loop
+    ok := public.is_admin() or public.has_perm('fees.collect') or public.can_teach_student(s)
+          or (public.has_role('placeadmin') and exists (select 1 from members x where x.id = s and x.halaqa_id in (select public.my_place_halaqat())));
+    if not ok or not exists (select 1 from members where id = s and role = 'student') then continue; end if;
+    if exists (select 1 from news where audience = 'm:' || s::text and text = txt and date = current_date) then continue; end if;
+    insert into news (text, audience, date, author_id, author)
+    values (txt, 'm:' || s::text, current_date, me.id,
+            (case me.role when 'accountant' then 'المحاسب' when 'teacher' then 'المعلم' when 'placeadmin' then 'الإداري'
+                          when 'supervisor' then 'المشرف' else 'الإدارة' end) || ' ' || me.name);
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke all on function public.notify_students(uuid[], text) from public, anon;
+grant execute on function public.notify_students(uuid[], text) to authenticated;
 
 notify pgrst, 'reload schema';
