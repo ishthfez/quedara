@@ -96,7 +96,17 @@
   /* المدير يملك كل ما تملكه الفئات الأخرى: حضور أي حلقة وتسميع طلابها، بالصفحتين نفسيهما */
   adminViews.att = attView;
   adminViews.mine = view;
-  if (!TABS.admin.some(t => t[0] === 'mine')) TABS.admin.push(['mine', 'طلاب الحلقات'], ['att', 'الحضور']);
+  if (!TABS.admin.some(t => t[0] === 'att')) TABS.admin.push(['att', 'الحضور']);
+  /* «طلاب الحلقات» للمدير ليس صفحة مستقلة (كان تكرارًا لـ«الطلاب»): صار عرضًا داخل «الطلاب» بزرّين
+     «كل الطلاب» و«حسب الحلقة»، والثاني هو جدول طلاب الحلقة نفسه الذي يراه المعلم */
+  const svwBar = () => `<div class="bar" style="margin:0 0 .6rem"><div class="plseg mtabs">
+      <button type="button" class="btn ${ui.svw !== 'hal' ? 'on' : ''}" data-svw="all">كل الطلاب</button>
+      <button type="button" class="btn ${ui.svw === 'hal' ? 'on' : ''}" data-svw="hal">حسب الحلقة</button></div></div>`;
+  document.addEventListener('DOMContentLoaded', () => {
+    const base = adminViews.students;
+    adminViews.students = () => svwBar() + (ui.svw === 'hal' ? view() : base());
+  });
+  document.addEventListener('click', e => { const b = e.target.closest('[data-svw]'); if (b) { ui.svw = b.dataset.svw; render(); } });
   /* صفحة بداية المعلم: «طلابي» (أول قائمته قبل أن يوحّد nav.js الترتيب) */
   { const i = TABS.teacher.findIndex(t => t[0] === 'mine'); if (i > 0) TABS.teacher.unshift(...TABS.teacher.splice(i, 1)); }
 
