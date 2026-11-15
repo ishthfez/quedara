@@ -14,6 +14,7 @@
     return myHalaqat();
   };
   const match = (s, q) => !q || norm(s.name).includes(norm(q));
+  const canP = p => (window.Perms ? Perms.can(p) : session?.role === 'admin');
   function view() {
     const hs = halaqatOf();
     if (!hs.length) return `<div class="card">${empty('لم تُسنَد إليك حلقة بعد. تواصل مع الإدارة.')}</div>`;
@@ -30,7 +31,7 @@
     const meta = [placeName(h), timeText(h)].filter(Boolean).join(' · ');
     const rows = list.map((s, i) => `<tr data-mn="${esc(norm(s.name))}"${match(s, st.q) ? '' : ' style="display:none"'}><td>${i + 1}</td><td>${esc(s.name)}</td>
       ${st.tab === 'off' ? `<td>${esc(s.info?.statusDate || '—')}</td>` : `<td>${esc(lastHifz(s.id))}</td><td>${attRate(s.id)}</td>`}
-      <td class="noprint">${st.tab === 'on' && canRec ? `<button class="btn sm primary" data-act="rec" data-id="${s.id}">تسجيل تسميع</button>` : ''}<button class="btn sm" data-act="hist" data-id="${s.id}">السجل</button><button class="btn sm" data-act="studentCard" data-id="${s.id}">الملف</button><button class="btn sm" data-mnote="${s.id}" title="إشعار لهذا الطالب">إشعار</button></td></tr>`).join('');
+      <td class="noprint">${st.tab === 'on' && canRec ? `<button class="btn sm primary" data-act="rec" data-id="${s.id}">تسجيل تسميع</button>` : ''}<button class="btn sm" data-act="hist" data-id="${s.id}">السجل</button><button class="btn sm" data-act="studentCard" data-id="${s.id}">الملف</button><button class="btn sm" data-mnote="${s.id}" title="إشعار لهذا الطالب">إشعار</button>${canP('students.move') ? `<button class="btn sm" data-move="${s.id}">نقل</button>` : ''}${canP('students.status') ? `<button class="btn sm" data-stat="${s.id}">${stOff(s) ? 'منتظم' : 'منقطع'}</button>` : ''}</td></tr>`).join('');
     return `<div class="card"><div class="bar" style="margin:0 0 .4rem">${head}<span class="muted">${all.length} طالب</span><button type="button" class="btn sm primary" data-mnote="*">إشعار للطلاب</button></div>
       ${meta ? `<p class="muted" style="margin:0 0 .6rem;font-size:.88rem">${esc(meta)}</p>` : ''}
       <div class="bar" style="margin:0 0 .6rem"><div class="plseg mtabs">
@@ -114,4 +115,20 @@
     let n = 0; rows.forEach(r => { const ok = !q || r.dataset.mn.includes(q); r.style.display = ok ? '' : 'none'; if (ok) n++; });
     const c = document.querySelector('[data-mcount]'); if (c) c.textContent = q ? `${n} من ${rows.length}` : `${rows.length} ${st.tab === 'off' ? 'منقطع' : 'منتظم'}`;
   });
+  /* ===== نقل الطالب وتغيير حالته من كل جدول طلاب، للمدير (ولمن له الصلاحية) =====
+     جدول «الطلاب» عند المدير وجدول «الاشتراكات» فيهما «تعديل» أو «الفئة» بلا «نقل»: يُضاف بجانبهما زرّا «نقل» و«منقطع/منتظم»
+     (يعملان بنافذة النقل نفسها التي يستعملها المحاسب، والخادم يتحقق من الصلاحية). */
+  let qRaf = 0;
+  const addMoveButtons = () => {
+    qRaf = 0;
+    if (!session || !canP('students.move')) return;
+    document.querySelectorAll('main td button[data-fee-assign], main td button[data-act="editStudent"]').forEach(b => {
+      const td = b.closest('td'), id = b.dataset.feeAssign || b.dataset.id; if (!td || !id || td.querySelector('[data-move]')) return;
+      const s = byId(db.students, id); if (!s) return;
+      let h = `<button type="button" class="btn sm" data-move="${esc(id)}">نقل</button>`;
+      if (canP('students.status') && !td.querySelector('[data-stat]')) h += `<button type="button" class="btn sm" data-stat="${esc(id)}">${stOff(s) ? 'منتظم' : 'منقطع'}</button>`;
+      b.insertAdjacentHTML('afterend', h);
+    });
+  };
+  new MutationObserver(() => { if (!qRaf) qRaf = requestAnimationFrame(addMoveButtons); }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
 })();
