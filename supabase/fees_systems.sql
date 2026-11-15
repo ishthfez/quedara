@@ -5,26 +5,36 @@
 --  2) حارس بيانات الطالب: من له صلاحية «قيمة الاشتراك» يغيّر نظام الطالب أيضًا.
 --  3) من له صلاحية «قيمة الاشتراك» (المحاسب) يحفظ «إعدادات الاشتراك» أيضًا، لا المدير وحده.
 --  4) مبالغ تختلف حسب المكان (places في إعدادات الاشتراك): طالب المكان يأخذ مبلغه، والفارغ يأخذ العام.
+--  5) لكل سنة مبالغها (years): مستحقات سنة لا تتغير إن تغيّر الاشتراك في سنة بعدها.
+--  يُنفَّذ بعد roles.sql أيضًا.
 --  يُنفَّذ بعد collections.sql و student_edit.sql، مرة واحدة في Supabase ← SQL Editor ← Run. آمن للتكرار.
 -- =====================================================================
 
-create or replace function public.fee_due(s public.members) returns numeric
+-- المستحق عن سنة بعينها: لكل سنة مبالغها (years في إعدادات الاشتراك)، فتغيير الاشتراك في سنة جديدة لا يغيّر مستحقات ما قبلها.
+-- مبالغ السنة: المحفوظة لها، وإلا لأقرب سنة قبلها، وإلا لأقرب سنة بعدها، وإلا المبالغ العامة. الخصومات واحدة لكل السنوات.
+create or replace function public.fee_due_y(s public.members, yy int) returns numeric
 language plpgsql stable security definer set search_path = public as $$
 declare cfg jsonb := coalesce((select value from settings where key = 'priv_fees'), '{}'); i jsonb := coalesce(s.info, '{}');
-        base numeric; c jsonb; d jsonb; v numeric; t text; off numeric := 0; g text; p jsonb;
+        yc jsonb; base numeric; c jsonb; d jsonb; v numeric; t text; off numeric := 0; g text; p jsonb;
 begin
+  yy := coalesce(yy, extract(year from current_date)::int);
+  if jsonb_typeof(cfg->'years') = 'object' then
+    select value into yc from jsonb_each(cfg->'years') where key ~ '^[0-9]{4}$' and key::int <= yy order by key::int desc limit 1;
+    if yc is null then select value into yc from jsonb_each(cfg->'years') where key ~ '^[0-9]{4}$' order by key::int limit 1; end if;
+  end if;
+  yc := coalesce(yc, cfg);
   if coalesce(i->>'fee', '') ~ '^[0-9]+(\.[0-9]+)?$' and (i->>'fee')::numeric > 0 then base := (i->>'fee')::numeric;
   else
-    select x into c from jsonb_array_elements(coalesce(cfg->'cats', '[]')) x where x->>'id' = i->>'feeCat' limit 1;
-    if c is null then select x into c from jsonb_array_elements(coalesce(cfg->'cats', '[]')) x where x->>'def' = (case when s.cat = 'adult' then 'adult' else 'child' end) limit 1; end if;
+    select x into c from jsonb_array_elements(coalesce(yc->'cats', '[]')) x where x->>'id' = i->>'feeCat' limit 1;
+    if c is null then select x into c from jsonb_array_elements(coalesce(yc->'cats', '[]')) x where x->>'def' = (case when s.cat = 'adult' then 'adult' else 'child' end) limit 1; end if;
     if c is not null then base := coalesce(nullif(c->>'amount', '')::numeric, 0);
     else
       /* الاشتراك العام: مبلغ مكان الطالب إن حُدّد له مبلغ خاص (places)، وإلا المبلغ العام؛
          ونظام 3 أيام إن اختير للطالب وحُدّد مبلغه، وإلا نظام 6 أيام */
-      p := cfg -> 'places' -> (select h.place_id::text from halaqat h where h.id = s.halaqa_id);
+      p := yc -> 'places' -> (select h.place_id::text from halaqat h where h.id = s.halaqa_id);
       g := case when i->>'feeSys' = '3'
-                then coalesce(p->>'general3', cfg->>'general3', p->>'general', cfg->>'general')
-                else coalesce(p->>'general', cfg->>'general') end;
+                then coalesce(p->>'general3', yc->>'general3', p->>'general', yc->>'general')
+                else coalesce(p->>'general', yc->>'general') end;
       if coalesce(g, '') !~ '^[0-9]+(\.[0-9]+)?$' then return null; end if;
       base := g::numeric;
     end if;
@@ -37,7 +47,21 @@ begin
   end if;
   return round(base - off, 2);
 end $$;
-revoke all on function public.fee_due(public.members) from public, anon;
+-- المستحق بالسنة الحالية (لما يستدعيه بلا سنة)
+create or replace function public.fee_due(s public.members) returns numeric
+language sql stable security definer set search_path = public as $$ select public.fee_due_y(s, extract(year from current_date)::int) $$;
+revoke all on function public.fee_due(public.members), public.fee_due_y(public.members, int) from public, anon;
+
+-- مستحقات طلاب حلقة عن سنة بعينها (لقائمة تحصيل شهر من تلك السنة)
+create or replace function public.student_dues_y(hid uuid, yy int) returns table (student_id uuid, due numeric)
+language sql stable security definer set search_path = public as $$
+  select m.id, public.fee_due_y(m, yy) from members m
+  where m.role = 'student' and m.halaqa_id = hid
+    and (public.is_admin() or public.has_perm('fees.collect') or hid in (select public.my_place_halaqat())
+         or exists (select 1 from halaqat h where h.id = hid and (h.teacher_id in (select public.my_ids()) or h.supervisor_id in (select public.my_ids()))))
+$$;
+revoke all on function public.student_dues_y(uuid, int) from public, anon;
+grant execute on function public.student_dues_y(uuid, int) to authenticated;
 
 -- حارس بيانات الطالب (كما في student_edit.sql، ومعه نظام الحضور feeSys)
 create or replace function public.members_guard() returns trigger
