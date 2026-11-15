@@ -36,6 +36,7 @@
   function create(x, h) {
     const m = { id: uid(), name: x.name, halaqaId: h.id, phone: '', pin: genPass() };
     Object.entries(x.vals || {}).forEach(([k, val]) => { if (k !== 'core:halaqa' && k !== 'core:halaqaId') setField(m, k, val); });
+    if (!h.id && x.halaqa) m.info = { ...(m.info || {}), fileHalaqa: String(x.halaqa) };   // حلقته كما في الملف، حتى لا تضيع
     db.students.push(m);
     Object.entries(x.extra || {}).forEach(([header, val]) => {
       const p = db.pending.find(pp => pp.kind === 'students' && pp.header === header);
@@ -119,6 +120,22 @@
     }
     return { c, why: why.join('، ') };
   }
+  /* ===== «إضافة الكل كما هم في السجل»: ضغطة واحدة بلا أي اختيار =====
+     كل واحد بالاسم نفسه، في الحلقة التي يدل عليها سجله إن دلّ على حلقة واحدة، وإلا «بلا حلقة»
+     (ونص حلقته في الملف يُحفظ في بياناته). ما جاء من ملف الدفعات لا يُضاف (ليس طلابًا: زر «إصلاح»). */
+  function quickAll() {
+    const L = list().filter(x => !isPay(x)); if (!L.length) { toast('لا يوجد من يُضاف'); return; }
+    const picks = L.map(x => { const G = guess(x); return { x, h: G.c.length === 1 ? G.c[0] : null }; });
+    const inH = picks.filter(p => p.h).length, noH = picks.length - inH;
+    ask(`إضافة ${L.length} طالبًا بأسمائهم كما في السجل؟ ${inH ? `${inH} في حلقاتهم من السجل` : ''}${inH && noH ? '، و' : ''}${noH ? `${noH} بلا حلقة (لم يدل سجلهم على حلقة واحدة؛ تجدهم في «الطلاب» بتصفية «بلا حلقة»)` : ''}. احفظ نسخة احتياطية قبلها.`, () => {
+      const ids = new Set();
+      picks.forEach(({ x, h }) => { create(x, h || { id: '' }); ids.add(x.id); });
+      db.payroll.settings.dup_students = list().filter(x => !ids.has(x.id));
+      save(); render();
+      const left = list().length;
+      toast(`أُضيف ${ids.size} طالبًا${left ? ` — بقي ${left} من ملف الدفعات (زر «إصلاح»)` : ' — القائمة فارغة ✓'}`);
+    });
+  }
   function allDialog() {
     const L = list().filter(x => !isPay(x)), payN = list().length - L.length;
     if (!L.length) { toast('لا يوجد من يُضاف'); return; }
@@ -180,16 +197,16 @@
     if (session?.role !== 'admin' || (window.QLView ? window.QLView() : ui.tab) !== 'dups' || ui.msub !== 'dups') return;
     if (document.querySelector('[data-dupsall]')) return;
     const note = document.querySelector('main .card > .note:not([data-fixpay])'); if (!note) return;
-    const g = sig(); if (g !== csig) { csig = g; cache = plan(); }
     const allN = list().filter(x => !isPay(x)).length;
-    if (!cache.add.length && !allN) return;
-    const at = note.nextElementSibling?.querySelector?.('[data-samego]') ? note.nextElementSibling : note;
-    at.insertAdjacentHTML('afterend', `<div class="bar" data-dupsall style="margin:.2rem 0 .7rem"><span class="muted grow" style="font-size:.88rem">${cache.add.length ? `${cache.add.length} اسمًا صاحبُ اسمهم في مكان آخر فقط: يُضافون بأسمائهم كما هي، والمكان يميّز` : 'اعتبار الباقين كلهم طلابًا مستقلين (تراجع الاسم والحلقة لكل واحد قبل الإضافة)'}</span>
-      ${cache.add.length ? `<button type="button" class="btn sm primary" data-dupsgo>إضافة الباقين مستقلين (${cache.add.length})</button>` : ''}${allN ? `<button type="button" class="btn sm" data-dupsevery>إضافة الكل مستقلين (${allN})</button>` : ''}</div>`);
+    if (!allN) return;
+    note.insertAdjacentHTML('beforebegin', `<div class="bar" data-dupsall style="margin:0 0 .7rem"><button type="button" class="btn primary" data-dupsquick>إضافة الكل كما هم في السجل (${allN})</button>
+      <span class="muted grow" style="font-size:.85rem">ضغطة واحدة: كل واحد باسمه، في حلقته من السجل إن عُرفت، وإلا «بلا حلقة».</span>
+      <button type="button" class="btn sm" data-dupsevery>مراجعة واحدًا واحدًا</button></div>`);
   }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
   document.addEventListener('click', e => {
     if (session?.role !== 'admin') return;
-    if (e.target.closest('[data-dupsgo]')) dialog();
+    if (e.target.closest('[data-dupsquick]')) quickAll();
+    else if (e.target.closest('[data-dupsgo]')) dialog();
     else if (e.target.closest('[data-dupsevery]')) allDialog();
   });
 })();
