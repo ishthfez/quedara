@@ -66,7 +66,7 @@ begin
   for k in select jsonb_object_keys(coalesce(old.info, '{}'::jsonb) || coalesce(new.info, '{}'::jsonb)) loop
     if (old.info -> k) is distinct from (new.info -> k) then
       if k in ('status', 'statusDate') and public.has_perm('students.status') then continue; end if;
-      if k in ('fee', 'feeCat', 'feeDisc', 'feeDiscVal', 'feeDiscType') and public.has_perm('fees.amount') then continue; end if;
+      if k in ('fee', 'feeCat', 'feeSys', 'feeDisc', 'feeDiscVal', 'feeDiscType') and public.has_perm('fees.amount') then continue; end if;
       raise exception 'غير مصرح بتعديل %', k;
     end if;
   end loop;
