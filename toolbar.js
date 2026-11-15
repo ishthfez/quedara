@@ -4,7 +4,7 @@
      - ينتقل شريط البطاقة إلى صف أدوات الجدول نفسه (التكبير وExcel وPDF والطباعة)، فيصيران صفًا واحدًا.
        (شريط البطاقة هو الذي ينتقل لا العكس: أزرار الجدول تجد جدولها بأنه العنصر الذي يلي صفها مباشرة)
      - الأزرار المعروفة تصير أيقونات، واسمها يظهر عند الوقوف عليها (وعند الضغط المطوّل على الجوال)، والعدد في رقم صغير.
-     - Excel وPDF في زر واحد «حفظ»: الضغط عليه يُظهر الخيارين (جدول أخضر Excel، ومستند أحمر PDF).
+     - Excel وPDF في أيقونة واحدة «حفظ الجدول» (سهم إلى الأسفل): الضغط عليها يُظهر الخيارين (جدول أخضر Excel، ومستند أحمر PDF).
      - ملاحظة الإرشاد تحت الشريط تُخفى، ما عدا التنبيهات المهمة (شريط «إصلاح» وما فيه أزرار).
      - زر «إضافة» آخر الصف (على اليسار)، والأزرار متجاورة بعد التصفية والبحث.
      - صف الطالب المنقطع والعامل المتوقف كله بالأحمر في كل الجداول (يُعرف من علامة «منقطع/متوقف» في صفه أو خانة حالته).
@@ -107,7 +107,7 @@
     main .tbl select.mini{font-size:.9em}
     .tblprint .btn.texp{display:none!important}
     .qsave{position:relative;display:inline-flex}
-    .qsave > .btn{width:auto!important;min-width:38px;height:36px;padding:0 .55rem;gap:.25rem;font-weight:700}
+    .qsave > .btn{width:38px!important;min-width:38px;height:36px;padding:0!important;justify-content:center}
     .qsmenu{position:absolute;top:calc(100% + .3rem);inset-inline-end:0;z-index:60;min-width:11rem;background:var(--card,#fff);border:1px solid var(--line,#e5e7eb);border-radius:12px;box-shadow:0 10px 26px rgba(15,25,50,.2);padding:.3rem;display:flex;flex-direction:column;gap:.15rem}
     .qsmenu[hidden]{display:none}
     .qsmenu button{display:flex;align-items:center;gap:.55rem;width:100%;padding:.5rem .6rem;border:0;border-radius:8px;background:none;font:inherit;font-weight:700;color:var(--text);cursor:pointer;text-align:start}
@@ -265,7 +265,7 @@
     /* زر «حفظ» واحد بدل Excel وPDF: يبقى الزران الأصليان في مكانهما مخفيين (يجدان جدولهما منه) ويُضغطان من القائمة */
     document.querySelectorAll('main .tblprint').forEach(tp => {
       if (tp.querySelector('.qsave') || !tp.querySelector('.btn.texp[data-xls]')) return;
-      tp.querySelector('.btn.texp[data-xls]').insertAdjacentHTML('beforebegin', `<span class="qsave noprint"><button type="button" class="btn" data-qsave title="حفظ الجدول" aria-label="حفظ الجدول" aria-haspopup="menu" aria-expanded="false">${SAVE}<span>حفظ</span></button>
+      tp.querySelector('.btn.texp[data-xls]').insertAdjacentHTML('beforebegin', `<span class="qsave noprint"><button type="button" class="btn icon-only" data-qsave title="حفظ الجدول" aria-label="حفظ الجدول" aria-haspopup="menu" aria-expanded="false">${SAVE}</button>
         <span class="qsmenu" role="menu" hidden><button type="button" role="menuitem" data-qsv="xls">${XLS}ملف Excel</button><button type="button" role="menuitem" data-qsv="pdf">${PDF}ملف PDF</button></span></span>`);
     });
     /* ===== سطر واحد لعرض المزيد أسفل جدول الطلاب =====
