@@ -76,6 +76,16 @@
      - تصفية «غير مصنف»: أداة التصنيف (ومعها المصنفون بمسميات أخرى) بدل الجدول، كـ«بلا حلقة» في الطلاب.
      - الحذف من ملف العامل («حذف»)، والاسم والنطاق فيه من قبل. */
   const W_KINDS = ['supervisors', 'teachers', 'accountants', 'placeadmins'];
+  /* ===== لا حساب دخول جديد لطالب منقطع ولا لعامل متوقف =====
+     المنقطع: حالة الطالب. المتوقف: المعلم «موقوف»، أو أي عضو مرتبط بموظف مرتبات حالته «متوقف». */
+  const empStoppedOf = id => { try { const c = typeof clsRead === 'function' ? clsRead() : {}; return (db.payroll?.employees || []).some(e => e.status === 'متوقف' && c[e.id]?.memberId === id); } catch (e) { return false; } };
+  const isOffMember = m => {
+    if (!m) return false;
+    if ((db.students || []).includes(m)) return typeof stOff === 'function' && stOff(m);
+    if ((db.teachers || []).includes(m) && m.admin?.status === 'موقوف') return true;
+    return empStoppedOf(m.id);
+  };
+  window.QLIsOff = isOffMember;
   const baseWorkers = adminViews.teachers;
   let wPendK = null;   // تصفية تُطبَّق بعد الرسم (staff.js يحفظ تصفيته داخله)
   const splitKey = key => { const i = key.indexOf(':'); return [key.slice(0, i), key.slice(i + 1)]; };
@@ -88,10 +98,11 @@
     }
     const m = byId(db[k] || [], id); if (!m) return '—';
     if (!CLOUD) return '<span class="tag tag-ok">له حساب</span>';
+    if (!m.hasLogin && isOffMember(m)) return '<span class="tag">بلا حساب</span>';   // متوقف: لا يُنشأ له حساب
     return m.hasLogin ? `<span class="tag tag-ok">متاح</span> <button type="button" class="btn sm" data-act="cloudPw" data-k="${k}" data-id="${esc(id)}">كلمة جديدة</button>`
       : `<span class="tag">بلا حساب</span> <button type="button" class="btn sm primary" data-act="cloudPw" data-k="${k}" data-id="${esc(id)}">إنشاء حساب</button>`;
   }
-  const needLogin = k => CLOUD ? (W_KINDS.includes(k) ? [k] : W_KINDS).flatMap(x => (db[x] || []).filter(m => !m.hasLogin)) : [];
+  const needLogin = k => CLOUD ? (W_KINDS.includes(k) ? [k] : W_KINDS).flatMap(x => (db[x] || []).filter(m => !m.hasLogin && !isOffMember(m))) : [];
   const ADD = { supervisors: ['addMember', 'مشرف'], placeadmins: ['addMember', 'إداري'], accountants: ['addMember', 'محاسب'] };
   function workersView() {
     const t = document.createElement('template'); t.innerHTML = baseWorkers();
@@ -529,6 +540,21 @@
     if (baseToggle) A.navToggle = d => { const was = ui.nav; baseToggle(d); if (!was && ui.nav) history.pushState(navState({ layer: true }), ''); else if (was && !ui.nav) popLayer(); };
     if (baseClose) A.navClose = d => { const was = ui.nav; baseClose(d); if (was) popLayer(); };
     if (typeof freezeTables === 'function' && typeof tableGrid === 'function') freezeTables = fastFreeze;
+    /* كل إنشاء حساب يمر بـ cloudMakeLogins: يُستبعد منه المنقطع والمتوقف (تجديد كلمة مرور حساب موجود لا يُمنع) */
+    if (typeof cloudMakeLogins === 'function') {
+      const baseMk = cloudMakeLogins;
+      cloudMakeLogins = function (list, ...rest) {
+        const skip = (list || []).filter(m => !m.hasLogin && isOffMember(m)), go = (list || []).filter(m => !skip.includes(m));
+        if (skip.length) toast(skip.length === 1 ? `لا يُنشأ حساب لـ «${skip[0].name}»: ${(db.students || []).includes(skip[0]) ? 'منقطع' : 'متوقف'}` : `استُبعد ${skip.length} من المنقطعين والمتوقفين: لا يُنشأ لهم حساب`);
+        return go.length ? baseMk.call(this, go, ...rest) : undefined;
+      };
+    }
+    if (A.cloudPw) { const basePw = A.cloudPw; A.cloudPw = d => { const m = byId(db[d.k] || [], d.id); if (m && !m.hasLogin && isOffMember(m)) { toast(`لا يُنشأ حساب لـ «${m.name}»: ${d.k === 'students' ? 'منقطع' : 'متوقف'}`); return; } return basePw(d); }; }
+    if (A.cloudPwAll) A.cloudPwAll = d => {
+      const list = (db[d.k] || []).filter(m => !m.hasLogin && !isOffMember(m));
+      if (!list.length) { toast('لا يوجد من يحتاج حسابًا (المنقطعون والمتوقفون لا تُنشأ لهم حسابات)'); return; }
+      ask(`إنشاء حسابات دخول لـ ${list.length} عضو؟ ستظهر كلمات المرور مرة واحدة لتسليمها. (المنقطعون والمتوقفون مستبعدون)`, () => cloudMakeLogins(list));
+    };
     /* «الطلاب»: الطلاب · الاشتراكات · تحصيل المعلمين · الحسابات (أزرارها data-svw يعالجها mine.js)، والتصفية تحدد عرض «الطلاب» */
     const stuFees = adminViews.fees, stuTcol = adminViews.tcollect, stuAtt = adminViews.att;
     const inPl = h => !ui.fp || (!!h && h.placeId === ui.fp);
@@ -542,14 +568,8 @@
     };
     const listView = () => {
       if (ui.fh === '__none') return noHalN() ? filters() + noHalView() : (ui.fh = '', stuBase());
-      const h = ui.fh && byId(db.halaqat, ui.fh);
-      if (h && adminViews.mine) {
-        /* حلقة معينة: جدول الحلقة بأدواته، وعنوانه اسمها بدل قائمة اختيار الحلقة (فالتصفية فوقه تكفي) */
-        ui.hid = h.id;
-        const v = adminViews.mine().replace(/<label style="margin:0;flex:1 1 16rem;max-width:28rem">الحلقة[\s\S]*?<\/label>/, `<h2 class="grow" style="margin:0">${esc(halaqaLabel(h))}</h2>`);
-        return filters() + v;
-      }
-      if (ui.fh) ui.fh = '';
+      /* اختيار الحلقة يصفّي الجدول العام نفسه (كالمكان)؛ وأدوات الحلقة صارت في «الحضور» */
+      if (ui.fh && !byId(db.halaqat, ui.fh)) ui.fh = '';
       ui.fcat = '';   // تصفية «الصغار والكبار» أُزيلت
       /* البحث بالاسم: يضيّق كل الطلاب (لا الظاهرين فقط)، ثم تعمل تصفية المكان والحلقة على النتيجة */
       const all = db.students, q = norm(ui.sq || '');
@@ -561,6 +581,35 @@
       if (n) html = `<div class="note" style="margin:0 0 .8rem">${n} طالب بلا حلقة. <button type="button" class="btn sm" data-fhnone>عرضهم وتعيين حلقاتهم</button></div>` + html;
       return html;
     };
+    /* ===== «الطلاب ← الحضور»: مساحة عمل الحلقة =====
+       أدوات الحلقة (المنتظمون/المنقطعون، البحث، التسميع، السجل، الإشعار، النقل) ومعها تسجيل الحضور في عمود «حضور اليوم»
+       بتاريخ يُختار. الحلقة تُختار بالمكان ثم الحلقة (ui.hid مشترك مع «طلابي»)، والتسجيل بالإجراء نفسه (data-act="att"). */
+    function attWork() {
+      const hs = db.halaqat.filter(inPl).sort((a, b) => halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'));
+      const places = db.places.slice().sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+      if (hs.length && !hs.some(h => h.id === ui.hid)) ui.hid = hs[0].id;
+      const pSel = `<select data-fplace aria-label="المكان"><option value="">كل الأماكن</option>${places.map(p => `<option value="${esc(p.id)}" ${p.id === ui.fp ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>`;
+      const hSel = `<select data-atth aria-label="الحلقة">${hs.map(h => `<option value="${esc(h.id)}" ${h.id === ui.hid ? 'selected' : ''}>${esc(halaqaLabel(h))}</option>`).join('')}</select>`;
+      const top = `<div class="card"><div class="bar" style="margin:0">${pSel}${hSel}<label class="attdate" style="margin:0">تاريخ الحضور<input type="date" value="${esc(ui.date)}" data-change="date"></label></div></div>`;
+      if (!hs.length || !adminViews.mine) return top + `<div class="card">${empty('لا توجد حلقات في هذا المكان.')}</div>`;
+      const h = byId(db.halaqat, ui.hid);
+      const t = document.createElement('template');
+      t.innerHTML = adminViews.mine().replace(/<label style="margin:0;flex:1 1 16rem;max-width:28rem">الحلقة[\s\S]*?<\/label>/, `<h2 class="grow" style="margin:0">${esc(halaqaLabel(h))}</h2>`);
+      const tbl = t.content.querySelector('.tbl table');
+      const head = tbl?.rows[0];
+      /* عمود «حضور اليوم» للمنتظمين فقط (المنقطع لا يُسجَّل حضوره) */
+      if (head && [...head.cells].some(c => c.textContent.trim() === 'آخر حفظ')) {
+        [...head.cells].forEach(c => { if (c.textContent.trim() === 'الحضور') c.textContent = 'نسبة الحضور'; });
+        head.cells[1].insertAdjacentHTML('afterend', `<th>${ui.date === today() ? 'حضور اليوم' : 'حضور ' + esc(ui.date)}</th>`);
+        [...tbl.rows].slice(1).forEach(r => {
+          const sid = r.querySelector('[data-act="hist"]')?.dataset.id; if (!sid || !r.cells[1]) return;
+          const cur = db.attendance.find(a => a.studentId === sid && a.date === ui.date)?.status;
+          r.cells[1].insertAdjacentHTML('afterend', `<td class="attcell">${Object.entries(STATUS).map(([k, l]) => `<button type="button" class="btn sm ${cur === k ? 'on ' + k : ''}" data-act="att" data-sid="${esc(sid)}" data-st="${k}">${l}</button>`).join(' ')}</td>`);
+        });
+      }
+      return top + t.innerHTML;
+    }
+    document.addEventListener('change', e => { const s = e.target.closest?.('select[data-atth]'); if (s) { ui.hid = s.value; render(); } });
     /* ===== جدول الطلاب: الاسم · السن · الحضور · الحلقة · الحالة · … =====
        - بلا «الفئة» ولا قائمة «الصغار والكبار» (الفئة باقية في بيانات الطالب كما هي).
        - «الحضور»: نظام الطالب (6) أيام أو (3) أيام، وهو الحقل نفسه (info.feeSys) الذي يحدد في «الاشتراكات» مبلغه
@@ -580,7 +629,7 @@
       /* أدوات الحسابات في الصف (كانت تبويب «الحسابات»)، وحذف المحدد */
       const bar = C.querySelector('.bar');
       if (bar) {
-        const need = CLOUD ? db.students.filter(s => !s.hasLogin).length : 0;
+        const need = CLOUD ? db.students.filter(s => !s.hasLogin && !stOff(s)).length : 0;
         bar.insertAdjacentHTML('beforeend', (need ? `<button type="button" class="btn" data-act="cloudPwAll" data-k="students">إنشاء الحسابات الناقصة (${need})</button>` : '')
           + (CLOUD ? '<button type="button" class="btn" data-act="credsOpen" data-k="students">إرسال بيانات الدخول</button>' : '')
           + `<button type="button" class="btn danger" data-sdel ${sSel.size ? '' : 'hidden'}>حذف المحدد (${sSel.size})</button>`);
@@ -649,7 +698,7 @@
       const T = [['list', 'الطلاب'], ['att', 'الحضور'], ['fees', 'الاشتراكات'], ['tcollect', 'تحصيل المعلمين']];   // «الحسابات» صارت في «الطلاب» (أدوات الصف) وفي ملف الطالب
       const cur = T.some(([k]) => k === ui.svw) ? ui.svw : 'list';
       const bar = `<div class="card subnav"><div class="bar" style="margin:0">${T.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-svw="${k}">${l}${k === 'tcollect' && tcollectN() ? ` <span class="count">${tcollectN()}</span>` : ''}</button>`).join('')}</div></div>`;
-      const fn = cur === 'att' ? stuAtt : cur === 'fees' ? stuFees : cur === 'tcollect' ? stuTcol : listView;
+      const fn = cur === 'att' ? attWork : cur === 'fees' ? stuFees : cur === 'tcollect' ? stuTcol : listView;
       return bar + (fn ? fn() : empty('هذا القسم غير محمّل.'));
     };
     document.addEventListener('click', e => { if (e.target.closest('[data-fhnone]')) { ui.svw = 'list'; ui.fh = '__none'; render(); window.scrollTo(0, 0); } });
