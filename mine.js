@@ -132,7 +132,8 @@
   const addMoveButtons = () => {
     qRaf = 0;
     if (!session || !canP('students.move')) return;
-    document.querySelectorAll('main td button[data-fee-assign], main td button[data-act="editStudent"]').forEach(b => {
+    document.querySelectorAll('main td button[data-fee-assign]:not([data-mvdone]), main td button[data-act="editStudent"]:not([data-mvdone])').forEach(b => {
+      b.dataset.mvdone = '1';
       const td = b.closest('td'), id = b.dataset.feeAssign || b.dataset.id; if (!td || !id || td.querySelector('[data-move]')) return;
       const s = byId(db.students, id); if (!s) return;
       let h = `<button type="button" class="btn sm" data-move="${esc(id)}">نقل</button>`;
