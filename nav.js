@@ -571,10 +571,15 @@
       /* اختيار الحلقة يصفّي الجدول العام نفسه (كالمكان)؛ وأدوات الحلقة صارت في «الحضور» */
       if (ui.fh && !byId(db.halaqat, ui.fh)) ui.fh = '';
       ui.fcat = '';   // تصفية «الصغار والكبار» أُزيلت
-      /* البحث بالاسم: يضيّق كل الطلاب (لا الظاهرين فقط)، ثم تعمل تصفية المكان والحلقة على النتيجة */
+      /* البحث بالاسم: يضيّق كل الطلاب (لا الظاهرين فقط)، ثم تعمل تصفية المكان والحلقة على النتيجة.
+         تصفية الحالة (منتظم/منقطع) تعمل مع المكان والحلقة، ولا تؤثر أثناء البحث بالاسم (يُبحث في الكل) */
       const all = db.students, q = norm(ui.sq || '');
       let raw;
-      try { if (q) db.students = all.filter(s => norm(s.name).includes(q)); raw = stuBase(); } finally { db.students = all; }
+      try {
+        if (q) db.students = all.filter(s => norm(s.name).includes(q));
+        else if (ui.sstf) db.students = all.filter(s => (ui.sstf === 'off') === !!stOff(s));
+        raw = stuBase();
+      } finally { db.students = all; }
       let html = stuTable(raw.replace(/غير مصنف \(بلا حلقة\)/g, 'بلا حلقة'));
       /* تنبيه بالطلاب بلا حلقة (وكانوا تبويبًا مستقلًا) */
       const n = noHalN();
@@ -621,7 +626,11 @@
       /* مربع البحث بالاسم: يمين قائمتي المكان والحلقة (بعد العنوان) */
       const sq = `<input type="search" data-sq value="${esc(ui.sq || '')}" placeholder="بحث باسم الطالب…" aria-label="بحث باسم الطالب" autocomplete="off">`;
       const h2 = C.querySelector('.bar > h2'), firstSel = C.querySelector('.bar > select, .bar > .qcombo');
-      if (h2) h2.insertAdjacentHTML('afterend', sq); else if (firstSel) firstSel.insertAdjacentHTML('beforebegin', sq);
+      /* تصفية الحالة: الأعداد ضمن المكان والحلقة المختارين؛ ومعطّلة أثناء البحث بالاسم (البحث في الكل) */
+      const inScope = s => { const h = byId(db.halaqat, s.halaqaId); return (!ui.fh || s.halaqaId === ui.fh) && (!ui.fp || h?.placeId === ui.fp); };
+      const scope = db.students.filter(inScope), nOff = scope.filter(stOff).length, searching = !!(ui.sq || '').trim();
+      const stf = `<select data-sstf aria-label="حالة الطلاب" ${searching ? 'disabled title="لا تُطبَّق أثناء البحث بالاسم: البحث في كل الطلاب"' : ''}>${[['', 'كل الحالات', scope.length], ['on', 'المنتظمون', scope.length - nOff], ['off', 'المنقطعون', nOff]].map(([v, l, n]) => `<option value="${v}" ${(ui.sstf || '') === v ? 'selected' : ''}>${l} (${n})</option>`).join('')}</select>`;
+      if (h2) h2.insertAdjacentHTML('afterend', sq + stf); else if (firstSel) firstSel.insertAdjacentHTML('beforebegin', sq + stf);
       const tbl = C.querySelector('.tbl table'); if (!tbl) return t.innerHTML;
       const head = tbl.rows[0], H = [...head.cells].map(c => c.textContent.trim());
       const iCat = H.indexOf('الفئة'), iAge = H.indexOf('السن'), iHal = H.indexOf('الحلقة'), iAtt = H.indexOf('الحضور');
@@ -656,6 +665,7 @@
       });
       return t.innerHTML;
     }
+    document.addEventListener('change', e => { const s = e.target.closest?.('select[data-sstf]'); if (s) { ui.sstf = s.value; render(); } });
     /* البحث بالاسم: يُعاد الرسم بعد توقف الكتابة لحظة، ويبقى المؤشر في المربع */
     let sqT = 0;
     document.addEventListener('input', e => {
