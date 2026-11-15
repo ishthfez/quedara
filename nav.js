@@ -199,6 +199,46 @@
       d.head.insertAdjacentHTML('beforeend', '<style>main [data-pvtz]{pointer-events:auto!important;opacity:1!important}</style>');
     } catch (err) { /* ignore */ }
   }, true);
+  /* ===== النوافذ المنبثقة: تمرير لطيف داخل النافذة، ورأس ثابت فيه زر إغلاق ×، وأزرار الحفظ ثابتة أسفلها =====
+     - التمرير داخل النافذة وحدها (لا تتحرك الصفحة خلفها ولا «يهرب» التمرير إليها)، والجدول العريض يُمرَّر أفقيًا داخل إطاره.
+     - لا تمرير داخل تمرير: الجداول داخل النافذة تأخذ طولها كاملًا وتتمرر مع النافذة.
+     - × يغلق النافذة (بزر «إلغاء/إغلاق» نفسه إن وُجد)، ومفتاح Esc كذلك على الحاسوب. */
+  const mcss = document.createElement('style');
+  mcss.textContent = `html.ql-modal,html.ql-modal body{overflow:hidden}
+    .overlay{overscroll-behavior:contain;padding:max(.75rem,env(safe-area-inset-top)) .75rem max(.75rem,env(safe-area-inset-bottom))}
+    .modal{max-height:88vh;max-height:88dvh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scroll-padding-top:4rem}
+    .modal .tbl{max-height:none!important;overflow-x:auto;overflow-y:visible!important;max-width:100%;border-radius:10px}
+    .modal .tbl table{width:max-content;min-width:100%}.modal .tbl th,.modal .tbl td{white-space:nowrap}
+    .modal .mhead{position:sticky;top:-1.1rem;z-index:3;display:flex;align-items:center;gap:.6rem;margin:-1.1rem -1.1rem .7rem;padding:.75rem 1.1rem .65rem;background:#fff;border-bottom:1px solid var(--line,#e5e7eb);border-radius:20px 20px 0 0}
+    .modal .mhead h2{margin:0;flex:1;min-width:0;font-size:1.12rem;line-height:1.4}
+    .modal .mclose{flex:none;width:38px;height:38px;border-radius:50%;border:1px solid var(--line,#e5e7eb);background:var(--card,#fff);color:var(--navy,#13294b);font-size:1.45rem;line-height:1;display:grid;place-items:center;cursor:pointer;padding:0;touch-action:manipulation}
+    .modal .mclose:hover{background:var(--navy-l,#eaeef5)}
+    .modal > .row:last-child{position:sticky;bottom:-1.1rem;z-index:3;margin:.9rem -1.1rem -1.1rem;padding:.7rem 1.1rem;background:#fff;border-top:1px solid var(--line,#e5e7eb);border-radius:0 0 20px 20px}
+    @media (max-width:600px){.overlay{align-items:flex-end;padding-bottom:0}.modal{max-width:100%!important;border-radius:20px 20px 0 0;max-height:92dvh}.modal > .row:last-child{border-radius:0;padding-bottom:max(.7rem,env(safe-area-inset-bottom))}}
+    @media print{.modal .mclose{display:none}.modal .mhead,.modal > .row:last-child{position:static;border:0;background:none}}`;
+  document.head.appendChild(mcss);
+  function dressModal(ov) {
+    const m = ov.querySelector(':scope > .modal'); if (!m || m.querySelector(':scope > .mhead')) return;
+    const head = document.createElement('div'); head.className = 'mhead';
+    const h = m.firstElementChild?.tagName === 'H2' ? m.firstElementChild : null;
+    if (h) head.appendChild(h);
+    else head.style.cssText = 'justify-content:flex-end;border-bottom:0;padding-bottom:0;margin-bottom:.2rem';
+    head.insertAdjacentHTML('beforeend', '<button type="button" class="mclose noprint" aria-label="إغلاق" title="إغلاق">×</button>');
+    m.prepend(head);
+  }
+  const closeTop = () => {
+    const ov = [...document.querySelectorAll('.overlay')].pop(); if (!ov) return false;
+    const c = ov.querySelector('.modal > .row:last-child [data-close], .modal [data-close]');
+    if (c) c.click(); else ov.remove();
+    return true;
+  };
+  document.addEventListener('click', e => { if (e.target.closest('.mclose')) { e.preventDefault(); closeTop(); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.querySelector('.overlay')) { e.preventDefault(); closeTop(); } });
+  new MutationObserver(() => {
+    const ovs = document.querySelectorAll('.overlay');
+    document.documentElement.classList.toggle('ql-modal', ovs.length > 0);
+    ovs.forEach(dressModal);
+  }).observe(document.body, { childList: true });
   /* ===== زر الرجوع (في الجوال والمتصفح) يرجع للسابق بدل الخروج من التطبيق =====
      - كل انتقال بين الأقسام (والتبويبات الداخلية وفئات الأعضاء) يُسجَّل خطوةً في سجل المتصفح.
      - النافذة المنبثقة والقائمة الجانبية على الجوال «طبقة»: الرجوع يغلقها أولًا.
