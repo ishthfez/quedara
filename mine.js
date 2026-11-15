@@ -131,4 +131,37 @@
     });
   };
   new MutationObserver(() => { if (!qRaf) qRaf = requestAnimationFrame(addMoveButtons); }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
+  /* ===== نافذة نقل الطالب: قائمتان بالبحث، المكان (الافتراضي مكانه الحالي) ثم حلقات ذلك المكان =====
+     تحل محل نافذة النقل القديمة (قائمة واحدة بكل الحلقات) لكل من يملك صلاحية النقل، والخادم يتحقق من الصلاحية. */
+  function moveDialog(s) {
+    const cur = byId(db.halaqat, s.halaqaId);
+    let pid = cur?.placeId || '';
+    const places = db.places.slice().sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+    const noPlace = db.halaqat.some(h => !h.placeId);
+    const halOpts = () => db.halaqat.filter(h => (h.placeId || '') === pid).sort((a, b) => halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'))
+      .map(h => `<option value="${esc(h.id)}" ${h.id === s.halaqaId ? 'selected' : ''}>${esc(halaqaLabel(h))}${timeText(h) ? ' · ' + esc(timeText(h)) : ''} (${db.students.filter(x => x.halaqaId === h.id && !stOff(x)).length} طالب)</option>`).join('');
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    const halBox = () => { const o = halOpts(); return o ? `<label>الحلقة<select data-mvh><option value="">— اختر الحلقة —</option>${o}</select></label>` : '<p class="muted">لا توجد حلقات في هذا المكان.</p>'; };
+    ov.innerHTML = `<div class="modal"><h2>نقل الطالب: ${esc(s.name)}</h2>
+      <p class="muted" style="margin:0 0 .6rem">الحالية: ${cur ? `${esc(halaqaLabel(cur))} — ${esc(placeName(cur) || 'بلا مكان')}` : 'بلا حلقة'}</p>
+      <label>المكان<select data-mvp>${places.map(p => `<option value="${esc(p.id)}" ${p.id === pid ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}${noPlace ? `<option value="" ${!pid ? 'selected' : ''}>بلا مكان</option>` : ''}</select></label>
+      <div data-mvhw>${halBox()}</div>
+      <div class="row"><button type="button" class="btn primary" data-mvok>نقل</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('change', e => { if (e.target.matches('[data-mvp]')) { pid = e.target.value; ov.querySelector('[data-mvhw]').innerHTML = halBox(); } });
+    ov.addEventListener('click', e => {
+      if (e.target.closest('[data-close]')) { ov.remove(); return; }
+      if (!e.target.closest('[data-mvok]')) return;
+      const hid = ov.querySelector('[data-mvh]')?.value;
+      if (!hid) { toast('اختر الحلقة'); return; }
+      if (hid === s.halaqaId) { toast('اختر حلقة مختلفة'); return; }
+      s.halaqaId = hid; ov.remove(); save(); render();
+      toast(`نُقل «${s.name}» إلى ${halaqaLabel(byId(db.halaqat, hid))}`);
+    });
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-move]'); if (!b || e.target.closest('.overlay [data-mvok]')) return;
+    const s = byId(db.students, b.dataset.move); if (!s || !canP('students.move')) return;
+    e.stopImmediatePropagation(); e.preventDefault(); moveDialog(s);
+  }, true);
 })();
