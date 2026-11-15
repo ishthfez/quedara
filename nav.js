@@ -13,14 +13,16 @@
      - «الأعضاء» لم يعد قسمًا: صار «حسابات الدخول» في «الإعدادات»، و«مكرر للمراجعة» تبويبًا مستقلًا بجانبه (يظهر حين يوجد فيه أسماء).
      - «العاملون»: القائمة الموحدة + الغياب + المرتبات (الغياب يُخصم من المرتب، فدورة الشهر كلها في مكان واحد).
      - «الاشتراكات»: التحصيل + تحصيل المعلمين (الاسم نفسه عند المحاسب).
-     - حسابات الدخول بحسب أصحابها: حسابات العاملين (وغير المصنفين من المرتبات) في «العاملون ← الحسابات»،
-       وحسابات الطلاب والمديرين و«طلاب بلا حلقة» في «الإعدادات ← حسابات الدخول». القائمة نفسها بفئات مختلفة.
+     - حسابات الدخول بحسب أصحابها (القائمة نفسها بفئات مختلفة):
+       العاملون وغير المصنفين من المرتبات ← «العاملون ← الحسابات»؛ الطلاب ← «الطلاب ← الحسابات»؛
+       «طلاب بلا حلقة» ← «الطلاب ← بلا حلقة»؛ والمديرون وحدهم ← «الإعدادات ← حسابات المديرين».
+     - «الطلاب» شريط واحد: كل الطلاب · حسب الحلقة · بلا حلقة (حين يوجد) · الحسابات.
      الدوال الأصلية لكل قسم كما هي؛ والأزرار القديمة (data-v="members" أو "payroll"…) تفتح القسم الجامع على تبويبها. */
   const dupsN = () => (db.payroll?.settings?.dup_students || []).length;
   const GROUPS = {
     teachers: [['teachers', 'العاملون'], ['absence', 'الغياب'], ['payroll', 'المرتبات'], ['accounts', 'الحسابات']],
     fees: [['fees', 'التحصيل'], ['tcollect', 'تحصيل المعلمين']],
-    settings: [['settings', 'الإعدادات'], ['members', 'حسابات الدخول'], ['dups', 'مكرر للمراجعة', () => dupsN() > 0], ['perms', 'الصلاحيات'], ['backup', 'النسخ الاحتياطية'], ['pending', 'بيانات معلّقة']]
+    settings: [['settings', 'الإعدادات'], ['members', 'حسابات المديرين'], ['dups', 'مكرر للمراجعة', () => dupsN() > 0], ['perms', 'الصلاحيات'], ['backup', 'النسخ الاحتياطية'], ['pending', 'بيانات معلّقة']]
   };
   /* «مكرر للمراجعة» تبويب مستقل: هو فئة «dups» من قائمة الأعضاء نفسها، بلا قائمة الفئات */
   const baseMem = adminViews.members;
@@ -29,9 +31,9 @@
     ui.msub = 'dups';
     return baseMem().replace(MSEL, '<h2 class="grow" style="margin:0">مكرر للمراجعة</h2>');
   };
-  /* الفئات: للعاملين (staff، المعلمون…، المسميات الأخرى، غير مصنف) وللإعدادات (الطلاب، المديرون، طلاب بلا حلقة) */
-  const SET_K = ['students', 'admins', 'nohal'];
-  const isSet = k => SET_K.includes(k), isStaff = k => !!k && !isSet(k) && k !== 'dups';
+  /* الفئات: للعاملين (staff، المعلمون…، المسميات الأخرى، غير مصنف)، وللطلاب (الطلاب، بلا حلقة)، وللإعدادات (المديرون) */
+  const STU_K = ['students', 'nohal'];
+  const isStu = k => STU_K.includes(k), isSet = k => k === 'admins', isStaff = k => !!k && !isSet(k) && !isStu(k) && k !== 'dups';
   const noHalN = () => (window.QLNoHalaqa ? window.QLNoHalaqa().length : 0);
   const keepOpts = (h, ok) => h.replace(MSEL, sel => sel.replace(/<option value="([^"]*)"[^>]*>[^<]*<\/option>/g, (o, v) => ok(v) ? o : '')
     .replace(/<optgroup[^>]*>\s*<\/optgroup>/g, ''));
@@ -46,21 +48,20 @@
     if (i > -1) { const end = h.lastIndexOf('</div>'); h = h.slice(0, i) + h.slice(end); }
     return h;
   };
-  /* «الإعدادات ← حسابات الدخول»: الطلاب والمديرون، و«طلاب بلا حلقة» */
+  /* «الإعدادات ← حسابات المديرين» */
   adminViews.members = () => {
-    if (!isSet(ui.msub)) { ui.msub = 'students'; saveTab(); }
-    if (ui.msub === 'nohal') {
-      if (!noHalN()) { ui.msub = 'students'; saveTab(); return adminViews.members(); }
-      ui.msub = 'students'; const pick = (keepOpts(baseMem(), isSet).match(MSEL) || [''])[0]; ui.msub = 'unclassified';
-      let h; try { h = baseMem(); } finally { ui.msub = 'nohal'; }
-      const i = h.indexOf(NOHAL);
-      const sel = pick.replace(/ selected(?=[ >])/g, '').replace('</select>', `<option value="nohal" selected>طلاب بلا حلقة (${noHalN()})</option></select>`);
-      return `<div class="memview"><div class="card"><div class="bar" style="margin:0">${sel}</div></div>${i > -1 ? h.slice(i) : empty('لا يوجد طلاب بلا حلقة ✓') + '</div>'}`;
-    }
-    let h = keepOpts(baseMem(), isSet);
-    if (noHalN()) h = h.replace(MSEL, sel => sel.replace('</select>', `<option value="nohal">طلاب بلا حلقة (${noHalN()})</option></select>`));
-    return h;
+    if (!isSet(ui.msub)) { ui.msub = 'admins'; saveTab(); }
+    return baseMem().replace(MSEL, '<h2 class="grow" style="margin:0">حسابات المديرين</h2>');
   };
+  /* «الطلاب ← الحسابات» و«الطلاب ← بلا حلقة»: من قائمة الأعضاء نفسها */
+  const stuAccView = () => { ui.msub = 'students'; return baseMem().replace(MSEL, '<h2 class="grow" style="margin:0">حسابات الطلاب</h2>'); };
+  const noHalView = () => {
+    const keepM = ui.msub; ui.msub = 'unclassified';
+    let h; try { h = baseMem(); } finally { ui.msub = keepM; }
+    const i = h.indexOf(NOHAL);
+    return i > -1 ? '<div class="memview">' + h.slice(i) : `<div class="card">${empty('لا يوجد طلاب بلا حلقة ✓')}</div>`;
+  };
+  const stuBase = adminViews.students;   // «كل الطلاب» (بعد staff.js وcascade.js، وقبل شريط mine.js)
   /* زر «حسابات الدخول» في صفحة العاملين (data-v="members") يفتح حسابات العاملين */
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-act="tab"][data-v="members"]');
@@ -406,11 +407,22 @@
     if (baseToggle) A.navToggle = d => { const was = ui.nav; baseToggle(d); if (!was && ui.nav) history.pushState(navState({ layer: true }), ''); else if (was && !ui.nav) popLayer(); };
     if (baseClose) A.navClose = d => { const was = ui.nav; baseClose(d); if (was) popLayer(); };
     if (typeof freezeTables === 'function' && typeof tableGrid === 'function') freezeTables = fastFreeze;
+    /* «الطلاب»: شريط واحد بدل «كل الطلاب / حسب الحلقة» (أزراره data-svw يعالجها mine.js) */
+    const SV = [['all', 'كل الطلاب'], ['hal', 'حسب الحلقة'], ['nohal', 'بلا حلقة', () => noHalN() > 0], ['acc', 'الحسابات']];
+    adminViews.students = () => {
+      const vis = SV.filter(([, , show]) => !show || show());
+      const cur = vis.some(([k]) => k === ui.svw) ? ui.svw : 'all';
+      const bar = `<div class="card subnav"><div class="bar" style="margin:0">${vis.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-svw="${k}">${l}${k === 'nohal' ? ` <span class="count">${noHalN()}</span>` : ''}</button>`).join('')}</div></div>`;
+      const body = cur === 'hal' ? (adminViews.mine ? adminViews.mine() : '') : cur === 'nohal' ? noHalView() : cur === 'acc' ? stuAccView() : stuBase();
+      return bar + body;
+    };
     unifyTabs();
     const base = render;
     render = function () {
-      /* «الأعضاء» القديم: فئات العاملين تفتح «العاملون ← الحسابات»، والطلاب والمديرون «الإعدادات ← حسابات الدخول» */
+      /* «الأعضاء» القديم: فئات العاملين تفتح «العاملون ← الحسابات»، والطلاب «الطلاب ← الحسابات» أو «بلا حلقة» */
       if (session?.role === 'admin' && ui.tab === 'members' && isStaff(ui.msub)) ui.tab = 'accounts';
+      if (session?.role === 'admin' && ui.tab === 'members' && isStu(ui.msub)) { ui.svw = ui.msub === 'nohal' ? 'nohal' : 'acc'; ui.tab = 'students'; saveTab(); }
+      if (ui.svw === 'nohal' && !noHalN()) ui.svw = 'all';
       /* قسم صار تبويبًا: يُفتح القسم الجامع على هذا التبويب (قبل فحص صفحة البداية، وإلا أعاده إليها) */
       if (session?.role === 'admin' && OWNER[ui.tab] && OWNER[ui.tab] !== ui.tab) { sub[OWNER[ui.tab]] = ui.tab; saveSub(); ui.tab = OWNER[ui.tab]; saveTab(); }
       /* صفحة البداية لكل فئة كما كانت (لا أول القائمة بعد توحيد الترتيب) */
