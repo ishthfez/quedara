@@ -104,9 +104,7 @@
       if (add && ADD[k]) { add.dataset.act = ADD[k][0]; add.dataset.k = k; add.textContent = '+ ' + ADD[k][1]; }
       const need = needLogin(k).length;
       const tools = (need ? `<button type="button" class="btn" data-wmk="${esc(k)}">إنشاء الحسابات الناقصة (${need})</button>` : '')
-        + (CLOUD && W_KINDS.includes(k) ? `<button type="button" class="btn" data-act="credsOpen" data-k="${k}">إرسال بيانات الدخول</button>` : '')
-        + (!k || k === 'teachers' ? '<button type="button" class="btn" data-act="importMembers" data-k="teachers">استيراد</button>' : '')
-        + '<button type="button" class="btn" data-act="dupOpen">الأسماء المتشابهة</button>';
+        + (CLOUD && W_KINDS.includes(k) ? `<button type="button" class="btn" data-act="credsOpen" data-k="${k}">إرسال بيانات الدخول</button>` : '');
       if (add) add.insertAdjacentHTML('beforebegin', tools); else bar.insertAdjacentHTML('beforeend', tools);
     }
     if (k === 'un') {
@@ -124,12 +122,33 @@
       if (drop > -1) [...tbl.rows].forEach(r => r.cells[drop]?.remove());
       const lastTh = head.cells[head.cells.length - 1]; lastTh.insertAdjacentHTML('beforebegin', '<th>الحساب</th>');
       tbl.querySelectorAll('tr[data-stk]').forEach(r => r.cells[r.cells.length - 1].insertAdjacentHTML('beforebegin', `<td>${wAccCell(r.dataset.stk)}</td>`));
+      /* الضغط على الاسم يفتح الملف (فلا حاجة لعمود «الملف»)، وكبسولة «متوقف» تكفي عنها خانة الحالة بالأحمر */
+      [...tbl.rows].forEach(r => r.cells[r.cells.length - 1]?.remove());
+      tbl.querySelectorAll('tr[data-stk]').forEach(r => {
+        const nameTd = r.cells[1]; if (!nameTd) return;
+        nameTd.querySelectorAll('.tag-no').forEach(t => t.remove());
+        const nm = nameTd.textContent.trim();
+        nameTd.innerHTML = `<button type="button" class="lnk wname" data-staff="${esc(r.dataset.stk)}" title="فتح الملف"><b>${esc(nm)}</b></button>`;
+        r.querySelectorAll('select[data-tstat],select[data-pstat]').forEach(s => s.classList.toggle('qoff', s.querySelector('option[selected]')?.value === 'off'));
+      });
     }
-    const note = C.querySelector('.card > .note');
-    if (note) note.textContent = 'كل العاملين في مكان واحد: الصفة، والحلقات أو النطاق، والحالة، وحساب الدخول. «الملف» يعرض البيانات والمرتب والغياب، وفيه تعديل الاسم والنطاق والحذف. تعديل الاسم من أي مكان يسري على الحساب والمرتبات معًا.';
+    C.querySelector('.card > .note')?.remove();   // إرشاد: لا حاجة له
     return t.innerHTML;
   }
   adminViews.teachers = workersView;
+  /* الحالة «متوقف» بالأحمر فور اختيارها */
+  document.addEventListener('change', e => { const s = e.target.closest?.('select[data-tstat],select[data-pstat]'); if (s) s.classList.toggle('qoff', s.value === 'off'); });
+  const wcss = document.createElement('style');
+  wcss.textContent = `select.qoff{color:var(--red,#b3372f)!important;border-color:var(--red,#b3372f)!important;font-weight:700}
+    .lnk.wname{text-decoration:none;text-align:start}.lnk.wname:hover b{text-decoration:underline;text-decoration-color:var(--gold)}`;
+  document.head.appendChild(wcss);
+  /* «الإعدادات»: الاستيراد والأسماء المتشابهة (نُقلا من صفحات العاملين والطلاب) */
+  const baseSettings = adminViews.settings;
+  adminViews.settings = () => `<div class="card"><h2>الاستيراد والمراجعة</h2><div class="row qsettools" style="flex-wrap:wrap;gap:.5rem">
+      <button type="button" class="btn" data-act="importMembers" data-k="teachers">استيراد معلمين من Excel / Sheets</button>
+      <button type="button" class="btn" data-act="importMembers" data-k="students">استيراد طلاب من Excel / Sheets</button>
+      <button type="button" class="btn" data-act="dupOpen">الأسماء المتشابهة</button></div>
+      <p class="muted" style="margin:.5rem 0 0;font-size:.85rem">استيراد دفعات الاشتراكات في «الطلاب ← الاشتراكات».</p></div>` + baseSettings();
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-wmk]'); if (!b || session?.role !== 'admin') return;
     const list = needLogin(b.dataset.wmk);
