@@ -1,5 +1,5 @@
 'use strict';
-/* ملفات التطبيق ثلاثة تُحمَّل بالترتيب ويتشارك بعضها تعريفات بعض:
+/* ملفات التطبيق ثلاثة تُحمَّل بالترتيب ويتشارك بعضها تعريفات بعض:
    app.js (الأساس والواجهات) ← app-forms.js (الاستيراد والنماذج) ← app-actions.js (الإجراءات والمزامنة والتشغيل) */
 /* وضع قاعدة البيانات: يعمل تلقائيًا عند وجود cloud.js مضبوطًا، وإلا يبقى التطبيق محليًا كما كان */
 const CLOUD = !!(window.Cloud && window.Cloud.enabled);
@@ -129,7 +129,7 @@ function migrate(d) {
   });
   delete d.settings.adminPin;
   if (!Array.isArray(d.fees)) d.fees = [];
-  /* الأسماء المحفوظة سابقًا تُصحَّح بالقاعدة نفسها (عبدالله ← عبد الله) */
+  /* الأسماء المحفوظة سابقًا تُصحَّح بالقاعدة نفسها (عبدالله ← عبد الله) */
   const fx = o => { if (o && typeof o.name === 'string') { const n = fixName(o.name); if (n !== o.name) o.name = n; } };
   ['admins', 'supervisors', 'teachers', 'students', 'accountants'].forEach(k => d[k].forEach(fx));
   if (d.payroll) { (d.payroll.employees || []).forEach(fx); (d.payroll.rows || []).forEach(fx); }
@@ -428,7 +428,10 @@ function loginView() {
 /* ===== بحث الاسم في صفحة الدخول (كل الحسابات في قائمة واحدة) ===== */
 /* قواعد البحث والمقارنة: التشكيل يُتجاهل، والهمزات (أ إ آ) = ا، والتاء المربوطة = الهاء، والألف المقصورة = الياء،
    و«عبد الله» = «عبدالله» (المسافة بعد «عبد» لا تُحسب) */
-const norm = t => String(t || '').replace(/[ً-ْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().replace(/(^| )عبد /g, '$1عبد').toLowerCase();
+const normRaw = t => String(t || '').replace(/[ً-ْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().replace(/(^| )عبد /g, '$1عبد').toLowerCase();
+/* النتائج تُحفظ: نفس الأسماء تُوحَّد آلاف المرات في الصفحة الواحدة (البحث والمقارنة والقوائم) */
+const normMemo = new Map();
+const norm = t => { const k = typeof t === 'string' ? t : String(t || ''); let v = normMemo.get(k); if (v === undefined) { if (normMemo.size > 60000) normMemo.clear(); v = normRaw(k); normMemo.set(k, v); } return v; };
 /* تُجمع الحسابات بالاسم: الاسم الواحد قد يكون له أكثر من وضع (معلم وطالب مثلًا) */
 function nameGroups() {
   const m = new Map();
@@ -551,11 +554,13 @@ const adminViews = {
   members() {
     const subs = [['unclassified', 'غير مصنف'], ['teachers', 'المعلمون'], ['students', 'الطلاب'], ['supervisors', 'المشرفون'], ['accountants', 'المحاسبون'], ['admins', 'المديرون']];
     const kind = subs.some(x => x[0] === ui.msub) ? ui.msub : 'teachers';
-    /* موظفو المرتبات يظهرون هنا تلقائيًا حتى يُحدَّد تصنيف كل منهم */
+    /* موظفو المرتبات يظهرون هنا تلقائيًا حتى يُحدَّد تصنيف كل منهم */
     const cnt = k => (k === 'unclassified' ? unclassCount() : db[k].length);
     if (kind === 'unclassified') return unclassView(`<div class="bar">${subs.map(([k, l]) => `<button class="btn ${k === kind ? 'on' : ''}" data-act="msub" data-v="${k}">${l} (${cnt(k)})</button>`).join('')}</div>`);
     const one = KIND_ONE[kind];
-    const others = m => accounts().filter(a => norm(a.u.name) === norm(m.name) && a.u.id !== m.id).map(a => ROLE_L[a.role]);
+    /* الحسابات الأخرى بالاسم نفسه: فهرس واحد بدل البحث في كل الحسابات لكل صف */
+    const accIdx = new Map(); accounts().forEach(a => { const k = norm(a.u.name); (accIdx.get(k) || accIdx.set(k, []).get(k)).push(a); });
+    const others = m => (accIdx.get(norm(m.name)) || []).filter(a => a.u.id !== m.id).map(a => ROLE_L[a.role]);
     ui.sel = new Set([...ui.sel].filter(id => db[kind].some(m => m.id === id)));
     const rows = db[kind].map((m, i) => { const o = others(m); return `<tr><td class="selc"><input type="checkbox" data-sel="${m.id}" ${ui.sel.has(m.id) ? 'checked' : ''} aria-label="تحديد ${esc(m.name)}"></td><td>${i + 1}</td><td>${esc(m.name)}${o.length ? ` <span class="tag" title="نفس الاسم له حساب آخر">+ ${esc(o.join('، '))}</span>` : ''}</td>
       <td>${CLOUD ? (m.hasLogin ? '<span class="tag tag-ok">له حساب دخول</span>' : '<span class="tag">بلا حساب</span>') : `<code class="pw">${ui.shown[m.id] ? esc(m.pin) : '••••••'}</code> <button class="btn sm" data-act="togglePw" data-id="${m.id}">${ui.shown[m.id] ? 'إخفاء' : 'إظهار'}</button>`}</td>
@@ -622,7 +627,7 @@ const adminViews = {
       <div class="logo-edit"><img class="logo-prev" src="${logoSrc()}" alt="الشعار الحالي">
         <div class="bar"><label class="btn sm primary" style="margin:0">رفع شعار جديد<input type="file" accept="image/*" data-change="logo" hidden></label>${db.settings.logo ? '<button class="btn sm" data-act="logoReset">الشعار الافتراضي</button>' : ''}</div>
         <button class="btn sm" style="width:100%" data-act="themeFromLogo">استخراج الألوان من الشعار</button>
-        <p class="muted" style="font-size:.78rem;margin:.5rem 0 0">PNG أو SVG بخلفية شفافة يعطي أفضل نتيجة. يُصغَّر تلقائيًا ويظهر في الشاشة الافتتاحية وصفحة الدخول والشريط العلوي.</p>
+        <p class="muted" style="font-size:.78rem;margin:.5rem 0 0">PNG أو SVG بخلفية شفافة يعطي أفضل نتيجة. يُصغَّر تلقائيًا ويظهر في الشاشة الافتتاحية وصفحة الدخول والشريط العلوي.</p>
       </div>
       <div><div class="swatches">${sw}</div>
         <h3 style="font-size:.95rem;margin:1rem 0 .5rem">أنماط جاهزة</h3><div class="presets">${pre}</div>
