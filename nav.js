@@ -162,6 +162,17 @@
     const name = (db.settings?.org || '').trim() || 'إدارة الحلقات القرآنية';
     return baseLogin.apply(this, arguments).replace('<div class="card loginform">', `<h1 class="appname">${esc(name)}</h1><div class="card loginform">`);
   };
+  /* «الطلاب»: قائمتا «المكان» و«الحلقة» (البحث المتتابع) بجانب بعضهما في سطر واحد، على الحاسوب والجوال */
+  const fcss = document.createElement('style');
+  fcss.textContent = `main .card > .bar:has(> .qcombo > [data-fplace])::after{content:'';flex-basis:100%;height:0;order:2}
+    main .card > .bar:has(> .qcombo > [data-fplace]) > .btn,main .card > .bar:has(> .qcombo > [data-fplace]) > button{order:1}
+    main .card > .bar:has(> .qcombo > [data-fplace]) > select,main .card > .bar:has(> .qcombo > [data-fplace]) > .qcombo{order:3}
+    main .card > .bar:has(> .qcombo > [data-fplace]) > .qcombo{flex:1 1 0;min-width:0;width:auto;max-width:none;margin:0}
+    main .card > .bar:has(> .qcombo > [data-fplace]) > .qcombo .qcombo-in{min-width:0;width:100%;text-overflow:ellipsis}
+    main .card > .bar:has(> .qcombo > [data-fplace]) > select{flex:none;width:auto}
+    @media (max-width:600px){main .card > .bar:has(> .qcombo > [data-fplace])::before{content:'';flex-basis:100%;height:0;order:4}
+      main .card > .bar:has(> .qcombo > [data-fplace]) > select{order:5}}`;
+  document.head.appendChild(fcss);
   const lcss = document.createElement('style');
   lcss.textContent = `.login .logo-wrap{margin-bottom:.6rem}.login .appname{text-align:center;margin:0 0 1.1rem;font-size:clamp(1.25rem,5vw,1.6rem);font-weight:800;color:var(--navy,#13294b);letter-spacing:.01em}`;
   document.head.appendChild(lcss);
