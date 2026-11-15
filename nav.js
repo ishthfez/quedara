@@ -49,8 +49,27 @@
     h = h.replace(/(<option value="unclassified"[^>]*>غير مصنف \()(\d+)(\))/, (m, a, k, c) => a + (typeof unclassCount === 'function' ? unclassCount() : k) + c);
     const i = h.indexOf(NOHAL);
     if (i > -1) { const end = h.lastIndexOf('</div>'); h = h.slice(0, i) + h.slice(end); }
-    return h;
+    return slimAcc(h);
   };
+  /* جداول «الحسابات» للحساب وحده: الوظيفة في المرتبات والمكان في «العاملون»، وزرّا «النطاق» و«الاسم» في ملف العامل
+     (فيه: تعديل الاسم أو البيانات، والنطاق، وكلمة المرور). يُحذف العمود بعنوانه، والعمود الذي يفرغ بعدها يُحذف كذلك. */
+  const DROP_COLS = ['الوظيفة في المرتبات', 'المكان'];
+  function slimAcc(h) {
+    const t = document.createElement('template'); t.innerHTML = h;
+    t.content.querySelectorAll('[data-act="memScope"],[data-act="editName"]').forEach(b => b.remove());
+    t.content.querySelectorAll('.tbl table').forEach(tbl => {
+      const head = [...tbl.rows].find(r => r.querySelector('th')); if (!head) return;
+      if ([...tbl.rows].some(r => [...r.cells].some(c => c.colSpan > 1 || c.rowSpan > 1))) return;   // جدول مركّب: يبقى كما هو
+      const n = head.cells.length, drop = [];
+      for (let c = 0; c < n; c++) {
+        const title = head.cells[c].textContent.trim();
+        const emptyCol = !title && [...tbl.rows].every(r => r === head || !r.cells[c] || (!r.cells[c].textContent.trim() && !r.cells[c].querySelector('button,select,input')));
+        if (DROP_COLS.includes(title) || emptyCol) drop.push(c);
+      }
+      drop.reverse().forEach(c => [...tbl.rows].forEach(r => r.cells[c]?.remove()));
+    });
+    return t.innerHTML;
+  }
   /* «الإعدادات ← حسابات المديرين» */
   adminViews.members = () => {
     if (!isSet(ui.msub)) { ui.msub = 'admins'; saveTab(); }
