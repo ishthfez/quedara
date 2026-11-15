@@ -9,18 +9,26 @@
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./pager.js')) VFILES.push('./pager.js'); } catch (e) { /* ignore */ } });
   const STEP = 50, SKIP_TABS = ['teachers', 'payroll'];
   const css = document.createElement('style');
-  css.textContent = `tr.pgx{display:none}.pgmore{display:flex;align-items:center;justify-content:center;gap:.6rem;flex-wrap:wrap;margin:.5rem 0 .2rem}
-    .pgmore small{color:var(--muted,#777)}@media print{tr.pgx{display:table-row!important}.pgmore{display:none!important}}`;
+  /* قبل أن يصل الجدول إلى هذا الملف: صفوفه بعد الخمسين مخفية من البداية، فلا يحسب المتصفح تخطيط آلاف الصفوف ثم يخفيها */
+  css.textContent = `.tbl table:not(.pgok)>tbody>tr:nth-child(n+53){display:none}tr.pgx{display:none}.pgmore{display:flex;align-items:center;justify-content:center;gap:.6rem;flex-wrap:wrap;margin:.5rem 0 .2rem}
+    .pgmore small{color:var(--muted,#777)}@media print{tr.pgx,.tbl table>tbody>tr{display:table-row!important}.pgmore{display:none!important}}`;
   document.head.appendChild(css);
 
   const limits = new Map(); let page = '';
   const pageKey = () => `${session?.role}|${ui.tab}|${ui.msub || ''}|${ui.svw || ''}`;
   const firstData = t => { const i = [...t.rows].findIndex(r => [...r.cells].some(x => x.tagName === 'TD')); return i < 0 ? t.rows.length : i; };
-  function apply(t, key) {
+  const sig = new WeakMap();   // جدول لم يتغير منذ آخر مرة لا يُعاد فحصه (المراقب يعمل مع كل تغيير في الصفحة)
+  function apply(t, key, force, skip) {
+    t.classList.add('pgok');
+    if (skip) return;
     const wrap = t.closest('.tbl') || t;
+    const lim = limits.get(key) || STEP;
+    if (!force && t.rows.length <= STEP + 3 && !(wrap.nextElementSibling?.classList?.contains('pgmore'))) return;
     const rows = [...t.rows].slice(firstData(t)).filter(r => !r.classList.contains('sum'));
     const cand = rows.filter(r => !r.hidden && r.style.display !== 'none');
-    const lim = limits.get(key) || STEP;
+    const k = `${key}|${rows.length}|${cand.length}|${lim}|${rows[0]?.rowIndex}`;
+    if (!force && sig.get(t) === k) return;
+    sig.set(t, k);
     rows.forEach(r => r.classList.remove('pgx'));
     let btn = wrap.nextElementSibling?.classList?.contains('pgmore') ? wrap.nextElementSibling : null;
     if (cand.length <= STEP || lim >= cand.length) {
@@ -40,14 +48,15 @@
     if (!session) return;
     const pk = pageKey(); if (pk !== page) { page = pk; limits.clear(); }
     const skipMain = SKIP_TABS.includes(ui.tab);
-    document.querySelectorAll('main .tbl table').forEach((t, i) => { if (!skipMain) apply(t, 'm' + i); });
+    document.querySelectorAll('main .tbl table').forEach((t, i) => apply(t, 'm' + i, false, skipMain));
     document.querySelectorAll('.overlay .tbl table').forEach((t, i) => apply(t, 'o' + i));
   }
   let raf = 0;
   const later = () => { if (!raf) raf = requestAnimationFrame(run); };
-  new MutationObserver(later).observe(document.body, { childList: true, subtree: true });
+  /* يعمل فور تغيّر الصفحة (قبل رسمها)، وما لم يتغير من الجداول لا يُعاد فحصه */
+  new MutationObserver(() => { if (raf) { cancelAnimationFrame(raf); } raf = 1; run(); }).observe(document.body, { childList: true, subtree: true });
   /* بعد البحث الحي (يخفي الصفوف دون إعادة رسم) */
-  document.addEventListener('input', () => setTimeout(later, 0));
+  document.addEventListener('input', () => setTimeout(() => { document.querySelectorAll('.tbl table').forEach(t => sig.delete(t)); later(); }, 0));
   document.addEventListener('click', e => {
     const b = e.target.closest('.pgmore button'); if (!b) return;
     const box = b.closest('.pgmore'), key = box.dataset.pgkey, t = box.previousElementSibling?.querySelector?.('table') || box.previousElementSibling;
@@ -55,6 +64,6 @@
     if (b.matches('[data-pgmore]')) limits.set(key, (limits.get(key) || STEP) + STEP);
     else if (b.matches('[data-pgall]')) limits.set(key, total);
     else if (b.matches('[data-pgless]')) limits.set(key, STEP);
-    if (t) apply(t, key);
+    if (t) apply(t, key, true);
   });
 })();

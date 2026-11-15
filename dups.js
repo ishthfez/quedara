@@ -56,7 +56,9 @@
   };
   function view(pick) {
     const L = list();
-    const existing = x => db.students.filter(s => norm(s.name) === norm(x.name)).map(s => `${esc(s.name)}<br><small class="muted">${esc(hName(s.halaqaId) || 'بلا حلقة')}</small>`).join('<hr style="margin:.25rem 0;border:0;border-top:1px solid var(--line)">') || '<span class="muted">لم يعد موجودًا</span>';
+    /* فهرس الأسماء مرة واحدة (بدل البحث في كل الطلاب لكل اسم في القائمة) */
+    const idx = new Map(); db.students.forEach(s => { const k = norm(s.name); (idx.get(k) || idx.set(k, []).get(k)).push(s); });
+    const existing = x => (idx.get(norm(x.name)) || []).map(s => `${esc(s.name)}<br><small class="muted">${esc(hName(s.halaqaId) || 'بلا حلقة')}</small>`).join('<hr style="margin:.25rem 0;border:0;border-top:1px solid var(--line)">') || '<span class="muted">لم يعد موجودًا</span>';
     const extra = x => [x.vals?.['core:phone'] ? `الجوال: <span dir="ltr">${esc(x.vals['core:phone'])}</span>` : '', ...Object.entries(x.extra || {}).map(([k, v]) => `${esc(k)}: ${esc(v)}`)].filter(Boolean).join('<br>') || '—';
     const rows = L.map((x, i) => `<tr><td>${i + 1}</td><td><b>${esc(x.name)}</b><br><small class="muted">${esc(x.halaqa || 'بلا حلقة')}</small></td><td style="font-size:.9em">${extra(x)}</td><td>${existing(x)}</td>
       <td><button type="button" class="btn sm primary" data-dupadd="${x.id}" title="إضافته طالبًا مستقلًا بعد تمييز اسمه">طالب مستقل</button> <button type="button" class="btn sm" data-dupsame="${x.id}" title="هو الطالب الموجود نفسه: يُحذف من القائمة">نفس الطالب</button></td></tr>`).join('');
@@ -113,9 +115,47 @@
     (db.settings.dupIgnore || []).forEach(k => pairsOf(String(k).replace(/^[^:]*:/, '').split(',')).forEach(p => S.add(p)));
     return S;
   };
+  /* البحث عن الأسماء المتشابهة بسرعة: نفس قواعد التطبيق (dupLike)، لكن كل اسم يُوحَّد مرة واحدة، ولا يُقارن الاسم
+     إلا بالأسماء التي تبدأ بالكلمة نفسها أو تطابقه بلا مسافات — بدل مقارنة كل اسم بكل اسم (كانت ثوانيَ مع آلاف الطلاب) */
+  function fastGroups() {
+    const out = [], ign = new Set(typeof dupIgnored === 'function' ? dupIgnored() : []);
+    DUP_KINDS.forEach(([k, lbl]) => {
+      const list = k === 'payroll' ? payEmps() : (db[k] || []);
+      const P = list.map(m => { const n = norm(m.name || ''); const t = n.split(' ').filter(Boolean); return { m, ns: n.replace(/\s/g, ''), t }; });
+      const byFirst = new Map(), byNs = new Map();
+      P.forEach((x, i) => { const f = x.t[0] || ''; (byFirst.get(f) || byFirst.set(f, []).get(f)).push(i); (byNs.get(x.ns) || byNs.set(x.ns, []).get(x.ns)).push(i); });
+      const like = (x, y) => {
+        if (x.ns === y.ns) return true;
+        const [s2, l2] = x.t.length <= y.t.length ? [x.t, y.t] : [y.t, x.t];
+        return s2.length >= 2 && s2.length < l2.length && s2[0] === l2[0] && s2[s2.length - 1] === l2[l2.length - 1] && s2.every(w => l2.includes(w));
+      };
+      const months = new Map();
+      const pm = id => { if (!months.has(id)) months.set(id, new Set((db.payroll?.rows || []).filter(r => r.eid === id).map(r => r.y * 100 + r.m))); return months.get(id); };
+      const seen = new Set();
+      P.forEach((x, i) => {
+        const a = x.m; if (seen.has(a.id)) return;
+        const cand = [...new Set([...(byFirst.get(x.t[0] || '') || []), ...(byNs.get(x.ns) || [])])].filter(j => j > i).sort((p, q) => p - q);
+        let g = [a];
+        cand.forEach(j => {
+          const y = P[j], b = y.m;
+          if (seen.has(b.id)) return;
+          if (k === 'students' && a.halaqaId && b.halaqaId && a.halaqaId !== b.halaqaId) return;
+          if (k === 'payroll' && x.ns !== y.ns) { const A = pm(a.id); if ([...pm(b.id)].some(v => A.has(v))) return; }
+          if (like(x, y)) g.push(b);
+        });
+        if (k === 'payroll') g = g.slice().sort((p, q) => (clsOf(q) ? 1 : 0) - (clsOf(p) ? 1 : 0) || pm(q.id).size - pm(p.id).size);
+        if (g.length < 2) return;
+        g.forEach(m => seen.add(m.id));
+        const key = k + ':' + g.map(m => m.id).sort().join(',');
+        if (!ign.has(key)) out.push({ k, lbl, key, items: g });
+      });
+    });
+    return out;
+  }
+  window.QLDupFast = fastGroups;
   document.addEventListener('DOMContentLoaded', () => {
     if (typeof dupGroups !== 'function') return;
-    const base = dupGroups;
+    const base = (() => { try { return DUP_KINDS && payEmps && clsOf ? fastGroups : dupGroups; } catch (e) { return dupGroups; } })();
     dupGroups = function () {
       const S = ignoredPairs();
       return base.apply(this, arguments).filter(g => !pairsOf(g.items.map(m => m.id)).every(p => S.has(p)));
