@@ -155,8 +155,38 @@
     ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1 && !n.classList?.contains('hpill')) pillQ.add(n); else if (n.nodeType === 3 && n.parentNode) pillQ.add(n.parentNode); }));
     if (pillQ.size && !pillRaf) pillRaf = requestAnimationFrame(() => { const q = [...pillQ]; pillQ = new Set(); pillRaf = 0; q.forEach(el => { if (el.isConnected) pillify(el); }); });
   }).observe(document.body, { childList: true, subtree: true });
-  /* المعاينة: الإطار صفحة مستقلة، فتُلفّ كلماته بعد تحميله */
-  document.addEventListener('load', e => { const f = e.target; if (f?.classList?.contains('pvif')) try { pillify(f.contentDocument.body); } catch (err) { /* ignore */ } }, true);
+  /* ===== التكبير والتصغير في كل جدول، لكل الفئات =====
+     جداول الصفحات لها أزرار الحجم من قبل (tables.js)؛ وهنا تُضاف لجداول النوافذ المنبثقة (طلاب الحلقة، بطاقة الموظف، السجل…)
+     ولجداول «المعاينة». الحجم واحد لكل الجداول ويُحفظ على الجهاز. */
+  const zcss = document.createElement('style');
+  zcss.textContent = `.overlay .tbl table{font-size:calc(.95rem * var(--tz,1))}.ztools{display:flex;justify-content:flex-end;gap:.3rem;margin:.2rem 0 .35rem}
+    .ztools .btn{width:auto;min-width:34px;padding:0 .45rem;font-weight:700;font-size:.85rem}`;
+  document.head.appendChild(zcss);
+  const zBar = (attr, label) => `<div class="ztools noprint"><button type="button" class="btn sm" ${attr}="-1" title="تصغير النص" aria-label="تصغير النص">أ−</button><button type="button" class="btn sm" ${attr}="0" ${attr === 'data-tz' ? 'data-tzv' : 'data-pvtzv'} title="الحجم الأصلي" aria-label="الحجم الأصلي">${label}</button><button type="button" class="btn sm" ${attr}="1" title="تكبير النص" aria-label="تكبير النص">أ+</button></div>`;
+  const zPct = () => Math.round((+getComputedStyle(document.documentElement).getPropertyValue('--tz') || 1) * 100) + '%';
+  function zoomify(root) {
+    (root.querySelectorAll ? root : document).querySelectorAll('.overlay .tbl:not([data-zm])').forEach(t => {
+      if (!t.querySelector('table td')) return;
+      t.dataset.zm = '1'; t.insertAdjacentHTML('beforebegin', zBar('data-tz', zPct()));
+    });
+  }
+  new MutationObserver(ms => { if (ms.some(m => [...m.addedNodes].some(n => n.nodeType === 1 && (n.classList?.contains('overlay') || n.closest?.('.overlay'))))) requestAnimationFrame(() => zoomify(document)); })
+    .observe(document.body, { childList: true, subtree: true });
+  /* المعاينة: الإطار صفحة مستقلة؛ تُلفّ كلماته، وتوضع أزرار الحجم فوق جداوله (تكبير داخل الإطار وحده) */
+  document.addEventListener('load', e => {
+    const f = e.target; if (!f?.classList?.contains('pvif')) return;
+    try {
+      const d = f.contentDocument; pillify(d.body);
+      const cur = () => +d.documentElement.style.getPropertyValue('--tz') || 1;
+      d.querySelectorAll('main .tbl').forEach(t => { if (t.querySelector('table td')) t.insertAdjacentHTML('beforebegin', zBar('data-pvtz', Math.round(cur() * 100) + '%')); });
+      d.addEventListener('click', ev => {
+        const b = ev.target.closest('[data-pvtz]'); if (!b) return;
+        const k = +b.dataset.pvtz, z = k ? Math.min(1.8, Math.max(0.7, Math.round((cur() + k * 0.1) * 10) / 10)) : 1;
+        d.documentElement.style.setProperty('--tz', z); d.querySelectorAll('[data-pvtzv]').forEach(x => { x.textContent = Math.round(z * 100) + '%'; });
+      });
+      d.head.insertAdjacentHTML('beforeend', '<style>main [data-pvtz]{pointer-events:auto!important;opacity:1!important}</style>');
+    } catch (err) { /* ignore */ }
+  }, true);
   setTimeout(() => {
     if (typeof freezeTables === 'function' && typeof tableGrid === 'function') freezeTables = fastFreeze;
     const base = render;
