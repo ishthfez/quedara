@@ -199,8 +199,55 @@
       d.head.insertAdjacentHTML('beforeend', '<style>main [data-pvtz]{pointer-events:auto!important;opacity:1!important}</style>');
     } catch (err) { /* ignore */ }
   }, true);
+  /* ===== زر الرجوع (في الجوال والمتصفح) يرجع للسابق بدل الخروج من التطبيق =====
+     - كل انتقال بين الأقسام (والتبويبات الداخلية وفئات الأعضاء) يُسجَّل خطوةً في سجل المتصفح.
+     - النافذة المنبثقة والقائمة الجانبية على الجوال «طبقة»: الرجوع يغلقها أولًا.
+     - في الصفحة الأولى: «اضغط رجوع مرة أخرى للخروج»، والضغطة الثانية خلال ثانيتين تخرج. */
+  const NAV = { restoring: false, closing: false, skip: 0, lastBack: 0, booted: false };
+  const navKey = () => JSON.stringify({ t: ui.tab, m: ui.msub || '', s: sub });
+  const navState = extra => ({ ql: 1, k: navKey(), tab: ui.tab, msub: ui.msub, sub: { ...sub }, ...extra });
+  const layerOpen = () => !!(document.querySelector('.overlay') || document.querySelector('.shell.open'));
+  const popLayer = () => { if (history.state?.layer) { NAV.skip++; history.back(); } };
+  function afterRender() {
+    if (!session) return;
+    if (!NAV.booted) { NAV.booted = true; history.replaceState(navState({ guard: true }), ''); history.pushState(navState(), ''); return; }
+    if (NAV.restoring) { NAV.restoring = false; return; }
+    const st = history.state;
+    if (st?.layer && !layerOpen()) { history.replaceState(navState(), ''); return; } // طبقة أُغلقت بالانتقال نفسه
+    if (st?.ql && !st.layer && !st.guard && st.k !== navKey()) history.pushState(navState(), '');
+  }
+  window.addEventListener('popstate', e => {
+    if (!session) return;
+    if (NAV.skip) { NAV.skip--; return; }
+    const shell = document.querySelector('.shell.open');
+    if (shell) { ui.nav = false; shell.classList.remove('open'); return; }
+    const ovs = document.querySelectorAll('.overlay');
+    if (ovs.length) { NAV.closing = true; ovs[ovs.length - 1].remove(); setTimeout(() => { NAV.closing = false; }, 0); return; }
+    const s = e.state; if (!s?.ql) return;
+    if (s.guard) {
+      if (Date.now() - NAV.lastBack < 2000) { history.back(); return; }
+      NAV.lastBack = Date.now(); toast('اضغط رجوع مرة أخرى للخروج'); history.pushState(navState(), ''); return;
+    }
+    NAV.restoring = true;
+    ui.tab = s.tab; ui.msub = s.msub; ui.nav = false;
+    Object.keys(sub).forEach(k => delete sub[k]); Object.assign(sub, s.sub || {}); saveSub(); saveTab();
+    render(); window.scrollTo(0, 0);
+  });
+  /* فتح نافذة منبثقة يضيف طبقة؛ وإغلاقها بزرّها (لا بالرجوع) يسحب طبقتها من السجل */
+  new MutationObserver(ms => {
+    if (!session || !NAV.booted) return;
+    ms.forEach(m => {
+      m.addedNodes.forEach(n => { if (n.nodeType === 1 && n.classList.contains('overlay') && !NAV.closing) history.pushState(navState({ layer: true }), ''); });
+      m.removedNodes.forEach(n => { if (n.nodeType === 1 && n.classList.contains('overlay') && !NAV.closing) popLayer(); });
+    });
+  }).observe(document.body, { childList: true });
+
   /* بعد تحميل كل الملفات (ومنها app-actions.js)، لا بمؤقّت: على الشبكات البطيئة قد يسبق المؤقّتُ تحميلَ الملف التالي */
   document.addEventListener('DOMContentLoaded', () => {
+    /* القائمة الجانبية على الجوال طبقة كذلك */
+    const baseToggle = A.navToggle, baseClose = A.navClose;
+    if (baseToggle) A.navToggle = d => { const was = ui.nav; baseToggle(d); if (!was && ui.nav) history.pushState(navState({ layer: true }), ''); else if (was && !ui.nav) popLayer(); };
+    if (baseClose) A.navClose = d => { const was = ui.nav; baseClose(d); if (was) popLayer(); };
     if (typeof freezeTables === 'function' && typeof tableGrid === 'function') freezeTables = fastFreeze;
     const base = render;
     render = function () {
@@ -208,6 +255,7 @@
       if (session?.role === 'admin' && OWNER[ui.tab] && OWNER[ui.tab] !== ui.tab) { sub[OWNER[ui.tab]] = ui.tab; saveSub(); ui.tab = OWNER[ui.tab]; }
       const r = base.apply(this, arguments);
       try { decorate(); } catch (err) { /* لا يعطّل العرض */ }
+      try { afterRender(); } catch (err) { /* لا يعطّل العرض */ }
       return r;
     };
     if (session) render();
