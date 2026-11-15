@@ -13,10 +13,12 @@
      - «الأعضاء» لم يعد قسمًا: صار «حسابات الدخول» في «الإعدادات»، و«مكرر للمراجعة» تبويبًا مستقلًا بجانبه (يظهر حين يوجد فيه أسماء).
      - «العاملون»: القائمة الموحدة + الغياب + المرتبات (الغياب يُخصم من المرتب، فدورة الشهر كلها في مكان واحد).
      - «الاشتراكات»: التحصيل + تحصيل المعلمين (الاسم نفسه عند المحاسب).
+     - حسابات الدخول بحسب أصحابها: حسابات العاملين (وغير المصنفين من المرتبات) في «العاملون ← الحسابات»،
+       وحسابات الطلاب والمديرين و«طلاب بلا حلقة» في «الإعدادات ← حسابات الدخول». القائمة نفسها بفئات مختلفة.
      الدوال الأصلية لكل قسم كما هي؛ والأزرار القديمة (data-v="members" أو "payroll"…) تفتح القسم الجامع على تبويبها. */
   const dupsN = () => (db.payroll?.settings?.dup_students || []).length;
   const GROUPS = {
-    teachers: [['teachers', 'العاملون'], ['absence', 'الغياب'], ['payroll', 'المرتبات']],
+    teachers: [['teachers', 'العاملون'], ['absence', 'الغياب'], ['payroll', 'المرتبات'], ['accounts', 'الحسابات']],
     fees: [['fees', 'التحصيل'], ['tcollect', 'تحصيل المعلمين']],
     settings: [['settings', 'الإعدادات'], ['members', 'حسابات الدخول'], ['dups', 'مكرر للمراجعة', () => dupsN() > 0], ['perms', 'الصلاحيات'], ['backup', 'النسخ الاحتياطية'], ['pending', 'بيانات معلّقة']]
   };
@@ -27,10 +29,43 @@
     ui.msub = 'dups';
     return baseMem().replace(MSEL, '<h2 class="grow" style="margin:0">مكرر للمراجعة</h2>');
   };
-  adminViews.members = () => {
-    if (ui.msub === 'dups') { ui.msub = 'staff'; saveTab(); }
-    return baseMem().replace(/<option value="dups"[^>]*>[^<]*<\/option>/, '');
+  /* الفئات: للعاملين (staff، المعلمون…، المسميات الأخرى، غير مصنف) وللإعدادات (الطلاب، المديرون، طلاب بلا حلقة) */
+  const SET_K = ['students', 'admins', 'nohal'];
+  const isSet = k => SET_K.includes(k), isStaff = k => !!k && !isSet(k) && k !== 'dups';
+  const noHalN = () => (window.QLNoHalaqa ? window.QLNoHalaqa().length : 0);
+  const keepOpts = (h, ok) => h.replace(MSEL, sel => sel.replace(/<option value="([^"]*)"[^>]*>[^<]*<\/option>/g, (o, v) => ok(v) ? o : '')
+    .replace(/<optgroup[^>]*>\s*<\/optgroup>/g, ''));
+  const NOHAL = '<div class="card"><h2>طلاب غير مصنفين (بلا حلقة)';
+  /* «العاملون ← الحسابات» */
+  adminViews.accounts = () => {
+    if (!isStaff(ui.msub)) { ui.msub = 'staff'; saveTab(); }
+    let h = keepOpts(baseMem(), v => isStaff(v));
+    /* «غير مصنف» هنا للعاملين وحدهم: بلا بطاقة الطلاب بلا حلقة، والعدد للعاملين فقط */
+    h = h.replace(/(<option value="unclassified"[^>]*>غير مصنف \()(\d+)(\))/, (m, a, k, c) => a + (typeof unclassCount === 'function' ? unclassCount() : k) + c);
+    const i = h.indexOf(NOHAL);
+    if (i > -1) { const end = h.lastIndexOf('</div>'); h = h.slice(0, i) + h.slice(end); }
+    return h;
   };
+  /* «الإعدادات ← حسابات الدخول»: الطلاب والمديرون، و«طلاب بلا حلقة» */
+  adminViews.members = () => {
+    if (!isSet(ui.msub)) { ui.msub = 'students'; saveTab(); }
+    if (ui.msub === 'nohal') {
+      if (!noHalN()) { ui.msub = 'students'; saveTab(); return adminViews.members(); }
+      ui.msub = 'students'; const pick = (keepOpts(baseMem(), isSet).match(MSEL) || [''])[0]; ui.msub = 'unclassified';
+      let h; try { h = baseMem(); } finally { ui.msub = 'nohal'; }
+      const i = h.indexOf(NOHAL);
+      const sel = pick.replace(/ selected(?=[ >])/g, '').replace('</select>', `<option value="nohal" selected>طلاب بلا حلقة (${noHalN()})</option></select>`);
+      return `<div class="memview"><div class="card"><div class="bar" style="margin:0">${sel}</div></div>${i > -1 ? h.slice(i) : empty('لا يوجد طلاب بلا حلقة ✓') + '</div>'}`;
+    }
+    let h = keepOpts(baseMem(), isSet);
+    if (noHalN()) h = h.replace(MSEL, sel => sel.replace('</select>', `<option value="nohal">طلاب بلا حلقة (${noHalN()})</option></select>`));
+    return h;
+  };
+  /* زر «حسابات الدخول» في صفحة العاملين (data-v="members") يفتح حسابات العاملين */
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act="tab"][data-v="members"]');
+    if (b && session?.role === 'admin' && ui.tab === 'teachers' && !isStaff(ui.msub)) ui.msub = 'staff';
+  }, true);
   /* ترتيب الشريط الجانبي وعناوين مجموعاته */
   const ORDER = [['dash'], ['students', 'التعليم'], ['teachers'], ['halaqat'], ['fees', 'المالية'], ['news', 'التواصل'], ['settings', 'النظام']];
   const OWNER = {}; Object.entries(GROUPS).forEach(([g, subs]) => subs.forEach(([k]) => { OWNER[k] = g; }));
@@ -374,6 +409,8 @@
     unifyTabs();
     const base = render;
     render = function () {
+      /* «الأعضاء» القديم: فئات العاملين تفتح «العاملون ← الحسابات»، والطلاب والمديرون «الإعدادات ← حسابات الدخول» */
+      if (session?.role === 'admin' && ui.tab === 'members' && isStaff(ui.msub)) ui.tab = 'accounts';
       /* قسم صار تبويبًا: يُفتح القسم الجامع على هذا التبويب (قبل فحص صفحة البداية، وإلا أعاده إليها) */
       if (session?.role === 'admin' && OWNER[ui.tab] && OWNER[ui.tab] !== ui.tab) { sub[OWNER[ui.tab]] = ui.tab; saveSub(); ui.tab = OWNER[ui.tab]; saveTab(); }
       /* صفحة البداية لكل فئة كما كانت (لا أول القائمة بعد توحيد الترتيب) */
