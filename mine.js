@@ -8,9 +8,9 @@
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./mine.js')) VFILES.push('./mine.js'); } catch (e) { /* ignore */ } });
   const st = { tab: 'on', q: '' };
-  /* حلقات صاحب الحساب: المشرف العام يرى كل الحلقات */
+  /* حلقات صاحب الحساب: المدير والمشرف العام يريان كل الحلقات */
   const halaqatOf = () => {
-    if (session?.role === 'supervisor' && byId(db.supervisors, session.id)?.info?.scope === 'all') return db.halaqat.slice().sort((a, b) => halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'));
+    if (session?.role === 'admin' || session?.role === 'supervisor' && byId(db.supervisors, session.id)?.info?.scope === 'all') return db.halaqat.slice().sort((a, b) => halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'));
     return myHalaqat();
   };
   const match = (s, q) => !q || norm(s.name).includes(norm(q));
@@ -43,6 +43,27 @@
   }
   teacherViews.mine = view;
   supervisorViews.mine = view;
+  /* الحضور: للمنتظمين فقط (المنقطع لا يُسجَّل حضوره) */
+  function attView() {
+    const hs = halaqatOf();
+    if (!hs.length) return `<div class="card">${empty('لم تُسنَد إليك حلقة بعد. تواصل مع الإدارة.')}</div>`;
+    const picker = halaqaPicker(hs);
+    const all = db.students.filter(s => s.halaqaId === ui.hid), sts = all.filter(s => !stOff(s)).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+    const rows = sts.map(s => {
+      const cur = db.attendance.find(a => a.studentId === s.id && a.date === ui.date)?.status;
+      return `<tr><td>${esc(s.name)}</td><td>${Object.entries(STATUS).map(([k, l]) => `<button class="btn sm ${cur === k ? 'on ' + k : ''}" data-act="att" data-sid="${s.id}" data-st="${k}">${l}</button>`).join(' ')}</td></tr>`;
+    }).join('');
+    const offN = all.length - sts.length;
+    return `<div class="card"><div class="bar">${picker}<input type="date" value="${ui.date}" data-change="date"></div>
+    ${offN ? `<p class="muted" style="margin:0 0 .5rem;font-size:.85rem">${offN} منقطع لا يظهرون في الحضور.</p>` : ''}
+    ${sts.length ? `<div class="tbl"><table><tr><th>الطالب</th><th>الحالة</th></tr>${rows}</table></div>` : empty('لا يوجد طلاب منتظمون في هذه الحلقة.')}</div>`;
+  }
+  teacherViews.att = attView;
+  supervisorViews.att = attView;
+  /* المدير يملك كل ما تملكه الفئات الأخرى: حضور أي حلقة وتسميع طلابها، بالصفحتين نفسيهما */
+  adminViews.att = attView;
+  adminViews.mine = view;
+  if (!TABS.admin.some(t => t[0] === 'mine')) TABS.admin.push(['mine', 'طلاب الحلقات'], ['att', 'الحضور']);
   /* صفحة بداية المعلم: «طلابي» (أول قائمته قبل أن يوحّد nav.js الترتيب) */
   { const i = TABS.teacher.findIndex(t => t[0] === 'mine'); if (i > 0) TABS.teacher.unshift(...TABS.teacher.splice(i, 1)); }
 
