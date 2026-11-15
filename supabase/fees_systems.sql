@@ -3,6 +3,7 @@
 --  ونظام كل طالب في بياناته (feeSys = '3' أو '6'، والافتراضي 6).
 --  1) fee_due: المستحق على الخادم (لقوائم تحصيل المعلم والإداري) يعرف الاشتراك العام بنظاميه.
 --  2) حارس بيانات الطالب: من له صلاحية «قيمة الاشتراك» يغيّر نظام الطالب أيضًا.
+--  3) من له صلاحية «قيمة الاشتراك» (المحاسب) يحفظ «إعدادات الاشتراك» أيضًا، لا المدير وحده.
 --  يُنفَّذ بعد collections.sql و student_edit.sql، مرة واحدة في Supabase ← SQL Editor ← Run. آمن للتكرار.
 -- =====================================================================
 
@@ -67,5 +68,10 @@ begin
 end $$;
 drop trigger if exists members_guard on public.members;
 create trigger members_guard before insert or update on public.members for each row execute function public.members_guard();
+
+-- 3) إعدادات الاشتراك (المبلغ العام بنظاميه والخصومات والفئات): يحفظها المدير ومن له صلاحية «قيمة الاشتراك» (المحاسب)
+drop policy if exists settings_write_fees on public.settings;
+create policy settings_write_fees on public.settings for all to authenticated
+  using (key = 'priv_fees' and public.has_perm('fees.amount')) with check (key = 'priv_fees' and public.has_perm('fees.amount'));
 
 notify pgrst, 'reload schema';
