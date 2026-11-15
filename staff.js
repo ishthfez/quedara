@@ -9,7 +9,7 @@
      وفي «الاشتراكات» يظهر اسمها كما في «الأماكن والحلقات» («حلقة + المعلم») والمكان في عموده.
    يُحمَّل قبل app-actions.js، وما يعتمد عليها يُطبَّق بعد تحميلها. */
 (() => {
-  setTimeout(() => { try { if (!VFILES.includes('./staff.js')) VFILES.push('./staff.js'); } catch (e) { /* ignore */ } }, 0);
+  document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./staff.js')) VFILES.push('./staff.js'); } catch (e) { /* ignore */ } });
   const tab = TABS.admin.find(t => t[0] === 'teachers'); if (tab) tab[1] = 'الموظفون';
   const KINDS = [['admins', 'مدير'], ['supervisors', 'مشرف'], ['teachers', 'معلم'], ['accountants', 'محاسب'], ['placeadmins', 'إداري']];
   const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
@@ -180,11 +180,12 @@
       + h.slice(h.indexOf('</div>', end) + 6);
   };
   document.addEventListener('click', e => { if (e.target.closest('[data-stall]')) { showAll = true; render(); } });
-  setTimeout(() => {
+  /* بعد تحميل كل الملفات (ومنها app-actions.js)، لا بمؤقّت: على الشبكات البطيئة قد يسبق المؤقّتُ تحميلَ الملف التالي */
+  document.addEventListener('DOMContentLoaded', () => {
     const base = render;
     render = function () {
       try { if (syncNames()) save(); } catch (err) { /* لا يعطّل العرض */ }
       return base.apply(this, arguments);
     };
-  }, 0);
+  });
 })();
