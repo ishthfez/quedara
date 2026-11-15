@@ -62,6 +62,7 @@
     return { base, src, off, dl, due: Math.round((base - off) * 100) / 100 };
   }
   const feeOf = s => dueOf(s)?.due ?? null;
+  window.QLFeeDue = feeOf; // للإيصال: مستحق الطالب للشهر
   const halOf = s => byId(db.halaqat, s.halaqaId);
   const paidFor = (sid, y, m) => fees().filter(f => f.studentId === sid && +f.y === y && +f.m === m).reduce((a, f) => a + (+f.amount || 0), 0);
   /* «بداية الاسم»: يطابق أول الاسم أو أول أي كلمة فيه */
@@ -198,8 +199,11 @@
       const amount = +v.amount;
       if (!(amount > 0)) return 'اكتب مبلغًا صحيحًا';
       const [y, m] = v.month.split('-').map(Number);
-      fees().push({ id: uid(), studentId: sid, y, m, amount, date: v.date || today(), by: me()?.name || '', byMember: session?.id || '', note: (v.note || '').trim() });
-      toast(`سُجّل ${money(amount)} جنيه لـ«${s.name}» عن ${MONTHS[m - 1]} ${y}`);
+      const f = { id: uid(), studentId: sid, y, m, amount, date: v.date || today(), by: me()?.name || '', byMember: session?.id || '', note: (v.note || '').trim() };
+      fees().push(f);
+      /* إيصال للطابعة الصغيرة (receipt.js) بعد إغلاق النافذة وحفظ الدفعة */
+      if (window.QLReceipt) setTimeout(() => window.QLReceipt.offer(f), 60);
+      else toast(`سُجّل ${money(amount)} جنيه لـ«${s.name}» عن ${MONTHS[m - 1]} ${y}`);
     });
   }
   function log(sid) {
@@ -207,7 +211,7 @@
     const list = fees().filter(f => f.studentId === sid).sort((a, b) => (b.y * 100 + b.m) - (a.y * 100 + a.m) || String(b.date).localeCompare(String(a.date)));
     const total = list.reduce((a, f) => a + (+f.amount || 0), 0);
     openInfo('سجل اشتراكات: ' + s.name, `<div class="tbl"><table><tr><th>عن شهر</th><th>المبلغ</th><th>التاريخ</th><th>حصّلها</th><th>ملاحظة</th><th class="noprint"></th></tr>
-      ${list.map(f => `<tr><td>${MONTHS[f.m - 1]} ${f.y}</td><td>${money(f.amount)}</td><td dir="ltr" style="text-align:right">${esc(f.date || '')}</td><td>${esc(f.by || '')}</td><td>${esc(f.note || '')}</td><td class="noprint">${isAdmin() || (can('fees.collect') && f.byMember === session?.id) ? `<button type="button" class="btn sm danger" data-fee-del="${esc(f.id)}">حذف</button>` : ''}</td></tr>`).join('')}
+      ${list.map(f => `<tr><td>${MONTHS[f.m - 1]} ${f.y}</td><td>${money(f.amount)}</td><td dir="ltr" style="text-align:right">${esc(f.date || '')}</td><td>${esc(f.by || '')}</td><td>${esc(f.note || '')}</td><td class="noprint"><button type="button" class="btn sm" data-fee-rcpt="${esc(f.id)}">إيصال</button>${isAdmin() || (can('fees.collect') && f.byMember === session?.id) ? `<button type="button" class="btn sm danger" data-fee-del="${esc(f.id)}">حذف</button>` : ''}</td></tr>`).join('')}
       <tr class="sum"><td>الإجمالي</td><td>${money(total)}</td><td colspan="4"></td></tr></table></div>`);
   }
   function del(id) {
