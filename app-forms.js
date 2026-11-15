@@ -274,6 +274,8 @@ function nidInfo(raw) {
 /* قائمة الحلقات (مصفّاة بالمكان إن اختير) وقائمة الأماكن */
 const halOptsIn = placeId => db.halaqat.filter(h => !placeId || h.placeId === placeId).map(h => [h.id, halaqaLabel(h)]);
 const placeOptsAll = () => db.places.map(p => [p.id, p.name]);
+/* الاسم الواحد مسموح لطالبين في مكانين مختلفين (المكان يميّز بينهما)؛ ويُمنع في المكان نفسه أو إن لم يُعرف مكان أحدهما */
+const samePlaceHal = (a, b) => { const pa = byId(db.halaqat, a)?.placeId, pb = byId(db.halaqat, b)?.placeId; return !pa || !pb || pa === pb; };
 function studentForm(st) {
   const isNew = !st;
   st = st || { id: uid(), name: '', cat: 'child', halaqaId: ui.fh || '', phone: '', pin: genPass(), info: {} };
@@ -366,7 +368,7 @@ function studentForm(st) {
     const name = val('name').replace(/\s+/g, ' ');
     if (!name) { toast('اكتب الاسم'); return; }
     if (!CLOUD && !val('pin')) { toast('اكتب كلمة المرور'); return; }
-    if (db.students.some(x => x.id !== st.id && norm(x.name) === norm(name))) { toast('يوجد طالب بالاسم نفسه'); return; }
+    if (db.students.some(x => x.id !== st.id && norm(x.name) === norm(name) && samePlaceHal(x.halaqaId, val('halaqaId')))) { toast('يوجد طالب بالاسم نفسه في المكان نفسه'); return; }
     const N = nidInfo(val('nid'));
     if (N.err) { toast(N.err); return; }
     if (N.nid && db.students.some(x => x.id !== st.id && (x.info || {}).nid === N.nid)) { toast('الرقم القومي مسجّل لطالب آخر'); return; }
@@ -510,12 +512,12 @@ function quickAdd() {
     }
     if (e.target.name === 'qNames') { const k = names().length; $('[data-qcnt]').textContent = k ? `${k} اسمًا` : ''; }
   });
-  const exists = n => db.students.some(x => norm(x.name) === norm(n));
+  const exists = (n, hid) => db.students.some(x => norm(x.name) === norm(n) && samePlaceHal(x.halaqaId, hid));
   $('[data-qsave]').onclick = () => {
     if (mode === 'one') {
       const name = fixName(val('qName'));
       if (!name) { toast('اكتب اسم الطالب'); return; }
-      if (exists(name)) { toast('يوجد طالب بالاسم نفسه'); return; }
+      if (exists(name, val('qHal1'))) { toast('يوجد طالب بالاسم نفسه في المكان نفسه'); return; }
       const N = nidInfo(val('qNid'));
       if (N.err) { toast(N.err); return; }
       if (N.nid && db.students.some(x => (x.info || {}).nid === N.nid)) { toast('الرقم القومي مسجّل لطالب آخر'); return; }
@@ -526,7 +528,7 @@ function quickAdd() {
     if (!val('qPlace2') || !val('qHal2')) { toast('اختر المكان والحلقة'); return; }
     const list = names();
     if (!list.length) { toast('اكتب أسماء الطلاب'); return; }
-    const fresh = list.filter(n => !exists(n)), skipped = list.length - fresh.length;
+    const fresh = list.filter(n => !exists(n, val('qHal2'))), skipped = list.length - fresh.length;
     fresh.forEach(n => db.students.push(newStudent(n, val('qHal2'), {})));
     ov.remove(); save(); render();
     toast(`أُضيف ${fresh.length} طالبًا إلى ${halaqaLabel(byId(db.halaqat, val('qHal2')))}${skipped ? ` — تُرك ${skipped} موجود من قبل` : ''}`);
