@@ -155,8 +155,11 @@
     #demobar .btn{background:#fff;color:#1f5a3a;border:0;min-height:32px;padding:0 .7rem}
     html.demo body{padding-top:var(--demo-h,44px)}html.demo .content .top{top:var(--demo-h,44px)}
     .demo-pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.6rem;margin:.6rem 0}
-    .demo-pick .btn{min-height:64px;font-size:1rem;font-weight:700;flex-direction:column}
-    .demo-pick small{font-weight:400;font-size:.78rem;opacity:.8}`;
+    .demo-pick .btn{display:flex!important;flex-direction:column!important;align-items:center;justify-content:center;gap:.4rem;min-height:76px;padding:.55rem .5rem;white-space:normal;text-align:center}
+    .demo-pick .dt{display:block;font-size:1.05rem;font-weight:800;line-height:1.2}
+    .demo-pick .dd{display:inline-block;font-size:.76rem;font-weight:500;line-height:1.3;padding:.15rem .65rem;border-radius:999px;background:rgba(19,41,75,.08);color:inherit}
+    .demo-pick .btn.primary .dd{background:rgba(255,255,255,.18)}
+    .demo-intro{margin:0 0 .3rem;line-height:1.75}.demo-intro li{margin:.1rem 0}`;
   function bar() {
     let b = document.getElementById('demobar');
     if (!b) { b = document.createElement('div'); b.id = 'demobar'; document.body.appendChild(b); document.documentElement.classList.add('demo'); }
@@ -169,8 +172,9 @@
     const ov = document.createElement('div'); ov.className = 'overlay';
     const DESC = { admin: 'اللوحة كاملة', accountant: 'الاشتراكات والتحصيل', teacher: 'الحضور والتسميع', supervisor: 'متابعة الحلقات', placeadmin: 'حلقات مكانه', student: 'حفظه وحضوره' };
     ov.innerHTML = `<div class="modal"><h2>مرحبًا بك في نسخة العرض</h2>
-      <p class="muted" style="margin:0">هذه نسخة كاملة من التطبيق <b>ببيانات وهمية</b> (أسماء ومبالغ مصطنعة). جرّب ما تشاء: لا يُحفظ شيء، ولا تتصل هذه النسخة بأي خادم. اختر الواجهة التي تريد مشاهدتها، ويمكنك التبديل بينها من الشريط أعلى الشاشة.</p>
-      <div class="demo-pick">${ROLES.map(([k, l]) => `<button type="button" class="btn ${k === 'admin' ? 'primary' : ''}" data-demogo="${k}">${l}<small>${DESC[k]}</small></button>`).join('')}</div></div>`;
+      <div class="demo-intro muted"><p style="margin:0 0 .3rem">تصفّح التطبيق كما يعمل فعلًا في جمعية افتراضية، <b>بأسماء ومبالغ وهمية</b>.</p>
+        <ul style="margin:0;padding-inline-start:1.2rem"><li>جرّب ما تشاء: سجّل حضورًا، أو حصّل اشتراكًا، أو اطبع إيصالًا.</li><li>لا يُحفظ شيء، ولا يتصل هذا العرض بأي خادم.</li><li>اختر الواجهة الآن، وبدّل بينها متى شئت من الشريط أعلى الشاشة.</li></ul></div>
+      <div class="demo-pick">${ROLES.map(([k, l]) => `<button type="button" class="btn ${k === 'admin' ? 'primary' : ''}" data-demogo="${k}"><span class="dt">${l}</span><span class="dd">${DESC[k]}</span></button>`).join('')}</div></div>`;
     document.body.appendChild(ov);
   }
   document.addEventListener('DOMContentLoaded', () => {
