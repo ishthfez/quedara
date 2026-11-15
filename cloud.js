@@ -443,7 +443,7 @@ async function push(db) {
       gr.up.forEach(r => { snap[gr.name] = snap[gr.name] || {}; snap[gr.name][rowKey(gr.pk, r)] = JSON.stringify(r); });
     }
     /* الصور تُرسل وحدها وفقط إن تغيّرت فعلًا؛ وصورة لم تُحمَّل بعد لا تُمسح أبدًا */
-    if (role === 'admin') for (const m of db.students || []) {
+    if (role === 'admin' || (db.myPerms || []).includes('students.edit')) for (const m of db.students || []) {
       if (m.photo === undefined) continue;
       const cur = m.photo || '', hv = hashStr(cur), known = photoSent.get(m.id);
       if (known === hv || (!cur && known === undefined)) continue;
