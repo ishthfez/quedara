@@ -124,7 +124,7 @@
   pcss.textContent = `.hpill{display:inline-block;font-size:.78em;line-height:1.55;padding:0 .5em;border-radius:999px;background:color-mix(in srgb,var(--navy,#13294b) 11%,transparent);color:var(--navy,#13294b);font-weight:700;vertical-align:.06em;white-space:nowrap}
     .side .hpill,.pvtop .hpill{background:rgba(255,255,255,.18);color:inherit}`;
   document.head.appendChild(pcss);
-  let pillRe = null, pillKey = '';
+  let pillRe = null, pillKey = null; // null: لم يُبنَ بعد (حتى لو لم يوجد معلمون)
   const escRe = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   function pillRegex() {
     const names = [...new Set((db.teachers || []).map(t => (t.name || '').trim()).filter(Boolean))].sort((a, b) => b.length - a.length);
