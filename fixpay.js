@@ -38,7 +38,10 @@
     const rev = list.filter(x => Object.keys(x.extra || {}).some(isPayHeader) || wrongNames.has(norm(x.name)));
     return { pend, wrong, rev };
   }
-  const found = () => { const r = scan(); return r.wrong.length || r.rev.length || r.pend.length ? r : null; };
+  /* النتيجة تُحفظ ما دامت البيانات لم تتغير (المراقب يستدعيها مع كل تغيير في الصفحة) */
+  const dsig = () => `${db.students.length}|${(db.pending || []).length}|${(db.pending || []).reduce((a, p) => a + (p.values || []).length, 0)}|${(db.payroll?.settings?.dup_students || []).length}|${(db.fees || []).length}|${db.halaqat.length}`;
+  let fCache = null, fSig = '';
+  const found = () => { const g = dsig(); if (g !== fSig) { fSig = g; const r = scan(); fCache = r.wrong.length || r.rev.length || r.pend.length ? r : null; } return fCache; };
 
   function fix() {
     const { pend, wrong, rev } = scan();
@@ -82,7 +85,7 @@
     document.body.appendChild(ov);
     ov.querySelector('[data-close]').onclick = () => ov.remove();
     ov.querySelector('[data-fpok]').onclick = () => {
-      const x = fix(); ov.remove();
+      const x = fix(); fSig = tSig = ''; ov.remove();
       const msg = `تم: حُذف ${x.del} طالبًا أُضيفوا بالخطأ، و${x.rev} من «مكرر للمراجعة»${x.moved ? `، ونُقلت ${x.moved} دفعة إلى أصحابها` : ''}${x.dropped ? `، وحُذفت ${x.dropped} دفعة مستوردة (تعود بإعادة استيراد ملف الدفعات)` : ''}.`;
       if (x.keep) openInfo('تم الإصلاح', `<p>${esc(msg)}</p><p class="note">بقي ${x.keep} طالبًا «بلا حلقة» لأن عليهم حضورًا أو تسميعًا أو دفعات مسجّلة يدويًا، راجعهم: ${x.keepNames.slice(0, 30).map(esc).join('، ')}${x.keep > 30 ? '…' : ''}</p>`);
       else toast(msg);
@@ -148,10 +151,12 @@
     return ids.size;
   }
   window.QLFixPay.triage = sameTriage;
+  let tCache = null, tSig = '';
+  const triageCached = () => { const g = dsig(); if (g !== tSig) { tSig = g; tCache = sameTriage(); } return tCache; };
   new MutationObserver(() => {
     if (session?.role !== 'admin' || ui.tab !== 'members' || ui.msub !== 'dups') return;
     const note = document.querySelector('main .card > .note:not([data-fixpay])'); if (!note || document.querySelector('[data-samego]')) return;
-    const r = sameTriage(); if (!r.merge.length) return;
+    const r = triageCached(); if (!r.merge.length) return;
     note.insertAdjacentHTML('afterend', `<div class="bar" style="margin:.2rem 0 .7rem"><span class="muted grow" style="font-size:.88rem">${r.merge.length} في الحلقة نفسها أو المسجد نفسه (الطالب نفسه)${r.other.length ? ` · ${r.other.length} في مكان آخر للمراجعة` : ''}${r.unknown.length ? ` · ${r.unknown.length} حلقتهم في الملف غير محددة` : ''}</span>
       <button type="button" class="btn sm primary" data-samego>دمج من في المكان نفسه (${r.merge.length})</button></div>`);
   }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
@@ -159,7 +164,7 @@
     if (!e.target.closest('[data-samego]') || session?.role !== 'admin') return;
     const r = sameTriage();
     ask(`دمج ${r.merge.length} اسمًا مع الطالب الموجود بالاسم نفسه في الحلقة نفسها أو المسجد نفسه؟ يُحذفون من القائمة ويُكمل الطالب الموجود بجواله ورقمه القديم إن نقصا. ويبقى ${r.other.length + r.unknown.length} للمراجعة.`, () => {
-      const n = doMerge(); toast(`دُمج ${n} — بقي ${(db.payroll.settings.dup_students || []).length} للمراجعة`);
+      const n = doMerge(); tSig = fSig = ''; toast(`دُمج ${n} — بقي ${(db.payroll.settings.dup_students || []).length} للمراجعة`);
     });
   });
 })();
