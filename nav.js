@@ -11,12 +11,13 @@
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./nav.js')) VFILES.push('./nav.js'); } catch (e) { /* ignore */ } });
   /* إعادة التنظيم (المرحلة الأولى، الشكل فقط): العناصر الأساسية طالب وعامل وحلقة ومكان.
      - «الأعضاء» لم يعد قسمًا: صار «حسابات الدخول» في «الإعدادات»، و«مكرر للمراجعة» تبويبًا مستقلًا بجانبه (يظهر حين يوجد فيه أسماء).
-     - «العاملون»: القائمة الموحدة + الغياب. «المالية»: التحصيل + تحصيل المعلمين + المرتبات.
+     - «العاملون»: القائمة الموحدة + الغياب + المرتبات (الغياب يُخصم من المرتب، فدورة الشهر كلها في مكان واحد).
+     - «الاشتراكات»: التحصيل + تحصيل المعلمين (الاسم نفسه عند المحاسب).
      الدوال الأصلية لكل قسم كما هي؛ والأزرار القديمة (data-v="members" أو "payroll"…) تفتح القسم الجامع على تبويبها. */
   const dupsN = () => (db.payroll?.settings?.dup_students || []).length;
   const GROUPS = {
-    teachers: [['teachers', 'العاملون'], ['absence', 'الغياب']],
-    fees: [['fees', 'التحصيل'], ['tcollect', 'تحصيل المعلمين'], ['payroll', 'المرتبات']],
+    teachers: [['teachers', 'العاملون'], ['absence', 'الغياب'], ['payroll', 'المرتبات']],
+    fees: [['fees', 'التحصيل'], ['tcollect', 'تحصيل المعلمين']],
     settings: [['settings', 'الإعدادات'], ['members', 'حسابات الدخول'], ['dups', 'مكرر للمراجعة', () => dupsN() > 0], ['perms', 'الصلاحيات'], ['backup', 'النسخ الاحتياطية'], ['pending', 'بيانات معلّقة']]
   };
   /* «مكرر للمراجعة» تبويب مستقل: هو فئة «dups» من قائمة الأعضاء نفسها، بلا قائمة الفئات */
@@ -68,7 +69,7 @@
   });
   /* أقسام الشريط الجانبي الجديدة */
   const keep = new Map(TABS.admin.map(t => [t[0], t[1]]));
-  keep.set('teachers', 'العاملون'); keep.set('fees', 'المالية'); keep.set('settings', 'الإعدادات');
+  keep.set('teachers', 'العاملون'); keep.set('fees', 'الاشتراكات'); keep.set('settings', 'الإعدادات');
   /* التبويب الفعلي المعروض الآن (داخل القسم الجامع)، لمن يحتاج معرفته: pager.js وfixpay.js… */
   const curSub = g => { const subs = GROUPS[g]; if (!subs) return g; const vis = subs.filter(([, , show]) => !show || show()); return vis.some(([k]) => k === sub[g]) ? sub[g] : vis[0][0]; };
   window.QLView = () => (session?.role === 'admin' && GROUPS[ui.tab] ? curSub(ui.tab) : ui.tab);
