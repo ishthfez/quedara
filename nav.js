@@ -9,7 +9,6 @@
    يُحمَّل بعد كل الملفات التي تضيف أقسامًا، وقبل app-actions.js. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./nav.js')) VFILES.push('./nav.js'); } catch (e) { /* ignore */ } });
-  const label = k => (TABS.admin.find(t => t[0] === k) || [k, k])[1];
   const GROUPS = {
     fees: [['fees', 'التحصيل'], ['tcollect', 'تحصيل المعلمين']],
     payroll: [['payroll', 'المرتبات'], ['absence', 'غياب المعلمين']],
@@ -157,6 +156,15 @@
     ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1 && !n.classList?.contains('hpill')) pillQ.add(n); else if (n.nodeType === 3 && n.parentNode) pillQ.add(n.parentNode); }));
     if (pillQ.size && !pillRaf) pillRaf = requestAnimationFrame(() => { const q = [...pillQ]; pillQ = new Set(); pillRaf = 0; q.forEach(el => { if (el.isConnected) pillify(el); }); });
   }).observe(document.body, { childList: true, subtree: true });
+  /* ===== اسم التطبيق تحت الشعار في صفحة الدخول (من «الإعدادات ← اسم المؤسسة») ===== */
+  const baseLogin = loginView;
+  loginView = function () {
+    const name = (db.settings?.org || '').trim() || 'إدارة الحلقات القرآنية';
+    return baseLogin.apply(this, arguments).replace('<div class="card loginform">', `<h1 class="appname">${esc(name)}</h1><div class="card loginform">`);
+  };
+  const lcss = document.createElement('style');
+  lcss.textContent = `.login .logo-wrap{margin-bottom:.6rem}.login .appname{text-align:center;margin:0 0 1.1rem;font-size:clamp(1.25rem,5vw,1.6rem);font-weight:800;color:var(--navy,#13294b);letter-spacing:.01em}`;
+  document.head.appendChild(lcss);
   /* ===== التكبير والتصغير في كل جدول، لكل الفئات =====
      جداول الصفحات لها أزرار الحجم من قبل (tables.js)؛ وهنا تُضاف لجداول النوافذ المنبثقة (طلاب الحلقة، بطاقة الموظف، السجل…)
      ولجداول «المعاينة». الحجم واحد لكل الجداول ويُحفظ على الجهاز. */
