@@ -15,7 +15,7 @@
      - الاشتراكات صارت مع الطلاب كما المرتبات مع العاملين: «الطلاب ← الاشتراكات» و«الطلاب ← تحصيل المعلمين»
        (والمحاسب كما هو: «الاشتراكات» قسمه الأول).
      - حسابات الدخول بحسب أصحابها (القائمة نفسها بفئات مختلفة):
-       العاملون ← عمود «الحساب» في «العاملون» وأدواته في شريطه (وغير المصنفين بتصفية «غير مصنف»)؛ الطلاب ← «الطلاب ← الحسابات»؛
+       العاملون ← عمود «الحساب» في «العاملون» وأدواته في شريطه (وغير المصنفين بتصفية «غير مصنف»)؛ الطلاب ← أدوات صف «الطلاب» وملف الطالب (لا تبويب «الحسابات»)؛
        «طلاب بلا حلقة» ← «الطلاب ← بلا حلقة»؛ والمديرون وحدهم ← «الإعدادات ← حسابات المديرين».
      - «الطلاب»: الطلاب · الحضور · الاشتراكات · تحصيل المعلمين · الحسابات (حضور الطلاب معهم كغياب العاملين معهم؛
        والمعلم والمشرف: «الحضور» قسمهما الأول كما هو). في «الطلاب» التصفية تحدد ما يظهر:
@@ -140,15 +140,18 @@
   document.addEventListener('change', e => { const s = e.target.closest?.('select[data-tstat],select[data-pstat]'); if (s) s.classList.toggle('qoff', s.value === 'off'); });
   const wcss = document.createElement('style');
   wcss.textContent = `select.qoff{color:var(--red,#b3372f)!important;border-color:var(--red,#b3372f)!important;font-weight:700}
-    .lnk.wname{text-decoration:none;text-align:start}.lnk.wname:hover b{text-decoration:underline;text-decoration-color:var(--gold)}`;
+    .lnk.wname{text-decoration:none;text-align:start}.lnk.wname:hover b{text-decoration:underline;text-decoration-color:var(--gold)}
+    main .tbl tr:has(select[data-sstat]) [data-stat]{display:none!important}`;
   document.head.appendChild(wcss);
   /* «الإعدادات»: الاستيراد والأسماء المتشابهة (نُقلا من صفحات العاملين والطلاب) */
   const baseSettings = adminViews.settings;
   adminViews.settings = () => `<div class="card"><h2>الاستيراد والمراجعة</h2><div class="row qsettools" style="flex-wrap:wrap;gap:.5rem">
       <button type="button" class="btn" data-act="importMembers" data-k="teachers">استيراد معلمين من Excel / Sheets</button>
       <button type="button" class="btn" data-act="importMembers" data-k="students">استيراد طلاب من Excel / Sheets</button>
-      <button type="button" class="btn" data-act="dupOpen">الأسماء المتشابهة</button></div>
-      <p class="muted" style="margin:.5rem 0 0;font-size:.85rem">استيراد دفعات الاشتراكات في «الطلاب ← الاشتراكات».</p></div>` + baseSettings();
+      <button type="button" class="btn" data-act="dupOpen">الأسماء المتشابهة</button>
+      <button type="button" class="btn ${window.QLHeads?.on() ? 'primary' : ''}" data-qheads>تعديل رؤوس الأعمدة: ${window.QLHeads?.on() ? 'مُشغَّل' : 'مُطفأ'}</button></div>
+      <p class="muted" style="margin:.5rem 0 0;font-size:.85rem">استيراد دفعات الاشتراكات في «الطلاب ← الاشتراكات». وحين يُشغَّل «تعديل رؤوس الأعمدة» يظهر زر القلم فوق كل جدول لتغيير أسماء أعمدته.</p></div>` + baseSettings();
+  document.addEventListener('click', e => { if (e.target.closest('[data-qheads]') && window.QLHeads) { window.QLHeads.set(!window.QLHeads.on()); render(); toast(window.QLHeads.on() ? 'زر تعديل رؤوس الأعمدة ظاهر فوق الجداول' : 'أُخفي زر تعديل رؤوس الأعمدة'); } });
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-wmk]'); if (!b || session?.role !== 'admin') return;
     const list = needLogin(b.dataset.wmk);
@@ -547,18 +550,106 @@
         return filters() + v;
       }
       if (ui.fh) ui.fh = '';
-      let html = stuBase().replace(/غير مصنف \(بلا حلقة\)/g, 'بلا حلقة');
+      ui.fcat = '';   // تصفية «الصغار والكبار» أُزيلت
+      /* البحث بالاسم: يضيّق كل الطلاب (لا الظاهرين فقط)، ثم تعمل تصفية المكان والحلقة على النتيجة */
+      const all = db.students, q = norm(ui.sq || '');
+      let raw;
+      try { if (q) db.students = all.filter(s => norm(s.name).includes(q)); raw = stuBase(); } finally { db.students = all; }
+      let html = stuTable(raw.replace(/غير مصنف \(بلا حلقة\)/g, 'بلا حلقة'));
       /* تنبيه بالطلاب بلا حلقة (وكانوا تبويبًا مستقلًا) */
       const n = noHalN();
       if (n) html = `<div class="note" style="margin:0 0 .8rem">${n} طالب بلا حلقة. <button type="button" class="btn sm" data-fhnone>عرضهم وتعيين حلقاتهم</button></div>` + html;
       return html;
     };
+    /* ===== جدول الطلاب: الاسم · السن · الحضور · الحلقة · الحالة · … =====
+       - بلا «الفئة» ولا قائمة «الصغار والكبار» (الفئة باقية في بيانات الطالب كما هي).
+       - «الحضور»: نظام الطالب (6) أيام أو (3) أيام، وهو الحقل نفسه (info.feeSys) الذي يحدد في «الاشتراكات» مبلغه
+         بحسب مكان حلقته؛ يُحفظ بمعالج «الاشتراكات» نفسه (data-fsys) فيتغير المستحق فورًا.
+       - «الحالة»: منتظم/منقطع (المنقطع بالأحمر) بدل الزر وكبسولة «منقطع»، وتغييرها بالتأكيد نفسه كما كان. */
+    function stuTable(html) {
+      const t = document.createElement('template'); t.innerHTML = html; const C = t.content;
+      C.querySelector('select[data-change="fcat"]')?.remove();
+      /* مربع البحث بالاسم: يمين قائمتي المكان والحلقة (بعد العنوان) */
+      const sq = `<input type="search" data-sq value="${esc(ui.sq || '')}" placeholder="بحث باسم الطالب…" aria-label="بحث باسم الطالب" autocomplete="off">`;
+      const h2 = C.querySelector('.bar > h2'), firstSel = C.querySelector('.bar > select, .bar > .qcombo');
+      if (h2) h2.insertAdjacentHTML('afterend', sq); else if (firstSel) firstSel.insertAdjacentHTML('beforebegin', sq);
+      const tbl = C.querySelector('.tbl table'); if (!tbl) return t.innerHTML;
+      const head = tbl.rows[0], H = [...head.cells].map(c => c.textContent.trim());
+      const iCat = H.indexOf('الفئة'), iAge = H.indexOf('السن'), iHal = H.indexOf('الحلقة'), iAtt = H.indexOf('الحضور');
+      if ([iCat, iAge, iHal, iAtt].some(i => i < 0)) return t.innerHTML;   // بنية غير متوقعة: يبقى كما هو
+      /* أدوات الحسابات في الصف (كانت تبويب «الحسابات»)، وحذف المحدد */
+      const bar = C.querySelector('.bar');
+      if (bar) {
+        const need = CLOUD ? db.students.filter(s => !s.hasLogin).length : 0;
+        bar.insertAdjacentHTML('beforeend', (need ? `<button type="button" class="btn" data-act="cloudPwAll" data-k="students">إنشاء الحسابات الناقصة (${need})</button>` : '')
+          + (CLOUD ? '<button type="button" class="btn" data-act="credsOpen" data-k="students">إرسال بيانات الدخول</button>' : '')
+          + `<button type="button" class="btn danger" data-sdel ${sSel.size ? '' : 'hidden'}>حذف المحدد (${sSel.size})</button>`);
+      }
+      const allIds = new Set(db.students.map(s => s.id)); [...sSel].forEach(id => { if (!allIds.has(id)) sSel.delete(id); });
+      [...tbl.rows].forEach((r, ri) => {
+        const c = [...r.cells], cat = c[iCat], age = c[iAge], hal = c[iHal], att = c[iAtt];
+        if (!cat || !age || !hal || !att) return;
+        if (ri === 0) { att.textContent = 'الحضور'; age.after(att); hal.insertAdjacentHTML('afterend', '<th>الحالة</th>'); hal.insertAdjacentHTML('afterend', '<th>المكان</th>'); cat.remove(); r.insertAdjacentHTML('afterbegin', '<th class="selc"><input type="checkbox" data-sselall aria-label="تحديد كل الظاهرين"></th>'); return; }
+        const id = r.querySelector('[data-act="studentCard"]')?.dataset.id, s = id && byId(db.students, id);
+        if (!s) { r.insertAdjacentHTML('afterbegin', '<td class="selc"></td>'); return; }
+        r.insertAdjacentHTML('afterbegin', `<td class="selc"><input type="checkbox" data-ssel="${esc(s.id)}" ${sSel.has(s.id) ? 'checked' : ''} aria-label="تحديد ${esc(s.name)}"></td>`);
+        const three = s.info?.feeSys === '3', off = stOff(s);
+        att.innerHTML = `<select class="mini" data-fsys="${esc(s.id)}" aria-label="نظام حضور ${esc(s.name)}"><option value="6" ${three ? '' : 'selected'}>(6) أيام</option><option value="3" ${three ? 'selected' : ''}>(3) أيام</option></select>`;
+        age.after(att);
+        /* «الحلقة» باسمها وحده (بلا كبسولتي «حلقة» والمكان)، و«المكان» عمود بعدها */
+        const h = byId(db.halaqat, s.halaqaId);
+        if (h) hal.textContent = halaqaLabel(h).replace(/^\s*حلقة\s+/, '').split(' — ')[0].trim();
+        hal.insertAdjacentHTML('afterend', `<td>${esc((h && placeName(h)) || '—')}</td>`);
+        hal.nextElementSibling.insertAdjacentHTML('afterend', `<td><select class="mini ${off ? 'qoff' : ''}" data-sstat="${esc(s.id)}" aria-label="حالة ${esc(s.name)}"><option value="on" ${off ? '' : 'selected'}>منتظم</option><option value="off" ${off ? 'selected' : ''}>منقطع</option></select></td>`);
+        cat.remove();
+        r.querySelectorAll('[data-stat]').forEach(b => b.remove());
+        r.cells[1]?.querySelectorAll('.tag-no').forEach(x => x.remove());
+      });
+      return t.innerHTML;
+    }
+    /* البحث بالاسم: يُعاد الرسم بعد توقف الكتابة لحظة، ويبقى المؤشر في المربع */
+    let sqT = 0;
+    document.addEventListener('input', e => {
+      const box = e.target.closest?.('main [data-sq]'); if (!box) return;
+      ui.sq = box.value; clearTimeout(sqT);
+      sqT = setTimeout(() => {
+        const caret = box.selectionStart ?? box.value.length;
+        render();
+        /* بعد أن يُدمج الشريط في صف الأدوات (يتم في الإطار التالي) */
+        const refocus = () => { const b = document.querySelector('main [data-sq]'); if (b && document.activeElement !== b) { b.focus({ preventScroll: true }); try { b.setSelectionRange(caret, caret); } catch (err) { /* ignore */ } } };
+        refocus(); requestAnimationFrame(() => requestAnimationFrame(refocus)); setTimeout(refocus, 80);
+      }, 250);
+    });
+    /* ===== التحديد والحذف الجماعي للطلاب (كان في «الحسابات») =====
+       «تحديد الكل» يحدد الظاهرين في الجدول الآن (بعد التصفية والبحث)، والحذف بالنافذة نفسها (بكلمة مرور المدير). */
+    const sSel = new Set();
+    const sSelPaint = () => {
+      const b = document.querySelector('main [data-sdel]'); if (!b) return;
+      b.hidden = !sSel.size; b.title = `حذف المحدد (${sSel.size})`; b.setAttribute('aria-label', b.title);
+      const c = b.querySelector('.cnt'); if (c) c.textContent = sSel.size; else if (!b.classList.contains('icon-only')) b.textContent = b.title;
+      const rows = [...document.querySelectorAll('main [data-ssel]')].filter(x => x.offsetParent), all = document.querySelector('main [data-sselall]');
+      if (all) { all.checked = rows.length > 0 && rows.every(x => x.checked); all.indeterminate = !all.checked && rows.some(x => x.checked); }
+    };
+    document.addEventListener('change', e => {
+      const one = e.target.closest?.('[data-ssel]'), all = e.target.closest?.('[data-sselall]');
+      if (one) { one.checked ? sSel.add(one.dataset.ssel) : sSel.delete(one.dataset.ssel); sSelPaint(); }
+      else if (all) { document.querySelectorAll('main [data-ssel]').forEach(x => { if (!x.offsetParent) return; x.checked = all.checked; all.checked ? sSel.add(x.dataset.ssel) : sSel.delete(x.dataset.ssel); }); sSelPaint(); }
+    });
+    document.addEventListener('click', e => { if (e.target.closest('main [data-sdel]') && sSel.size && typeof delMembersDialog === 'function') delMembersDialog('students', [...sSel]); });
+    /* تغيير الحالة: القائمة تعود لقيمتها، ويُستدعى التأكيد نفسه («تسجيل … منقطعًا؟»)؛ بعد التأكيد تُرسم بالقيمة الجديدة */
+    document.addEventListener('change', e => {
+      const sel = e.target.closest?.('select[data-sstat]'); if (!sel) return;
+      const s = byId(db.students, sel.dataset.sstat); if (!s) return;
+      sel.value = stOff(s) ? 'off' : 'on';
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.stat = s.id; b.hidden = true;
+      document.querySelector('main')?.appendChild(b); b.click(); b.remove();
+    });
     adminViews.students = () => {
       /* الحضور يفتح على الحلقة نفسها المختارة في «الطلاب» (ui.hid مشترك بينهما) */
-      const T = [['list', 'الطلاب'], ['att', 'الحضور'], ['fees', 'الاشتراكات'], ['tcollect', 'تحصيل المعلمين'], ['acc', 'الحسابات']];
+      const T = [['list', 'الطلاب'], ['att', 'الحضور'], ['fees', 'الاشتراكات'], ['tcollect', 'تحصيل المعلمين']];   // «الحسابات» صارت في «الطلاب» (أدوات الصف) وفي ملف الطالب
       const cur = T.some(([k]) => k === ui.svw) ? ui.svw : 'list';
       const bar = `<div class="card subnav"><div class="bar" style="margin:0">${T.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-svw="${k}">${l}${k === 'tcollect' && tcollectN() ? ` <span class="count">${tcollectN()}</span>` : ''}</button>`).join('')}</div></div>`;
-      const fn = cur === 'acc' ? stuAccView : cur === 'att' ? stuAtt : cur === 'fees' ? stuFees : cur === 'tcollect' ? stuTcol : listView;
+      const fn = cur === 'att' ? stuAtt : cur === 'fees' ? stuFees : cur === 'tcollect' ? stuTcol : listView;
       return bar + (fn ? fn() : empty('هذا القسم غير محمّل.'));
     };
     document.addEventListener('click', e => { if (e.target.closest('[data-fhnone]')) { ui.svw = 'list'; ui.fh = '__none'; render(); window.scrollTo(0, 0); } });
@@ -571,7 +662,8 @@
         wPendK = ui.msub === 'unclassified' || String(ui.msub).startsWith('t:') || ui.msub === 'titled' ? 'un' : W_KINDS.includes(ui.msub) ? ui.msub : null;
         sub.teachers = 'teachers'; saveSub(); ui.tab = 'teachers'; saveTab();
       }
-      if (session?.role === 'admin' && ui.tab === 'members' && isStu(ui.msub)) { if (ui.msub === 'nohal') { ui.svw = 'list'; ui.fh = '__none'; } else ui.svw = 'acc'; ui.tab = 'students'; saveTab(); }
+      if (session?.role === 'admin' && ui.tab === 'members' && isStu(ui.msub)) { ui.svw = 'list'; if (ui.msub === 'nohal') ui.fh = '__none'; ui.tab = 'students'; saveTab(); }
+      if (ui.svw === 'acc') ui.svw = 'list';   // تبويب «الحسابات» القديم
       /* «الحضور» و«الاشتراكات» و«تحصيل المعلمين» صارت تبويبات في «الطلاب» */
       if (session?.role === 'admin' && STU_TABS.includes(ui.tab)) { ui.svw = ui.tab; ui.tab = 'students'; saveTab(); }
       /* قسم صار تبويبًا: يُفتح القسم الجامع على هذا التبويب (قبل فحص صفحة البداية، وإلا أعاده إليها) */
