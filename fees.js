@@ -23,7 +23,26 @@
   const ORPHAN = { id: 'd_orphan', name: 'أيتام', type: 'pct', value: 100 };
   const DEF_DISCS = [{ id: 'd_tahfeez', name: 'أبناء موظفي التحفيظ', type: 'pct', value: 0 }, { id: 'd_assoc', name: 'أبناء موظفي الجمعية', type: 'pct', value: 0 }, ORPHAN, { id: 'd_special', name: 'حالات خاصة', type: 'pct', value: 0, each: true }];
   const isNum = v => v !== '' && v != null && !isNaN(+v);
-  const cfg = () => {
+  /* المبالغ (العام بنظاميه، والأماكن، والفئات) من كائن إعدادات أو من مبالغ سنة */
+  const amountsOf = c => {
+    const places = {};
+    Object.entries(c?.places && typeof c.places === 'object' ? c.places : {}).forEach(([k, v]) => {
+      const g = isNum(v?.general) ? +v.general : null, g3 = isNum(v?.general3) ? +v.general3 : null;
+      if (g != null || g3 != null) places[k] = { general: g, general3: g3 };
+    });
+    return { cats: Array.isArray(c?.cats) ? c.cats : [], general: isNum(c?.general) ? +c.general : null, general3: isNum(c?.general3) ? +c.general3 : null, places };
+  };
+  /* لكل سنة مبالغها (years): مبالغ السنة المحفوظة لها، وإلا لأقرب سنة قبلها، وإلا لأقرب سنة بعدها، وإلا العامة.
+     فتغيير الاشتراك في سنة جديدة لا يغيّر مستحقات ما قبلها. الخصومات واحدة لكل السنوات. */
+  const yearsOf = () => { const Y = db.settings.priv_fees?.years; return Y && typeof Y === 'object' ? Y : {}; };
+  const pickYear = (Y, y) => {
+    const ks = Object.keys(Y).filter(k => /^\d{4}$/.test(k)).map(Number).sort((a, b) => a - b);
+    if (!ks.length) return null;
+    const k = [...ks].reverse().find(x => x <= y) ?? ks[0];
+    return Y[k];
+  };
+  const cfg = (y = st.y) => { const A = cfgBase(), Y = pickYear(yearsOf(), +y); return Y ? { ...A, ...amountsOf(Y) } : A; };
+  const cfgBase = () => {
     const c = db.settings.priv_fees || {};
     let discs = Array.isArray(c.discs) ? c.discs : DEF_DISCS;
     /* إعدادات حُفظت قبل إضافة «أيتام»: يُضاف، و«حالات خاصة» تصبح لكل طالب على حدة */
@@ -33,18 +52,13 @@
     }
     /* الاشتراك العام بنظامي الحضور: general = نظام 6 أيام (الافتراضي)، general3 = نظام 3 أيام */
     /* places: مبالغ تختلف حسب المكان { معرف المكان: { general, general3 } }، والفارغ يأخذ العام */
-    const places = {};
-    Object.entries(c.places && typeof c.places === 'object' ? c.places : {}).forEach(([k, v]) => {
-      const g = isNum(v?.general) ? +v.general : null, g3 = isNum(v?.general3) ? +v.general3 : null;
-      if (g != null || g3 != null) places[k] = { general: g, general3: g3 };
-    });
-    return { cats: Array.isArray(c.cats) ? c.cats : [], discs, general: isNum(c.general) ? +c.general : null, general3: isNum(c.general3) ? +c.general3 : null, places };
+    return { ...amountsOf(c), discs };
   };
   const discTxt = (d, v, t) => ((t || d.type) === 'amt' ? money(v) + ' جنيه' : v + '%');
   const discLabel = d => (d.each ? `${d.name} (يُحدَّد لكل طالب)` : `${d.name} (${discTxt(d, d.value)})`);
   /* المستحق = (المبلغ الخاص للطالب، أو مبلغ فئته، أو الفئة الافتراضية لسنّه، أو «الاشتراك العام») − الخصم أو الإعفاء */
-  function dueOf(s) {
-    const I = s?.info || {}, C = cfg();
+  function dueOf(s, y) {
+    const I = s?.info || {}, C = cfg(y ?? st.y);
     let base = null, src = '';
     if (isNum(I.fee) && +I.fee > 0) { base = +I.fee; src = 'مبلغ خاص'; }
     else {
@@ -71,7 +85,7 @@
     }
     return { base, src, off, dl, due: Math.round((base - off) * 100) / 100 };
   }
-  const feeOf = s => dueOf(s)?.due ?? null;
+  const feeOf = (s, y) => dueOf(s, y)?.due ?? null;
   const hasThree = C => C.general3 != null || Object.values(C.places).some(p => p.general3 != null);
   const anyGeneral = C => C.general != null || C.general3 != null || Object.keys(C.places).length > 0;
   window.QLFeeDue = feeOf; // للإيصال: مستحق الطالب للشهر
@@ -244,7 +258,14 @@
 
   /* ===== نافذة الفئات والخصومات ===== */
   function cfgDialog() {
-    const C = JSON.parse(JSON.stringify(cfg()));
+    let curY = st.y;
+    const C = JSON.parse(JSON.stringify(cfg(curY)));
+    const origYears = JSON.parse(JSON.stringify(yearsOf())), baseNow = JSON.parse(JSON.stringify(amountsOf(db.settings.priv_fees || {})));
+    const stash = {};   // مبالغ كل سنة عُدّلت في هذه النافذة
+    const yNow = +today().slice(0, 4);
+    const yearOpts = () => [...new Set([yNow - 1, yNow, yNow + 1, st.y, curY, ...Object.keys(origYears).map(Number)])].filter(Boolean).sort((a, b) => a - b);
+    const takeYear = () => { stash[curY] = { general: C.general, general3: C.general3, places: C.places, cats: C.cats }; };
+    const loadYear = y => { const v = stash[y] ? JSON.parse(JSON.stringify(stash[y])) : JSON.parse(JSON.stringify(cfg(y))); C.general = v.general; C.general3 = v.general3; C.places = v.places || {}; C.cats = v.cats || []; };
     const ov = document.createElement('div'); ov.className = 'overlay';
     const catRow = (c, i) => `<tr><td><input data-c="name" data-i="${i}" value="${esc(c.name)}" placeholder="مثال: الصغار"></td><td><input type="number" min="0" data-c="amount" data-i="${i}" value="${esc(c.amount ?? '')}" style="width:7rem"></td>
       <td><select data-c="def" data-i="${i}"><option value="">—</option><option value="child" ${c.def === 'child' ? 'selected' : ''}>الصغار</option><option value="adult" ${c.def === 'adult' ? 'selected' : ''}>الكبار</option></select></td><td><button type="button" class="btn sm danger" data-cdel="${i}">حذف</button></td></tr>`;
@@ -254,7 +275,9 @@
     const used = (k, id) => db.students.filter(x => (x.info || {})[k] === id).length;
     const draw = () => {
       ov.innerHTML = `<div class="modal wide"><h2>إعدادات الاشتراك</h2>
-        <h3 style="font-size:1rem;margin:.4rem 0">الاشتراك العام (المبلغ الشهري بحسب نظام الحضور)</h3>
+        <div class="bar" style="margin:0 0 .6rem"><label style="margin:0">مبالغ سنة<select data-cfgy style="width:auto">${yearOpts().map(y => `<option value="${y}" ${y === curY ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
+          <span class="muted" style="font-size:.85rem">لكل سنة مبالغها: تغيير مبالغ سنة لا يغيّر مستحقات السنوات الأخرى. السنة التي لم تُحدَّد مبالغها تأخذ مبالغ السنة التي قبلها.</span></div>
+        <h3 style="font-size:1rem;margin:.4rem 0">الاشتراك العام لسنة ${curY} (المبلغ الشهري بحسب نظام الحضور)</h3>
         <div class="two" style="max-width:30rem"><label style="margin:0 0 .3rem">نظام 6 أيام (جنيه)<input type="number" min="0" step="any" data-general value="${C.general ?? ''}" placeholder="مثال: 60"></label>
           <label style="margin:0 0 .3rem">نظام 3 أيام (جنيه)<input type="number" min="0" step="any" data-general3 value="${C.general3 ?? ''}" placeholder="مثال: 40"></label></div>
         <p class="muted" style="font-size:.85rem;margin:0 0 1rem">كل طالب على «نظام 6 أيام» ما لم يُختر له «نظام 3 أيام» من القائمة بجانب اسمه في «الاشتراكات» (أو من «تعيين لنتائج البحث» لحلقة كاملة). ثم يُطرح من المبلغ خصمه أو إعفاؤه. اترك «3 أيام» فارغًا إن كان الاشتراك واحدًا للجميع.</p>
@@ -289,7 +312,10 @@
       ov.querySelectorAll('[data-d]').forEach(x => { C.discs[+x.dataset.i][x.dataset.d] = x.dataset.d === 'value' ? (x.value === '' ? '' : +x.value) : x.value.trim(); });
       ov.querySelectorAll('[data-each]').forEach(x => { const d = C.discs[+x.dataset.each]; d.each = x.checked; if (d.each) d.value = 0; });
     };
-    ov.addEventListener('change', e => { if (e.target.matches('[data-each]')) { read(); draw(); } });
+    ov.addEventListener('change', e => {
+      if (e.target.matches('[data-each]')) { read(); draw(); }
+      if (e.target.matches('[data-cfgy]')) { read(); takeYear(); curY = +e.target.value; loadYear(curY); draw(); }
+    });
     ov.addEventListener('input', e => {
       if (!e.target.matches('[data-cfgpq]')) return;
       const q = norm(e.target.value); ov.querySelectorAll('[data-cfgpn]').forEach(r => { r.style.display = !q || r.dataset.cfgpn.includes(q) ? '' : 'none'; });
@@ -309,14 +335,21 @@
         (isC ? C.cats : C.discs).splice(i, 1); draw(); return;
       }
       if (t.matches('[data-save]')) {
-        read();
-        if ([C.general, C.general3].some(x => x != null && (!isNum(x) || x < 0))) { toast('مبلغ الاشتراك العام غير صحيح'); return; }
-        if (Object.values(C.places).some(p => [p.general, p.general3].some(x => x != null && (!isNum(x) || x < 0)))) { toast('مبلغ أحد الأماكن غير صحيح'); return; }
-        if (C.cats.some(c => !c.name || !isNum(c.amount) || +c.amount < 0)) { toast('أكمل اسم كل فئة ومبلغها'); return; }
+        read(); takeYear();
+        for (const [y, V] of Object.entries(stash)) {
+          if ([V.general, V.general3].some(x => x != null && (!isNum(x) || x < 0))) { toast(`مبلغ الاشتراك العام لسنة ${y} غير صحيح`); return; }
+          if (Object.values(V.places || {}).some(p => [p.general, p.general3].some(x => x != null && (!isNum(x) || x < 0)))) { toast(`مبلغ أحد الأماكن لسنة ${y} غير صحيح`); return; }
+          if ((V.cats || []).some(c => !c.name || !isNum(c.amount) || +c.amount < 0)) { toast(`أكمل اسم كل فئة ومبلغها لسنة ${y}`); return; }
+          if (['child', 'adult'].some(k => (V.cats || []).filter(c => c.def === k).length > 1)) { toast('فئة افتراضية واحدة فقط للصغار وواحدة للكبار'); return; }
+        }
         if (C.discs.some(d => !d.name || (!d.each && (!isNum(d.value) || +d.value < 0)))) { toast('أكمل اسم كل خصم وقيمته'); return; }
         if (C.discs.some(d => d.type !== 'amt' && +d.value > 100)) { toast('نسبة الخصم لا تزيد على 100%'); return; }
-        if (['child', 'adult'].some(k => C.cats.filter(c => c.def === k).length > 1)) { toast('فئة افتراضية واحدة فقط للصغار وواحدة للكبار'); return; }
-        db.settings.priv_fees = { v: 2, general: C.general, general3: C.general3, places: C.places, cats: C.cats.map(c => ({ ...c, amount: +c.amount })), discs: C.discs.map(d => ({ ...d, value: d.each ? 0 : +d.value, each: !!d.each })) };
+        /* مبالغ السنوات: ما عُدّل هنا، وما قبل ذلك كما هو. أول مرة تُثبَّت مبالغ هذه السنة كما كانت حتى لا تتغير مستحقاتها */
+        const years = { ...origYears };
+        if (!Object.keys(origYears).length && !stash[yNow]) years[yNow] = baseNow;
+        Object.entries(stash).forEach(([y, V]) => { years[y] = { general: V.general, general3: V.general3, places: V.places || {}, cats: (V.cats || []).map(c => ({ ...c, amount: +c.amount })) }; });
+        const cur = amountsOf(pickYear(years, yNow) || {});
+        db.settings.priv_fees = { v: 3, general: cur.general, general3: cur.general3, places: cur.places, cats: cur.cats, years, discs: C.discs.map(d => ({ ...d, value: d.each ? 0 : +d.value, each: !!d.each })) };
         ov.remove(); save(); render(); toast('حُفظت إعدادات الاشتراك');
       }
     });
