@@ -7,7 +7,7 @@
    - للمدير فقط؛ قسم المحاسب المبني على هذه الصفحة يبقى كما كان.
    يُحمَّل بعد ملفات الأدوات (links، cleanup، distribute، split) وقبل nav.js و app-actions.js. */
 (() => {
-  setTimeout(() => { try { if (!VFILES.includes('./places.js')) VFILES.push('./places.js'); } catch (e) { /* ignore */ } }, 0);
+  document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./places.js')) VFILES.push('./places.js'); } catch (e) { /* ignore */ } });
   const st = { v: 'place', f: '', open: '', q: '', sel: new Set(), sup: '', src: '' };
   const base = adminViews.halaqat;
   const stuN = h => db.students.filter(s => s.halaqaId === h.id).length;
@@ -79,7 +79,7 @@
     [...st.sel].forEach(id => { if (!byId(db.halaqat, id)) st.sel.delete(id); });
     const n = st.sel.size;
     const sups = (db.supervisors || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-    const timed = db.halaqat.filter(hasTime).sort((a, b) => short(a).localeCompare(short(b), 'ar'));
+    const timed = db.halaqat.filter(h => h.time && hasTime(h)).sort((a, b) => short(a).localeCompare(short(b), 'ar'));
     const bulk = n ? `<div class="card plbulk"><div class="bar" style="margin:0"><b>${n} حلقة محددة</b><button type="button" class="btn sm" data-plclear>إلغاء التحديد</button></div>
         <div class="bar" style="margin:.5rem 0 0;flex-wrap:nowrap"><span class="muted" style="min-width:5.5rem">المشرف</span><div style="flex:1;min-width:0"><select data-plsup aria-label="المشرف"><option value="">— اختر —</option>${sups.map(s => `<option value="${s.id}" ${st.sup === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="__none" ${st.sup === '__none' ? 'selected' : ''}>بلا مشرف</option></select></div><button type="button" class="btn sm primary" data-plsetsup>تعيين</button></div>
         <div class="bar" style="margin:.5rem 0 0;flex-wrap:nowrap"><span class="muted" style="min-width:5.5rem">الوقت مثل</span><div style="flex:1;min-width:0"><select data-plsrc aria-label="نسخ الوقت من حلقة"><option value="">— اختر حلقة —</option>${timed.map(h => `<option value="${h.id}" ${st.src === h.id ? 'selected' : ''}>${esc(short(h) + ' — ' + timeText(h))}</option>`).join('')}</select></div><button type="button" class="btn sm primary" data-plsettime>تعيين</button></div></div>` : '';
