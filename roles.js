@@ -7,7 +7,7 @@
    - يحتاج على الخادم: supabase/roles.sql.
    يُحمَّل قبل app-actions.js؛ وما يستبدله من دوال app-actions يُطبَّق بعد تحميلها. */
 (() => {
-  setTimeout(() => { try { if (!VFILES.includes('./roles.js')) VFILES.push('./roles.js'); } catch (e) { /* ignore */ } }, 0);
+  document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./roles.js')) VFILES.push('./roles.js'); } catch (e) { /* ignore */ } });
   /* النوع الجديد في ثوابت التطبيق */
   if (!ROLES.includes('placeadmin')) ROLES.splice(ROLES.indexOf('admin'), 0, 'placeadmin');
   ROLE_L.placeadmin = 'إداري'; COLL.placeadmin = 'placeadmins'; KIND_ONE.placeadmins = 'إداري'; AUD.placeadmin = 'الإداريون';
@@ -155,7 +155,8 @@
   }
 
   /* ===== ما يُستبدل في app-actions.js (يُطبَّق بعد تحميلها) ===== */
-  setTimeout(() => {
+  /* بعد تحميل كل الملفات (ومنها app-actions.js)، لا بمؤقّت: على الشبكات البطيئة قد يسبق المؤقّتُ تحميلَ الملف التالي */
+  document.addEventListener('DOMContentLoaded', () => {
     /* أنواع التصنيف بالترتيب، و«مدير» آخرها */
     delete CLS_ROLES.admin;
     Object.assign(CLS_ROLES, { accountant: 'محاسب', placeadmin: 'إداري', admin: 'مدير' });
@@ -270,5 +271,5 @@
       return baseForm(title, fields, onSave);
     };
     if (session) render();
-  }, 0);
+  });
 })();
