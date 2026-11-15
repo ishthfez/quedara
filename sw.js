@@ -1,7 +1,7 @@
 /* عامل الخدمة: يحفظ ملفات التطبيق على الجهاز ليعمل بدون إنترنت.
    الاستراتيجية: الشبكة أولًا (حتى تصل التحديثات فور الاتصال)، ثم النسخة المحفوظة عند انقطاعها. */
 const CACHE = 'halaqat-v3';
-const CORE = ['./', './style.css', './app.js', './app-forms.js', './app-actions.js', './payroll.js', './fees.js', './perms.js', './accountant.js', './collect.js', './tables.js', './backup.js', './session.js', './dups.js', './selects.js', './links.js', './distribute.js', './split.js', './cleanup.js', './unassigned.js', './cascade.js', './places.js', './notes.js', './roles.js', './mine.js', './staff.js', './preview.js', './nav.js', './notify.js', './receipt.js', './importx.js', './feesimport.js', './cloud.js', './logo.png', './manifest.webmanifest'];
+const CORE = ['./', './style.css', './app.js', './app-forms.js', './app-actions.js', './payroll.js', './fees.js', './perms.js', './accountant.js', './collect.js', './tables.js', './backup.js', './session.js', './dups.js', './selects.js', './links.js', './distribute.js', './split.js', './cleanup.js', './unassigned.js', './cascade.js', './places.js', './notes.js', './roles.js', './mine.js', './staff.js', './preview.js', './nav.js', './notify.js', './receipt.js', './importx.js', './feesimport.js', './actas.js', './cloud.js', './logo.png', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
