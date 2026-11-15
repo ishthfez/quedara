@@ -4,13 +4,14 @@
 --  1) fee_due: المستحق على الخادم (لقوائم تحصيل المعلم والإداري) يعرف الاشتراك العام بنظاميه.
 --  2) حارس بيانات الطالب: من له صلاحية «قيمة الاشتراك» يغيّر نظام الطالب أيضًا.
 --  3) من له صلاحية «قيمة الاشتراك» (المحاسب) يحفظ «إعدادات الاشتراك» أيضًا، لا المدير وحده.
+--  4) مبالغ تختلف حسب المكان (places في إعدادات الاشتراك): طالب المكان يأخذ مبلغه، والفارغ يأخذ العام.
 --  يُنفَّذ بعد collections.sql و student_edit.sql، مرة واحدة في Supabase ← SQL Editor ← Run. آمن للتكرار.
 -- =====================================================================
 
 create or replace function public.fee_due(s public.members) returns numeric
 language plpgsql stable security definer set search_path = public as $$
 declare cfg jsonb := coalesce((select value from settings where key = 'priv_fees'), '{}'); i jsonb := coalesce(s.info, '{}');
-        base numeric; c jsonb; d jsonb; v numeric; t text; off numeric := 0; g text;
+        base numeric; c jsonb; d jsonb; v numeric; t text; off numeric := 0; g text; p jsonb;
 begin
   if coalesce(i->>'fee', '') ~ '^[0-9]+(\.[0-9]+)?$' and (i->>'fee')::numeric > 0 then base := (i->>'fee')::numeric;
   else
@@ -18,8 +19,12 @@ begin
     if c is null then select x into c from jsonb_array_elements(coalesce(cfg->'cats', '[]')) x where x->>'def' = (case when s.cat = 'adult' then 'adult' else 'child' end) limit 1; end if;
     if c is not null then base := coalesce(nullif(c->>'amount', '')::numeric, 0);
     else
-      /* الاشتراك العام: نظام 3 أيام إن اختير للطالب وحُدّد مبلغه، وإلا نظام 6 أيام */
-      g := case when i->>'feeSys' = '3' then coalesce(cfg->>'general3', cfg->>'general') else cfg->>'general' end;
+      /* الاشتراك العام: مبلغ مكان الطالب إن حُدّد له مبلغ خاص (places)، وإلا المبلغ العام؛
+         ونظام 3 أيام إن اختير للطالب وحُدّد مبلغه، وإلا نظام 6 أيام */
+      p := cfg -> 'places' -> (select h.place_id::text from halaqat h where h.id = s.halaqa_id);
+      g := case when i->>'feeSys' = '3'
+                then coalesce(p->>'general3', cfg->>'general3', p->>'general', cfg->>'general')
+                else coalesce(p->>'general', cfg->>'general') end;
       if coalesce(g, '') !~ '^[0-9]+(\.[0-9]+)?$' then return null; end if;
       base := g::numeric;
     end if;
