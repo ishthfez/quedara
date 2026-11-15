@@ -1,14 +1,13 @@
 'use strict';
 /* ============ إشعارات الطلاب بالاشتراكات ============
    - تأكيد الدفع يصل الطالبَ تلقائيًا من الخادم عند تسجيل اشتراكه (supabase/notify.sql).
-   - «تذكير»: المحاسب (ومن له صلاحية التحصيل) والمدير من «الاشتراكات»، والمعلم والإداري من «التحصيل»،
+   - «تذكير»: المحاسب (ومن له صلاحية التحصيل) والمدير من «الاشتراكات» (الأزرار في fees.js)، والمعلم والإداري من «التحصيل»،
      يرسلون للطالب (أو لكل من لم يسدّد) تذكيرًا بسداد اشتراك شهر يختارونه، مع ملاحظة اختيارية.
    - الرسائل تظهر للطالب في «الإعلانات» بعلامة «خاصة بك»، ولا تُزحم بها قائمة إعلانات المدير.
    يُحمَّل بعد nav.js وقبل app-actions.js. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./notify.js')) VFILES.push('./notify.js'); } catch (e) { /* ignore */ } });
   const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
-  const canFees = () => session?.role === 'admin' || !!window.Perms?.can('fees.collect');
   const ymOf = (h, attr) => { const m = h.match(new RegExp(`<select data-${attr}[^>]*>[\\s\\S]*?<option value="(\\d{4})-(\\d{1,2})" selected`)); return m ? [+m[1], +m[2]] : null; };
   const now = () => { const d = new Date(); return [d.getFullYear(), d.getMonth() + 1]; };
   let pending = { ids: [], ym: null };
@@ -44,24 +43,8 @@
     }
   }
 
-  /* ===== «الاشتراكات» (المدير والمحاسب): زر «تذكير» لكل من لم يسدّد، وزر لكل من في القائمة ===== */
-  function decorateFees(h) {
-    if (!canFees()) return h;
-    const ids = [];
-    h = h.replace(/<tr>((?:(?!<\/tr>)[\s\S])*?data-fee-(?:pay|log|assign)="([^"]+)"(?:(?!<\/tr>)[\s\S])*?)<\/td><\/tr>/g, (all, body, id) => {
-      /* لم يسدّد هذا الشهر: «لم يُسدَّد» أو «جزئي»، أو بلا قيمة محددة ولم يدفع شيئًا؛ لا المنقطع ولا المعفى ولا من دفع */
-      if (/منقطع|معفى/.test(body) || !/لم يُسدَّد|جزئي|بلا اشتراك محدد/.test(body)) return all;
-      ids.push(id);
-      return `<tr>${body}<button type="button" class="btn sm" data-remind="${esc(id)}" title="تذكير بالسداد">تذكير</button></td></tr>`;
-    });
-    pending = { ids, ym: ymOf(h, 'fmonth') };
-    if (!ids.length) return h;
-    const i = h.indexOf('<div class="tbl"><table>');
-    return i < 0 ? h : h.slice(0, i) + `<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">${ids.length} طالب في القائمة لم يسدّد هذا الشهر.</span><button type="button" class="btn sm" data-remind-all>تذكير غير المسددين (${ids.length})</button></div>` + h.slice(i);
-  }
-  if (adminViews.fees) { const b = adminViews.fees; adminViews.fees = () => decorateFees(b()); }
-  if (VIEWS.accountant?.fees) { const b = VIEWS.accountant.fees; VIEWS.accountant.fees = () => decorateFees(b()); }
-
+  /* «الاشتراكات» (المدير والمحاسب): زر «تذكير» بجانب كل من لم يسدّد وزر «تذكير غير المسددين» يرسمهما fees.js
+     (فيبقيان أثناء البحث)، وقائمة غير المسددين في كل نتائج البحث تأتي منه في window.QLFees */
   /* ===== «التحصيل» (المعلم والإداري): تذكير من لم يُحصَّل منه هذا الشهر ===== */
   if (teacherViews.collect) {
     const b = teacherViews.collect;
@@ -75,8 +58,10 @@
     };
   }
   document.addEventListener('click', e => {
-    const one = e.target.closest('[data-remind]'); if (one) { remindDialog([one.dataset.remind], pending.ym); return; }
-    if (e.target.closest('[data-remind-all]')) remindDialog(pending.ids, pending.ym);
+    const one = e.target.closest('[data-remind]'); if (one) { remindDialog([one.dataset.remind], one.closest('main')?.querySelector('[data-fmonth]') && window.QLFees ? [window.QLFees.y, window.QLFees.m] : pending.ym); return; }
+    const all = e.target.closest('[data-remind-all]'); if (!all) return;
+    if (all.dataset.remindAll === 'fees' && window.QLFees) remindDialog(window.QLFees.unpaid, [window.QLFees.y, window.QLFees.m]);
+    else remindDialog(pending.ids, pending.ym);
   });
 
   /* ===== إعلانات المدير: رسائل الطلاب (تأكيد الدفع والتذكير) في بطاقة مختصرة بدل أن تزحم القائمة ===== */

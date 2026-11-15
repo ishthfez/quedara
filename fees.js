@@ -13,15 +13,16 @@
   TAB_ICONS.fees = svg('<rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.6"/><path d="M6 9.5v6M18 9.5v6"/>');
   adminViews.fees = () => view();
   window.FeesView = () => view();
-  /* يُضاف هذا الملف لفحص التحديث التلقائي (القائمة تُعرَّف في app-actions.js الذي يُحمَّل بعده) */
+  /* يُضاف هذا الملف لفحص التحديث التلقائي (القائمة تُعرَّف في app-actions.js الذي يُحمَّل بعده) */
   setTimeout(() => { try { if (!VFILES.includes('./fees.js')) VFILES.push('./fees.js'); } catch (e) { /* ignore */ } }, 0);
 
   const fees = () => (Array.isArray(db.fees) ? db.fees : (db.fees = []));
   const money = n => (Math.round((+n || 0) * 100) / 100).toLocaleString('en-US');
   /* الفئات والخصومات: تُحفظ في الإعدادات بمفتاح خاص لا يقرؤه إلا المدير */
-  /* «أيتام» معفى كامل، و«حالات خاصة» تُحدَّد قيمتها لكل طالب على حدة (each) */
+  /* «أيتام» معفى كامل، و«حالات خاصة» تُحدَّد قيمتها لكل طالب على حدة (each) */
   const ORPHAN = { id: 'd_orphan', name: 'أيتام', type: 'pct', value: 100 };
   const DEF_DISCS = [{ id: 'd_tahfeez', name: 'أبناء موظفي التحفيظ', type: 'pct', value: 0 }, { id: 'd_assoc', name: 'أبناء موظفي الجمعية', type: 'pct', value: 0 }, ORPHAN, { id: 'd_special', name: 'حالات خاصة', type: 'pct', value: 0, each: true }];
+  const isNum = v => v !== '' && v != null && !isNaN(+v);
   const cfg = () => {
     const c = db.settings.priv_fees || {};
     let discs = Array.isArray(c.discs) ? c.discs : DEF_DISCS;
@@ -30,12 +31,11 @@
       discs = discs.map(d => (d.id === 'd_special' ? { ...d, each: true } : d));
       if (!discs.some(d => d.id === ORPHAN.id)) discs = [...discs.filter(d => d.id !== 'd_special'), ORPHAN, ...discs.filter(d => d.id === 'd_special')];
     }
-    return { cats: Array.isArray(c.cats) ? c.cats : [], discs };
+    return { cats: Array.isArray(c.cats) ? c.cats : [], discs, general: isNum(c.general) ? +c.general : null };
   };
-  const isNum = v => v !== '' && v != null && !isNaN(+v);
   const discTxt = (d, v, t) => ((t || d.type) === 'amt' ? money(v) + ' جنيه' : v + '%');
-  const discLabel = d => (d.each ? `${d.name} (يُحدَّد لكل طالب)` : `${d.name} (${discTxt(d, d.value)})`);
-  /* المستحق = (المبلغ الخاص للطالب، أو مبلغ فئته، أو الفئة الافتراضية لسنّه) − الخصم */
+  const discLabel = d => (d.each ? `${d.name} (يُحدَّد لكل طالب)` : `${d.name} (${discTxt(d, d.value)})`);
+  /* المستحق = (المبلغ الخاص للطالب، أو مبلغ فئته، أو الفئة الافتراضية لسنّه، أو «الاشتراك العام») − الخصم أو الإعفاء */
   function dueOf(s) {
     const I = s?.info || {}, C = cfg();
     let base = null, src = '';
@@ -43,6 +43,7 @@
     else {
       const c = C.cats.find(x => x.id === I.feeCat) || C.cats.find(x => x.def === (s.cat === 'adult' ? 'adult' : 'child'));
       if (c) { base = +c.amount || 0; src = c.name; }
+      else if (C.general != null) { base = C.general; src = 'الاشتراك العام'; }
     }
     if (base == null) return null;
     const d = C.discs.find(x => x.id === I.feeDisc);
@@ -50,7 +51,7 @@
     if (d) {
       const own = isNum(I.feeDiscVal), v = own ? +I.feeDiscVal : (d.each ? 0 : +d.value || 0), t = own ? (I.feeDiscType || d.type) : d.type;
       off = Math.min(base, Math.max(0, t === 'amt' ? v : base * v / 100));
-      dl = d.each && !own ? `${d.name} (لم تُحدَّد قيمته)` : `${d.name} (${discTxt(d, v, t)})`;
+      dl = d.each && !own ? `${d.name} (لم تُحدَّد قيمته)` : `${d.name} (${discTxt(d, v, t)})`;
     }
     return { base, src, off, dl, due: Math.round((base - off) * 100) / 100 };
   }
@@ -86,25 +87,35 @@
     const row = (s, i) => {
       const D = dueOf(s), fee = D?.due ?? null, paid = paidFor(s.id, st.y, st.m), h = halOf(s), off = stOff(s);
       const state = off ? `<span class="tag tag-no">منقطع</span>${paid ? ' <small class="muted">دفع ' + money(paid) + '</small>' : ''}` : fee === 0 ? '<span class="tag tag-ok">معفى</span>'
-        : fee ? (paid >= fee ? '<span class="tag tag-ok">مسدَّد ✓</span>' : paid > 0 ? `<span class="tag">جزئي: باقٍ ${money(fee - paid)}</span>` : '<span class="tag tag-no">لم يُسدَّد</span>')
+        : fee ? (paid >= fee ? '<span class="tag tag-ok">مسدَّد ✓</span>' : paid > 0 ? `<span class="tag">جزئي: باقٍ ${money(fee - paid)}</span>` : '<span class="tag tag-no">لم يُسدَّد</span>')
         : (paid > 0 ? '<span class="tag tag-ok">مدفوع</span>' : '<span class="muted">بلا اشتراك محدد</span>');
-      const catCell = D ? `${esc(D.src)}${D.dl ? `<br><small class="tag">${esc(D.dl)}</small>` : ''}` : '<span class="muted">—</span>';
+      const C0 = cfg(), I0 = s.info || {};
+      const catCell = can('fees.amount') && C0.discs.length && (D || C0.general != null)
+        ? `<small class="muted">${esc(D ? D.src : 'الاشتراك العام')}</small><br><select class="mini" data-fdisc="${esc(s.id)}" aria-label="الخصم أو الإعفاء لـ ${esc(s.name)}"><option value="">بلا خصم</option>${C0.discs.map(d => `<option value="${esc(d.id)}" ${I0.feeDisc === d.id ? 'selected' : ''}>${esc(+d.value === 100 && d.type !== 'amt' ? d.name + (/إعفاء|معفى/.test(d.name) ? '' : ' (إعفاء)') : discLabel(d))}</option>`).join('')}</select>${D?.dl && I0.feeDisc && C0.discs.find(d => d.id === I0.feeDisc)?.each ? `<br><small class="tag">${esc(D.dl)}</small>` : ''}`
+        : D ? `${esc(D.src)}${D.dl ? `<br><small class="tag">${esc(D.dl)}</small>` : ''}` : '<span class="muted">—</span>';
       const dueCell = D ? (D.off ? `<span title="${money(D.base)} − ${money(D.off)}">${money(D.due)}</span> <small class="muted"><s>${money(D.base)}</s></small>` : money(D.due)) : '—';
       const any = fees().some(f => f.studentId === s.id);
+      /* «تذكير» بالسداد لمن لم يسدّد (notify.js) */
+      const remind = can('fees.collect') && !off && fee !== 0 && (fee ? paid < fee : !paid) ? `<button type="button" class="btn sm" data-remind="${esc(s.id)}" title="تذكير بالسداد">تذكير</button>` : '';
       return `<tr><td>${i + 1}</td><td>${esc(s.name)}</td>${grouped ? '' : `<td>${h ? esc(halaqaLabel(h)) : '<span class="muted">—</span>'}</td><td>${h ? esc(placeName(h) || '—') : '<span class="muted">—</span>'}</td>`}
         <td>${catCell}</td><td>${dueCell}</td><td>${paid ? money(paid) : '—'}</td><td>${state}</td>
-        <td class="noprint">${can('fees.collect') ? `<button type="button" class="btn sm primary" data-fee-pay="${esc(s.id)}" ${cloudMissing() || fee === 0 ? 'disabled' : ''}>تحصيل</button>` : ''}${any ? `<button type="button" class="btn sm" data-fee-log="${esc(s.id)}">السجل</button>` : ''}${can('fees.amount') ? `<button type="button" class="btn sm" data-fee-assign="${esc(s.id)}">الفئة</button>` : ''}${accActs(s)}</td></tr>`;
+        <td class="noprint">${can('fees.collect') ? `<button type="button" class="btn sm primary" data-fee-pay="${esc(s.id)}" ${cloudMissing() || fee === 0 ? 'disabled' : ''}>تحصيل</button>` : ''}${any ? `<button type="button" class="btn sm" data-fee-log="${esc(s.id)}">السجل</button>` : ''}${can('fees.amount') ? `<button type="button" class="btn sm" data-fee-assign="${esc(s.id)}">الفئة</button>` : ''}${remind}${accActs(s)}</td></tr>`;
     };
     const table = (arr, withMore) => `<div class="tbl"><table><tr><th>#</th><th>الطالب</th>${grouped ? '' : '<th>الحلقة</th><th>المكان</th>'}<th>الفئة / الخصم</th><th>المستحق</th><th>المدفوع</th><th>الحالة</th><th class="noprint"></th></tr>${arr.slice(0, MAX_ROWS).map(row).join('')}</table></div>
         ${withMore && arr.length > MAX_ROWS ? `<p class="muted">يظهر أول ${MAX_ROWS} من ${arr.length} طالبًا؛ اكتب في مربعات البحث للتضييق.</p>` : ''}`;
+    const unpaid = [];
     list.forEach(s => {
       const fee = feeOf(s), paid = paidFor(s.id, st.y, st.m); got += paid;
+      if (!stOff(s) && fee !== 0 && (fee ? paid < fee : !paid)) unpaid.push(s.id);
       if (stOff(s)) offN++;
       else if (fee === 0) freeN++;
       else if (fee) { expected += fee; if (paid >= fee) paidN++; else if (paid > 0) partN++; else noneN++; } else if (paid > 0) paidN++;
     });
+    /* من لم يسدّد (كليًا أو جزئيًا) في كل نتائج البحث، لا في الصفوف الظاهرة فقط: لزر «تذكير غير المسددين» */
+    window.QLFees = { unpaid, y: st.y, m: st.m };
     const stat = (v, l) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
-    return `<div class="grid">${stat(money(got), 'المحصَّل في ' + MONTHS[st.m - 1])}${stat(money(expected), 'المتوقع')}${stat(paidN, 'مسدَّد')}${stat(partN, 'جزئي')}${stat(noneN, 'لم يُسدَّد')}${freeN ? stat(freeN, 'معفى') : ''}${offN ? stat(offN, 'منقطع') : ''}</div>
+    return `<div class="grid">${stat(money(got), 'المحصَّل في ' + MONTHS[st.m - 1])}${stat(money(expected), 'المتوقع')}${stat(paidN, 'مسدَّد')}${stat(partN, 'جزئي')}${stat(noneN, 'لم يُسدَّد')}${freeN ? stat(freeN, 'معفى') : ''}${offN ? stat(offN, 'منقطع') : ''}</div>
+      ${unpaid.length && can('fees.collect') ? `<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">${unpaid.length} طالب لم يسدّد اشتراك ${MONTHS[st.m - 1]} (في نتائج البحث).</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (${unpaid.length})</button></div>` : ''}
       ${grouped ? groupedView(list, table) : list.length ? table(list, true) : empty(st.qs || st.qh || st.qp ? 'لا توجد نتائج مطابقة.' : 'لا يوجد طلاب بعد.')}`;
   }
   /* بالمكان: الأماكن المطابقة وتحت كل منها حلقاتها؛ بالحلقة: الحلقات المطابقة مع كبسولة المكان.
@@ -116,7 +127,7 @@
     const block = (h, withChip) => {
       const arr = byH.get(h.id) || [], isOpen = st.open.has(h.id) || (!!st.qs.trim() && arr.length > 0);
       const done = arr.filter(s => { const f = feeOf(s); return f && paidFor(s.id, st.y, st.m) >= f; }).length;
-      return `<div class="ahal${isOpen ? ' open' : ''}"><div class="ahal-h" role="button" tabindex="0" data-fhal="${esc(h.id)}" aria-expanded="${isOpen}"><span class="ahal-ar">${isOpen ? '▾' : '◂'}</span><b>${esc(halaqaLabel(h))}</b>${withChip ? ' ' + chip(h) : ''}<span class="muted ahal-n">${arr.length} طالب · مسدَّد ${done}</span></div>
+      return `<div class="ahal${isOpen ? ' open' : ''}"><div class="ahal-h" role="button" tabindex="0" data-fhal="${esc(h.id)}" aria-expanded="${isOpen}"><span class="ahal-ar">${isOpen ? '▾' : '◂'}</span><b>${esc(halaqaLabel(h))}</b>${withChip ? ' ' + chip(h) : ''}<span class="muted ahal-n">${arr.length} طالب · مسدَّد ${done}</span></div>
         ${isOpen ? `<div class="ahal-b">${arr.length ? table(arr, false) : empty('لا يوجد طلاب في هذه الحلقة.')}</div>` : ''}</div>`;
     };
     if (st.qp.trim()) {
@@ -133,12 +144,12 @@
     const SUG = { qs: 'fee-students', qh: 'fee-halaqat', qp: 'fee-places' };
     const box = (k, l, ph) => `<label style="margin:0">${l}<input type="search" data-fq="${k}" data-suggest="${SUG[k]}" value="${esc(st[k])}" placeholder="${ph}" autocomplete="off"></label>`;
     return `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">تحصيل اشتراكات الطلاب</h2>
-        ${isAdmin() ? '<button type="button" class="btn" data-fee-cfg>الفئات والخصومات</button>' : ''}${can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : ''}${session?.role === 'accountant' && can('students.add') ? '<button type="button" class="btn" data-act="addStudent">+ استمارة طالب</button>' : ''}
+        ${isAdmin() ? '<button type="button" class="btn" data-fee-cfg>إعدادات الاشتراك</button>' : ''}${can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : ''}${session?.role === 'accountant' && can('students.add') ? '<button type="button" class="btn" data-act="addStudent">+ استمارة طالب</button>' : ''}
         <label style="margin:0">الشهر <select data-fmonth style="width:auto">${monthOpts(st.y, st.m).map(o => `<option value="${o.v}" ${o.sel ? 'selected' : ''}>${o.l}</option>`).join('')}</select></label></div>
       ${cloudMissing() ? '<div class="note" style="color:var(--red)">جدول الاشتراكات غير موجود على الخادم بعد: نفّذ الملف <b>supabase/fees.sql</b> في Supabase ← SQL Editor ثم حدّث الصفحة.</div>' : ''}
       <div class="three">${box('qs', 'اسم الطالب', 'اكتب أو اختر الطالب')}${box('qh', 'الحلقة', 'اسم الحلقة أو المعلم')}${box('qp', 'المكان', 'اكتب أو اختر المكان')}</div>
       <div data-fclearw style="margin:.1rem 0 .4rem">${st.qs || st.qh || st.qp ? '<button type="button" class="btn sm" data-fclear>مسح البحث</button>' : ''}</div>
-      <p class="muted" style="font-size:.85rem;margin:.2rem 0 .8rem">المستحق = مبلغ فئة الطالب (أو الفئة الافتراضية لسنّه، أو مبلغه الخاص من استمارته) مطروحًا منه خصمه إن وُجد.${cfg().cats.length ? '' : ' <b>ابدأ بإضافة الفئات من زر «الفئات والخصومات».</b>'}</p>
+      <p class="muted" style="font-size:.85rem;margin:.2rem 0 .8rem">المستحق = «الاشتراك العام» (أو فئة الطالب أو مبلغه الخاص إن وُجد) مطروحًا منه خصمه أو إعفاؤه، ويُختار من القائمة بجانب كل طالب.${cfg().general != null || cfg().cats.length ? '' : ' <b>ابدأ بتحديد «الاشتراك العام» من زر «إعدادات الاشتراك».</b>'}</p>
       <div data-fres>${results()}</div></div>`;
   }
   /* تحديث النتائج وحدها أثناء الكتابة (يبقى المؤشر في المربع) */
@@ -207,21 +218,25 @@
       <td><select data-c="def" data-i="${i}"><option value="">—</option><option value="child" ${c.def === 'child' ? 'selected' : ''}>الصغار</option><option value="adult" ${c.def === 'adult' ? 'selected' : ''}>الكبار</option></select></td><td><button type="button" class="btn sm danger" data-cdel="${i}">حذف</button></td></tr>`;
     const discRow = (d, i) => `<tr><td><input data-d="name" data-i="${i}" value="${esc(d.name)}"></td><td><select data-d="type" data-i="${i}"><option value="pct" ${d.type !== 'amt' ? 'selected' : ''}>نسبة %</option><option value="amt" ${d.type === 'amt' ? 'selected' : ''}>مبلغ ثابت (جنيه)</option></select></td>
       <td><input type="number" min="0" data-d="value" data-i="${i}" value="${d.each ? '' : esc(d.value ?? '')}" style="width:7rem" ${d.each ? 'disabled placeholder="لكل طالب"' : ''}></td>
-      <td style="text-align:center"><input type="checkbox" data-each="${i}" ${d.each ? 'checked' : ''} aria-label="تُحدَّد القيمة لكل طالب"></td><td><button type="button" class="btn sm danger" data-ddel="${i}">حذف</button></td></tr>`;
+      <td style="text-align:center"><input type="checkbox" data-each="${i}" ${d.each ? 'checked' : ''} aria-label="تُحدَّد القيمة لكل طالب"></td><td><button type="button" class="btn sm danger" data-ddel="${i}">حذف</button></td></tr>`;
     const used = (k, id) => db.students.filter(x => (x.info || {})[k] === id).length;
     const draw = () => {
-      ov.innerHTML = `<div class="modal wide"><h2>الفئات والخصومات</h2>
-        <h3 style="font-size:1rem;margin:.4rem 0">فئات الاشتراك (المبلغ الشهري)</h3>
-        <p class="muted" style="font-size:.85rem;margin:0 0 .4rem">«الافتراضية لـ» تجعل الفئة تُطبَّق تلقائيًا على كل الصغار أو كل الكبار ما لم تُعيَّن لهم فئة أخرى.</p>
-        <div class="tbl"><table><tr><th>اسم الفئة</th><th>المبلغ (جنيه)</th><th>الافتراضية لـ</th><th></th></tr>${C.cats.map(catRow).join('') || '<tr><td colspan="4" class="muted">لا توجد فئات بعد.</td></tr>'}</table></div>
-        <div class="row" style="margin:.4rem 0 1rem"><button type="button" class="btn sm" data-cadd>+ فئة</button></div>
-        <h3 style="font-size:1rem;margin:.4rem 0">الخصومات</h3>
-        <div class="tbl"><table><tr><th>اسم الخصم</th><th>النوع</th><th>القيمة</th><th>لكل طالب</th><th></th></tr>${C.discs.map(discRow).join('') || '<tr><td colspan="5" class="muted">لا توجد خصومات.</td></tr>'}</table></div>
-        <p class="muted" style="font-size:.85rem;margin:.3rem 0 0">«لكل طالب»: لا قيمة عامة للخصم، وتُحدَّد قيمته ونوعه لكل طالب من زر «الفئة» (مثل الحالات الخاصة). خصم 100% يجعل الطالب معفى.</p>
-        <div class="row" style="margin:.4rem 0 1rem"><button type="button" class="btn sm" data-dadd>+ خصم</button></div>
+      ov.innerHTML = `<div class="modal wide"><h2>إعدادات الاشتراك</h2>
+        <h3 style="font-size:1rem;margin:.4rem 0">الاشتراك العام</h3>
+        <label style="margin:0 0 .3rem">المبلغ الشهري لكل طالب (جنيه)<input type="number" min="0" step="any" data-general value="${C.general ?? ''}" placeholder="مثال: 50" style="max-width:12rem"></label>
+        <p class="muted" style="font-size:.85rem;margin:0 0 1rem">يُطبَّق على كل الطلاب، ثم يُطرح منه خصم الطالب أو إعفاؤه، ويُختار لكل طالب من القائمة المنسدلة بجانب اسمه في «الاشتراكات».</p>
+        <h3 style="font-size:1rem;margin:.4rem 0">الخصومات والإعفاءات</h3>
+        <div class="tbl"><table><tr><th>الاسم</th><th>النوع</th><th>القيمة</th><th>لكل طالب</th><th></th></tr>${C.discs.map(discRow).join('') || '<tr><td colspan="5" class="muted">لا توجد خصومات.</td></tr>'}</table></div>
+        <p class="muted" style="font-size:.85rem;margin:.3rem 0 0">الإعفاء = خصم 100%. «لكل طالب»: تُحدَّد قيمة الخصم ونوعه لكل طالب على حدة (مثل الحالات الخاصة).</p>
+        <div class="row" style="margin:.4rem 0 1rem"><button type="button" class="btn sm" data-dadd>+ خصم</button><button type="button" class="btn sm" data-dexempt>+ إعفاء</button></div>
+        <details ${C.cats.length ? 'open' : ''} style="margin:0 0 1rem"><summary style="cursor:pointer;font-weight:700">فئات بمبالغ مختلفة (اختياري)</summary>
+        <p class="muted" style="font-size:.85rem;margin:.4rem 0">لمن يختلف اشتراكه عن العام. «الافتراضية لـ» تطبّق الفئة على كل الصغار أو كل الكبار بدل الاشتراك العام.</p>
+        <div class="tbl"><table><tr><th>اسم الفئة</th><th>المبلغ (جنيه)</th><th>الافتراضية لـ</th><th></th></tr>${C.cats.map(catRow).join('') || '<tr><td colspan="4" class="muted">لا توجد فئات.</td></tr>'}</table></div>
+        <div class="row" style="margin:.4rem 0 0"><button type="button" class="btn sm" data-cadd>+ فئة</button></div></details>
         <div class="row"><button type="button" class="btn primary" data-save>حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
     };
     const read = () => {
+      const g = ov.querySelector('[data-general]'); if (g) C.general = g.value === '' ? null : +g.value;
       ov.querySelectorAll('[data-c]').forEach(x => { C.cats[+x.dataset.i][x.dataset.c] = x.dataset.c === 'amount' ? (x.value === '' ? '' : +x.value) : x.value.trim(); });
       ov.querySelectorAll('[data-d]').forEach(x => { C.discs[+x.dataset.i][x.dataset.d] = x.dataset.d === 'value' ? (x.value === '' ? '' : +x.value) : x.value.trim(); });
       ov.querySelectorAll('[data-each]').forEach(x => { const d = C.discs[+x.dataset.each]; d.each = x.checked; if (d.each) d.value = 0; });
@@ -233,6 +248,7 @@
       if (t.matches('[data-close]')) { ov.remove(); return; }
       if (t.matches('[data-cadd]')) { read(); C.cats.push({ id: uid(), name: '', amount: '', def: '' }); draw(); return; }
       if (t.matches('[data-dadd]')) { read(); C.discs.push({ id: uid(), name: '', type: 'pct', value: '' }); draw(); return; }
+      if (t.matches('[data-dexempt]')) { read(); C.discs.push({ id: uid(), name: 'إعفاء كامل', type: 'pct', value: 100 }); draw(); return; }
       if (t.matches('[data-cdel],[data-ddel]')) {
         read();
         const isC = t.matches('[data-cdel]'), i = +(isC ? t.dataset.cdel : t.dataset.ddel), item = (isC ? C.cats : C.discs)[i];
@@ -242,12 +258,13 @@
       }
       if (t.matches('[data-save]')) {
         read();
+        if (C.general != null && (!isNum(C.general) || C.general < 0)) { toast('مبلغ الاشتراك العام غير صحيح'); return; }
         if (C.cats.some(c => !c.name || !isNum(c.amount) || +c.amount < 0)) { toast('أكمل اسم كل فئة ومبلغها'); return; }
         if (C.discs.some(d => !d.name || (!d.each && (!isNum(d.value) || +d.value < 0)))) { toast('أكمل اسم كل خصم وقيمته'); return; }
         if (C.discs.some(d => d.type !== 'amt' && +d.value > 100)) { toast('نسبة الخصم لا تزيد على 100%'); return; }
         if (['child', 'adult'].some(k => C.cats.filter(c => c.def === k).length > 1)) { toast('فئة افتراضية واحدة فقط للصغار وواحدة للكبار'); return; }
-        db.settings.priv_fees = { v: 2, cats: C.cats.map(c => ({ ...c, amount: +c.amount })), discs: C.discs.map(d => ({ ...d, value: d.each ? 0 : +d.value, each: !!d.each })) };
-        ov.remove(); save(); render(); toast('حُفظت الفئات والخصومات');
+        db.settings.priv_fees = { v: 2, general: C.general, cats: C.cats.map(c => ({ ...c, amount: +c.amount })), discs: C.discs.map(d => ({ ...d, value: d.each ? 0 : +d.value, each: !!d.each })) };
+        ov.remove(); save(); render(); toast('حُفظت إعدادات الاشتراك');
       }
     });
   }
@@ -259,13 +276,13 @@
     const sel = (cur, opts) => opts.map(([v, l]) => `<option value="${esc(v)}" ${!one ? '' : String(cur ?? '') === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('');
     const ov = document.createElement('div'); ov.className = 'overlay';
     ov.innerHTML = `<div class="modal"><h2>${one ? 'فئة واشتراك: ' + esc(list[0].name) : `تعيين لـ${list.length} طالبًا من نتائج البحث`}</h2>
-      <label>الفئة<select name="cat">${keep}${sel(I.feeCat || '', [['', 'حسب الافتراضي لسنّه'], ...C.cats.map(c => [c.id, `${c.name} — ${money(c.amount)} جنيه`])])}</select></label>
+      <label>الفئة<select name="cat">${keep}${sel(I.feeCat || '', [['', C.general != null ? `الاشتراك العام — ${money(C.general)} جنيه` : 'حسب الافتراضي لسنّه'], ...C.cats.map(c => [c.id, `${c.name} — ${money(c.amount)} جنيه`])])}</select></label>
       <label>الخصم<select name="disc">${keep}${sel(I.feeDisc || '', [['', 'بلا خصم'], ...C.discs.map(d => [d.id, discLabel(d)])])}</select></label>
       <div class="two"><label>قيمة خصم خاصة بـ${one ? 'هذا الطالب' : 'هؤلاء الطلاب'}<input type="number" min="0" name="dval" value="${one && isNum(I.feeDiscVal) ? esc(I.feeDiscVal) : ''}" placeholder="${one ? 'فارغ = قيمة الخصم العامة' : 'فارغ = بلا تغيير'}"></label>
       <label>نوعها<select name="dtype"><option value="pct" ${I.feeDiscType !== 'amt' ? 'selected' : ''}>نسبة %</option><option value="amt" ${I.feeDiscType === 'amt' ? 'selected' : ''}>مبلغ (جنيه)</option></select></label></div>
-      <p class="muted" style="font-size:.82rem;margin:-.3rem 0 .6rem">مطلوبة لـ«حالات خاصة» وكل خصم يُحدَّد لكل طالب؛ واختيارية لغيرها.</p>
+      <p class="muted" style="font-size:.82rem;margin:-.3rem 0 .6rem">مطلوبة لـ«حالات خاصة» وكل خصم يُحدَّد لكل طالب؛ واختيارية لغيرها.</p>
       ${one ? `<label>مبلغ خاص يتجاوز الفئة (اختياري)<input type="number" min="0" name="fee" value="${isNum(I.fee) ? esc(I.fee) : ''}" placeholder="فارغ = مبلغ الفئة"></label>` : ''}
-      ${!C.cats.length ? '<p class="note">لم تُضف فئات بعد: أضفها من «الفئات والخصومات».</p>' : ''}
+      ${!C.cats.length && C.general == null ? '<p class="note">حدّد «الاشتراك العام» أولًا من «إعدادات الاشتراك».</p>' : ''}
       <div class="row"><button type="button" class="btn primary" data-save>حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
     document.body.appendChild(ov);
     ov.querySelector('[data-close]').onclick = () => ov.remove();
@@ -286,6 +303,17 @@
   }
 
   document.addEventListener('input', e => { const k = e.target.dataset?.fq; if (k) { st[k] = e.target.value; refresh(); } });
+  /* القائمة المنسدلة بجانب الطالب: خصمه أو إعفاؤه مباشرة؛ والخصم الذي يُحدَّد لكل طالب يفتح نافذة قيمته */
+  document.addEventListener('change', e => {
+    const t = e.target; if (!('fdisc' in (t.dataset || {})) || !can('fees.amount')) return;
+    const s = byId(db.students, t.dataset.fdisc); if (!s) return;
+    const d = cfg().discs.find(x => x.id === t.value);
+    s.info = s.info || {};
+    s.info.feeDisc = t.value;
+    if (!t.value) { s.info.feeDiscVal = ''; s.info.feeDiscType = ''; }
+    if (d?.each && !isNum(s.info.feeDiscVal)) { assignDialog([s]); return; }
+    save(); render(); toast(d ? `«${s.name}»: ${d.name}` : `«${s.name}»: بلا خصم`);
+  });
   document.addEventListener('change', e => {
     if (!('fmonth' in (e.target.dataset || {}))) return;
     const [y, m] = e.target.value.split('-').map(Number); st.y = y; st.m = m; render();
