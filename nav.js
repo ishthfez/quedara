@@ -12,18 +12,18 @@
   /* إعادة التنظيم (المرحلة الأولى، الشكل فقط): العناصر الأساسية طالب وعامل وحلقة ومكان.
      - «الأعضاء» لم يعد قسمًا: صار «حسابات الدخول» في «الإعدادات»، و«مكرر للمراجعة» تبويبًا مستقلًا بجانبه (يظهر حين يوجد فيه أسماء).
      - «العاملون»: القائمة الموحدة + الغياب + المرتبات (الغياب يُخصم من المرتب، فدورة الشهر كلها في مكان واحد).
-     - «الاشتراكات»: التحصيل + تحصيل المعلمين (الاسم نفسه عند المحاسب).
+     - الاشتراكات صارت مع الطلاب كما المرتبات مع العاملين: «الطلاب ← الاشتراكات» و«الطلاب ← تحصيل المعلمين»
+       (والمحاسب كما هو: «الاشتراكات» قسمه الأول).
      - حسابات الدخول بحسب أصحابها (القائمة نفسها بفئات مختلفة):
        العاملون وغير المصنفين من المرتبات ← «العاملون ← الحسابات»؛ الطلاب ← «الطلاب ← الحسابات»؛
        «طلاب بلا حلقة» ← «الطلاب ← بلا حلقة»؛ والمديرون وحدهم ← «الإعدادات ← حسابات المديرين».
-     - «الطلاب» تبويبان فقط: «الطلاب» و«الحسابات». في «الطلاب» التصفية تحدد ما يظهر:
+     - «الطلاب»: الطلاب · الاشتراكات · تحصيل المعلمين · الحسابات. في «الطلاب» التصفية تحدد ما يظهر:
        كل الحلقات ← الجدول العام؛ حلقة معينة ← أدوات الحلقة (المنتظمون/المنقطعون، التسميع، الإشعار)؛
        «بلا حلقة» ← أداة تعيين الحلقات. (كان: كل الطلاب · حسب الحلقة · بلا حلقة — ثلاثة عروض للشيء نفسه)
      الدوال الأصلية لكل قسم كما هي؛ والأزرار القديمة (data-v="members" أو "payroll"…) تفتح القسم الجامع على تبويبها. */
   const dupsN = () => (db.payroll?.settings?.dup_students || []).length;
   const GROUPS = {
     teachers: [['teachers', 'العاملون'], ['absence', 'الغياب'], ['payroll', 'المرتبات'], ['accounts', 'الحسابات']],
-    fees: [['fees', 'التحصيل'], ['tcollect', 'تحصيل المعلمين']],
     settings: [['settings', 'الإعدادات'], ['members', 'حسابات المديرين'], ['dups', 'مكرر للمراجعة', () => dupsN() > 0], ['perms', 'الصلاحيات'], ['backup', 'النسخ الاحتياطية'], ['pending', 'بيانات معلّقة']]
   };
   /* «مكرر للمراجعة» تبويب مستقل: هو فئة «dups» من قائمة الأعضاء نفسها، بلا قائمة الفئات */
@@ -70,7 +70,10 @@
     if (b && session?.role === 'admin' && ui.tab === 'teachers' && !isStaff(ui.msub)) ui.msub = 'staff';
   }, true);
   /* ترتيب الشريط الجانبي وعناوين مجموعاته */
-  const ORDER = [['dash'], ['students', 'التعليم'], ['teachers'], ['halaqat'], ['fees', 'المالية'], ['news', 'التواصل'], ['settings', 'النظام']];
+  const ORDER = [['dash'], ['students', 'التعليم'], ['teachers'], ['halaqat'], ['news', 'التواصل'], ['settings', 'النظام']];
+  /* أقسام صارت تبويبات في «الطلاب» (data-svw): لا تظهر في الشريط الجانبي، وأزرارها القديمة تفتح «الطلاب» عليها */
+  const STU_TABS = ['fees', 'tcollect'];
+  const tcollectN = () => (db.collections || []).filter(c => c.status === 'sent').length;
   const OWNER = {}; Object.entries(GROUPS).forEach(([g, subs]) => subs.forEach(([k]) => { OWNER[k] = g; }));
   const sub = {}; try { Object.assign(sub, JSON.parse(sessionStorage.getItem('halaqat_sub') || '{}')); } catch (e) { /* ignore */ }
   const saveSub = () => { try { sessionStorage.setItem('halaqat_sub', JSON.stringify(sub)); } catch (e) { /* ignore */ } };
@@ -107,19 +110,19 @@
   });
   /* أقسام الشريط الجانبي الجديدة */
   const keep = new Map(TABS.admin.map(t => [t[0], t[1]]));
-  keep.set('teachers', 'العاملون'); keep.set('fees', 'الاشتراكات'); keep.set('settings', 'الإعدادات');
+  keep.set('teachers', 'العاملون'); keep.set('settings', 'الإعدادات');
   /* التبويب الفعلي المعروض الآن (داخل القسم الجامع)، لمن يحتاج معرفته: pager.js وfixpay.js… */
   const curSub = g => { const subs = GROUPS[g]; if (!subs) return g; const vis = subs.filter(([, , show]) => !show || show()); return vis.some(([k]) => k === sub[g]) ? sub[g] : vis[0][0]; };
-  window.QLView = () => (session?.role === 'admin' && GROUPS[ui.tab] ? curSub(ui.tab) : ui.tab);
+  window.QLView = () => (session?.role !== 'admin' ? ui.tab : GROUPS[ui.tab] ? curSub(ui.tab) : ui.tab === 'students' && STU_TABS.includes(ui.svw) ? ui.svw : ui.tab);
   TABS.admin.splice(0, TABS.admin.length, ...ORDER.filter(([k]) => keep.has(k)).map(([k]) => [k, keep.get(k)]),
     /* أي قسم أضافه ملف آخر ولم يُذكر هنا يبقى في آخر القائمة */
-    ...[...keep.keys()].filter(k => !ORDER.some(o => o[0] === k) && !OWNER[k]).map(k => [k, keep.get(k)]));
+    ...[...keep.keys()].filter(k => !ORDER.some(o => o[0] === k) && !OWNER[k] && !STU_TABS.includes(k)).map(k => [k, keep.get(k)]));
 
   /* «تحصيل المعلمين» لا عمود فيه للمكان، فاسم الحلقة فيه بمكانها (كما كان قسمًا مستقلًا) */
   const baseLabel = halaqaLabel;
   /* (وعمومًا: داخل قسم جامع تُسمّى الحلقات كما في تبويبها الأصلي) */
   halaqaLabel = function (h) {
-    const g = ui.tab, v = session?.role === 'admin' && GROUPS[g] ? curSub(g) : g;
+    const g = ui.tab, v = session?.role === 'admin' ? window.QLView() : g;
     if (v === g) return baseLabel(h);
     ui.tab = v; try { return baseLabel(h); } finally { ui.tab = g; }
   };
@@ -168,7 +171,7 @@
     if (session.role !== 'admin') return;
     const badge = (k, n) => { const b = nav.querySelector(`button[data-v="${k}"]`); if (b && n && !b.querySelector('.count')) b.insertAdjacentHTML('beforeend', `<span class="count">${n}</span>`); };
     badge('settings', (db.pending || []).length + dupsN());
-    badge('fees', (db.collections || []).filter(c => c.status === 'sent').length);
+    badge('students', tcollectN());
   }
 
   /* ===== سرعة الانتقال بين الأقسام =====
@@ -409,7 +412,8 @@
     if (baseToggle) A.navToggle = d => { const was = ui.nav; baseToggle(d); if (!was && ui.nav) history.pushState(navState({ layer: true }), ''); else if (was && !ui.nav) popLayer(); };
     if (baseClose) A.navClose = d => { const was = ui.nav; baseClose(d); if (was) popLayer(); };
     if (typeof freezeTables === 'function' && typeof tableGrid === 'function') freezeTables = fastFreeze;
-    /* «الطلاب»: تبويبان «الطلاب» و«الحسابات» (أزرارهما data-svw يعالجها mine.js)، والتصفية تحدد العرض */
+    /* «الطلاب»: الطلاب · الاشتراكات · تحصيل المعلمين · الحسابات (أزرارها data-svw يعالجها mine.js)، والتصفية تحدد عرض «الطلاب» */
+    const stuFees = adminViews.fees, stuTcol = adminViews.tcollect;
     const inPl = h => !ui.fp || (!!h && h.placeId === ui.fp);
     /* شريط التصفية نفسه (المكان ← الحلقة) لعرضي الحلقة و«بلا حلقة»، بالأسماء نفسها التي يعالجها cascade.js وapp-actions.js */
     const filters = () => {
@@ -436,9 +440,11 @@
       return html;
     };
     adminViews.students = () => {
-      const cur = ui.svw === 'acc' ? 'acc' : 'list';
-      const bar = `<div class="card subnav"><div class="bar" style="margin:0">${[['list', 'الطلاب'], ['acc', 'الحسابات']].map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-svw="${k}">${l}</button>`).join('')}</div></div>`;
-      return bar + (cur === 'acc' ? stuAccView() : listView());
+      const T = [['list', 'الطلاب'], ['fees', 'الاشتراكات'], ['tcollect', 'تحصيل المعلمين'], ['acc', 'الحسابات']];
+      const cur = T.some(([k]) => k === ui.svw) ? ui.svw : 'list';
+      const bar = `<div class="card subnav"><div class="bar" style="margin:0">${T.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-svw="${k}">${l}${k === 'tcollect' && tcollectN() ? ` <span class="count">${tcollectN()}</span>` : ''}</button>`).join('')}</div></div>`;
+      const fn = cur === 'acc' ? stuAccView : cur === 'fees' ? stuFees : cur === 'tcollect' ? stuTcol : listView;
+      return bar + (fn ? fn() : empty('هذا القسم غير محمّل.'));
     };
     document.addEventListener('click', e => { if (e.target.closest('[data-fhnone]')) { ui.svw = 'list'; ui.fh = '__none'; render(); window.scrollTo(0, 0); } });
     unifyTabs();
@@ -447,6 +453,8 @@
       /* «الأعضاء» القديم: فئات العاملين تفتح «العاملون ← الحسابات»، والطلاب «الطلاب ← الحسابات» أو «بلا حلقة» */
       if (session?.role === 'admin' && ui.tab === 'members' && isStaff(ui.msub)) ui.tab = 'accounts';
       if (session?.role === 'admin' && ui.tab === 'members' && isStu(ui.msub)) { if (ui.msub === 'nohal') { ui.svw = 'list'; ui.fh = '__none'; } else ui.svw = 'acc'; ui.tab = 'students'; saveTab(); }
+      /* «الاشتراكات» و«تحصيل المعلمين» صارا تبويبين في «الطلاب» */
+      if (session?.role === 'admin' && STU_TABS.includes(ui.tab)) { ui.svw = ui.tab; ui.tab = 'students'; saveTab(); }
       /* قسم صار تبويبًا: يُفتح القسم الجامع على هذا التبويب (قبل فحص صفحة البداية، وإلا أعاده إليها) */
       if (session?.role === 'admin' && OWNER[ui.tab] && OWNER[ui.tab] !== ui.tab) { sub[OWNER[ui.tab]] = ui.tab; saveSub(); ui.tab = OWNER[ui.tab]; saveTab(); }
       /* صفحة البداية لكل فئة كما كانت (لا أول القائمة بعد توحيد الترتيب) */
