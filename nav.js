@@ -15,7 +15,7 @@
      - الاشتراكات صارت مع الطلاب كما المرتبات مع العاملين: «الطلاب ← الاشتراكات» و«الطلاب ← تحصيل المعلمين»
        (والمحاسب كما هو: «الاشتراكات» قسمه الأول).
      - حسابات الدخول بحسب أصحابها (القائمة نفسها بفئات مختلفة):
-       العاملون وغير المصنفين من المرتبات ← «العاملون ← الحسابات»؛ الطلاب ← «الطلاب ← الحسابات»؛
+       العاملون ← عمود «الحساب» في «العاملون» وأدواته في شريطه (وغير المصنفين بتصفية «غير مصنف»)؛ الطلاب ← «الطلاب ← الحسابات»؛
        «طلاب بلا حلقة» ← «الطلاب ← بلا حلقة»؛ والمديرون وحدهم ← «الإعدادات ← حسابات المديرين».
      - «الطلاب»: الطلاب · الحضور · الاشتراكات · تحصيل المعلمين · الحسابات (حضور الطلاب معهم كغياب العاملين معهم؛
        والمعلم والمشرف: «الحضور» قسمهما الأول كما هو). في «الطلاب» التصفية تحدد ما يظهر:
@@ -24,7 +24,7 @@
      الدوال الأصلية لكل قسم كما هي؛ والأزرار القديمة (data-v="members" أو "payroll"…) تفتح القسم الجامع على تبويبها. */
   const dupsN = () => (db.payroll?.settings?.dup_students || []).length;
   const GROUPS = {
-    teachers: [['teachers', 'العاملون'], ['absence', 'الغياب'], ['payroll', 'المرتبات'], ['accounts', 'الحسابات']],
+    teachers: [['teachers', 'العاملون'], ['absence', 'الغياب'], ['payroll', 'المرتبات']],
     settings: [['settings', 'الإعدادات'], ['members', 'حسابات المديرين'], ['dups', 'مكرر للمراجعة', () => dupsN() > 0], ['perms', 'الصلاحيات'], ['backup', 'النسخ الاحتياطية'], ['pending', 'بيانات معلّقة']]
   };
   /* «مكرر للمراجعة» تبويب مستقل: هو فئة «dups» من قائمة الأعضاء نفسها، بلا قائمة الفئات */
@@ -70,6 +70,81 @@
     });
     return t.innerHTML;
   }
+  /* ===== «العاملون»: قائمة واحدة فيها الحساب، وأدوات الحسابات في شريطها (لم يعد تبويب «الحسابات») =====
+     - يُحذف عمود «الوظيفة في المرتبات» (نص من ملف المرتبات لا يُحدَّث؛ القيمة باقية في بيانات المرتب)، ويُضاف عمود «الحساب».
+     - الشريط: إنشاء الحسابات الناقصة، إرسال بيانات الدخول، الاستيراد، الأسماء المتشابهة، والإضافة بحسب التصفية.
+     - تصفية «غير مصنف»: أداة التصنيف (ومعها المصنفون بمسميات أخرى) بدل الجدول، كـ«بلا حلقة» في الطلاب.
+     - الحذف من ملف العامل («حذف»)، والاسم والنطاق فيه من قبل. */
+  const W_KINDS = ['supervisors', 'teachers', 'accountants', 'placeadmins'];
+  const baseWorkers = adminViews.teachers;
+  let wPendK = null;   // تصفية تُطبَّق بعد الرسم (staff.js يحفظ تصفيته داخله)
+  const splitKey = key => { const i = key.indexOf(':'); return [key.slice(0, i), key.slice(i + 1)]; };
+  function wAccCell(key) {
+    const [k, id] = splitKey(key);
+    if (k === 'e') {
+      const e = (db.payroll?.employees || []).find(x => x.id === id);
+      if (!e || !clsOf(e)) return '<span class="muted">يُصنَّف أولًا</span>';
+      return e.status === 'متوقف' ? '<span class="muted">—</span>' : `<span class="tag">بلا حساب</span> <button type="button" class="btn sm primary" data-ttlacc="${esc(id)}">إنشاء حساب</button>`;
+    }
+    const m = byId(db[k] || [], id); if (!m) return '—';
+    if (!CLOUD) return '<span class="tag tag-ok">له حساب</span>';
+    return m.hasLogin ? `<span class="tag tag-ok">متاح</span> <button type="button" class="btn sm" data-act="cloudPw" data-k="${k}" data-id="${esc(id)}">كلمة جديدة</button>`
+      : `<span class="tag">بلا حساب</span> <button type="button" class="btn sm primary" data-act="cloudPw" data-k="${k}" data-id="${esc(id)}">إنشاء حساب</button>`;
+  }
+  const needLogin = k => CLOUD ? (W_KINDS.includes(k) ? [k] : W_KINDS).flatMap(x => (db[x] || []).filter(m => !m.hasLogin)) : [];
+  const ADD = { supervisors: ['addMember', 'مشرف'], placeadmins: ['addMember', 'إداري'], accountants: ['addMember', 'محاسب'] };
+  function workersView() {
+    const t = document.createElement('template'); t.innerHTML = baseWorkers();
+    const C = t.content, sel = C.querySelector('select[data-stfk]');
+    const k = sel?.querySelector('option[selected]')?.value || '';
+    const bar = C.querySelector('.card > .bar');
+    if (bar) {
+      bar.querySelector('[data-act="tab"][data-v="members"]')?.remove();
+      const add = bar.querySelector('[data-act="addTeacher"]');
+      if (add && ADD[k]) { add.dataset.act = ADD[k][0]; add.dataset.k = k; add.textContent = '+ ' + ADD[k][1]; }
+      const need = needLogin(k).length;
+      const tools = (need ? `<button type="button" class="btn" data-wmk="${esc(k)}">إنشاء الحسابات الناقصة (${need})</button>` : '')
+        + (CLOUD && W_KINDS.includes(k) ? `<button type="button" class="btn" data-act="credsOpen" data-k="${k}">إرسال بيانات الدخول</button>` : '')
+        + (!k || k === 'teachers' ? '<button type="button" class="btn" data-act="importMembers" data-k="teachers">استيراد</button>' : '')
+        + '<button type="button" class="btn" data-act="dupOpen">الأسماء المتشابهة</button>';
+      if (add) add.insertAdjacentHTML('beforebegin', tools); else bar.insertAdjacentHTML('beforeend', tools);
+    }
+    if (k === 'un') {
+      /* «غير مصنف»: أداة التصنيف من القائمة نفسها، ومعها المصنفون بمسميات أخرى (من لا حساب له منهم لا يظهر في الجدول) */
+      const keepM = ui.msub; let u = '', ti = '';
+      try { ui.msub = 'unclassified'; u = baseMem(); ui.msub = 'titled'; ti = baseMem(); } finally { ui.msub = keepM; }
+      u = u.replace(MSEL, ''); const i = u.indexOf(NOHAL); if (i > -1) u = u.slice(0, i) + u.slice(u.lastIndexOf('</div>'));
+      ti = ti.includes('موظفو المرتبات المصنفون بمسميات') ? ti.replace(MSEL, '<h2 class="grow" style="margin:0">مصنّفون بمسميات أخرى</h2>') : '';
+      return `<div class="card">${bar ? bar.outerHTML : ''}</div>` + u + ti;
+    }
+    const tbl = C.querySelector('.tbl table');
+    if (tbl) {
+      const head = tbl.rows[0], ths = [...head.cells];
+      const drop = ths.findIndex(c => c.textContent.trim() === 'الوظيفة في المرتبات');
+      if (drop > -1) [...tbl.rows].forEach(r => r.cells[drop]?.remove());
+      const lastTh = head.cells[head.cells.length - 1]; lastTh.insertAdjacentHTML('beforebegin', '<th>الحساب</th>');
+      tbl.querySelectorAll('tr[data-stk]').forEach(r => r.cells[r.cells.length - 1].insertAdjacentHTML('beforebegin', `<td>${wAccCell(r.dataset.stk)}</td>`));
+    }
+    const note = C.querySelector('.card > .note');
+    if (note) note.textContent = 'كل العاملين في مكان واحد: الصفة، والحلقات أو النطاق، والحالة، وحساب الدخول. «الملف» يعرض البيانات والمرتب والغياب، وفيه تعديل الاسم والنطاق والحذف. تعديل الاسم من أي مكان يسري على الحساب والمرتبات معًا.';
+    return t.innerHTML;
+  }
+  adminViews.teachers = workersView;
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-wmk]'); if (!b || session?.role !== 'admin') return;
+    const list = needLogin(b.dataset.wmk);
+    if (!list.length) { toast('كل العاملين لهم حسابات'); return; }
+    ask(`إنشاء حسابات دخول لـ ${list.length} من العاملين؟ ستظهر كلمات المرور مرة واحدة لتسليمها.`, () => { if (typeof cloudMakeLogins === 'function') cloudMakeLogins(list); });
+  });
+  /* «حذف» في ملف العامل (كان حذفًا جماعيًا في «الحسابات») */
+  let wCardKey = '';
+  document.addEventListener('click', e => { const b = e.target.closest('[data-staff]'); if (b) wCardKey = b.dataset.staff; }, true);
+  document.addEventListener('click', e => {
+    if (!e.target.closest('[data-staff]') || session?.role !== 'admin') return;
+    const [k, id] = splitKey(wCardKey); if (!W_KINDS.includes(k) && k !== 'admins') return;
+    const row = [...document.querySelectorAll('.overlay[data-staffcard] .row')].pop();
+    if (row && !row.querySelector('[data-act="delMember"]')) row.insertAdjacentHTML('beforeend', `<button type="button" class="btn danger" data-act="delMember" data-id="${esc(id)}" data-k="${k}">حذف</button>`);
+  });
   /* «الإعدادات ← حسابات المديرين» */
   adminViews.members = () => {
     if (!isSet(ui.msub)) { ui.msub = 'admins'; saveTab(); }
@@ -472,7 +547,11 @@
     const base = render;
     render = function () {
       /* «الأعضاء» القديم: فئات العاملين تفتح «العاملون ← الحسابات»، والطلاب «الطلاب ← الحسابات» أو «بلا حلقة» */
-      if (session?.role === 'admin' && ui.tab === 'members' && isStaff(ui.msub)) ui.tab = 'accounts';
+      if (session?.role === 'admin' && (ui.tab === 'accounts' || ui.tab === 'members' && isStaff(ui.msub))) {
+        /* «الحسابات» القديم: «العاملون» على الفئة نفسها (وغير المصنفين بتصفية «غير مصنف») */
+        wPendK = ui.msub === 'unclassified' || String(ui.msub).startsWith('t:') || ui.msub === 'titled' ? 'un' : W_KINDS.includes(ui.msub) ? ui.msub : null;
+        sub.teachers = 'teachers'; saveSub(); ui.tab = 'teachers'; saveTab();
+      }
       if (session?.role === 'admin' && ui.tab === 'members' && isStu(ui.msub)) { if (ui.msub === 'nohal') { ui.svw = 'list'; ui.fh = '__none'; } else ui.svw = 'acc'; ui.tab = 'students'; saveTab(); }
       /* «الحضور» و«الاشتراكات» و«تحصيل المعلمين» صارت تبويبات في «الطلاب» */
       if (session?.role === 'admin' && STU_TABS.includes(ui.tab)) { ui.svw = ui.tab; ui.tab = 'students'; saveTab(); }
@@ -481,6 +560,10 @@
       /* صفحة البداية لكل فئة كما كانت (لا أول القائمة بعد توحيد الترتيب) */
       if (session && TABS[session.role] && !TABS[session.role].some(t => t[0] === ui.tab) && HOME[session.role]) ui.tab = HOME[session.role];
       const r = base.apply(this, arguments);
+      if (wPendK !== null) {
+        const s = document.querySelector('main select[data-stfk]'), v = wPendK; wPendK = null;
+        if (s && s.value !== v && [...s.options].some(o => o.value === v)) { s.value = v; s.dispatchEvent(new Event('change', { bubbles: true })); }
+      }
       try { decorate(); } catch (err) { /* لا يعطّل العرض */ }
       try { afterRender(); } catch (err) { /* لا يعطّل العرض */ }
       return r;
