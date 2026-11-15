@@ -56,7 +56,7 @@
     const html = `<h3 class="sc-h">الاشتراكات</h3><div class="tbl"><table>${feesRows}</table></div>
       ${fees.length ? `<div class="row noprint" style="margin:.4rem 0 0"><button type="button" class="btn sm" data-fee-log="${esc(st.id)}">سجل الدفعات</button></div>` : ''}
       <h3 class="sc-h">حساب الدخول</h3><div class="tbl"><table>${row('الحالة', acc)}</table></div>
-      <div class="row noprint" style="margin:.4rem 0 0">${CLOUD ? `<button type="button" class="btn sm" data-act="cloudPw" data-id="${esc(st.id)}" data-k="students">${st.hasLogin ? 'كلمة مرور جديدة' : 'إنشاء حساب دخول'}</button>` : ''}<button type="button" class="btn sm danger" data-act="delMember" data-k="students" data-id="${esc(st.id)}">حذف الطالب</button></div>`;
+      <div class="row noprint" style="margin:.4rem 0 0">${CLOUD && (st.hasLogin || !stOff(st)) ? `<button type="button" class="btn sm" data-act="cloudPw" data-id="${esc(st.id)}" data-k="students">${st.hasLogin ? 'كلمة مرور جديدة' : 'إنشاء حساب دخول'}</button>` : ''}<button type="button" class="btn sm danger" data-act="delMember" data-k="students" data-id="${esc(st.id)}">حذف الطالب</button></div>`;
     const actions = box.querySelector(':scope > .row.noprint:last-child');
     if (actions) actions.insertAdjacentHTML('beforebegin', html); else box.insertAdjacentHTML('beforeend', html);
   };
