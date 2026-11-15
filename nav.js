@@ -17,7 +17,8 @@
      - حسابات الدخول بحسب أصحابها (القائمة نفسها بفئات مختلفة):
        العاملون وغير المصنفين من المرتبات ← «العاملون ← الحسابات»؛ الطلاب ← «الطلاب ← الحسابات»؛
        «طلاب بلا حلقة» ← «الطلاب ← بلا حلقة»؛ والمديرون وحدهم ← «الإعدادات ← حسابات المديرين».
-     - «الطلاب»: الطلاب · الاشتراكات · تحصيل المعلمين · الحسابات. في «الطلاب» التصفية تحدد ما يظهر:
+     - «الطلاب»: الطلاب · الحضور · الاشتراكات · تحصيل المعلمين · الحسابات (حضور الطلاب معهم كغياب العاملين معهم؛
+       والمعلم والمشرف: «الحضور» قسمهما الأول كما هو). في «الطلاب» التصفية تحدد ما يظهر:
        كل الحلقات ← الجدول العام؛ حلقة معينة ← أدوات الحلقة (المنتظمون/المنقطعون، التسميع، الإشعار)؛
        «بلا حلقة» ← أداة تعيين الحلقات. (كان: كل الطلاب · حسب الحلقة · بلا حلقة — ثلاثة عروض للشيء نفسه)
      الدوال الأصلية لكل قسم كما هي؛ والأزرار القديمة (data-v="members" أو "payroll"…) تفتح القسم الجامع على تبويبها. */
@@ -72,7 +73,7 @@
   /* ترتيب الشريط الجانبي وعناوين مجموعاته */
   const ORDER = [['dash'], ['students', 'التعليم'], ['teachers'], ['halaqat'], ['news', 'التواصل'], ['settings', 'النظام']];
   /* أقسام صارت تبويبات في «الطلاب» (data-svw): لا تظهر في الشريط الجانبي، وأزرارها القديمة تفتح «الطلاب» عليها */
-  const STU_TABS = ['fees', 'tcollect'];
+  const STU_TABS = ['att', 'fees', 'tcollect'];
   const tcollectN = () => (db.collections || []).filter(c => c.status === 'sent').length;
   const OWNER = {}; Object.entries(GROUPS).forEach(([g, subs]) => subs.forEach(([k]) => { OWNER[k] = g; }));
   const sub = {}; try { Object.assign(sub, JSON.parse(sessionStorage.getItem('halaqat_sub') || '{}')); } catch (e) { /* ignore */ }
@@ -413,7 +414,7 @@
     if (baseClose) A.navClose = d => { const was = ui.nav; baseClose(d); if (was) popLayer(); };
     if (typeof freezeTables === 'function' && typeof tableGrid === 'function') freezeTables = fastFreeze;
     /* «الطلاب»: الطلاب · الاشتراكات · تحصيل المعلمين · الحسابات (أزرارها data-svw يعالجها mine.js)، والتصفية تحدد عرض «الطلاب» */
-    const stuFees = adminViews.fees, stuTcol = adminViews.tcollect;
+    const stuFees = adminViews.fees, stuTcol = adminViews.tcollect, stuAtt = adminViews.att;
     const inPl = h => !ui.fp || (!!h && h.placeId === ui.fp);
     /* شريط التصفية نفسه (المكان ← الحلقة) لعرضي الحلقة و«بلا حلقة»، بالأسماء نفسها التي يعالجها cascade.js وapp-actions.js */
     const filters = () => {
@@ -440,10 +441,11 @@
       return html;
     };
     adminViews.students = () => {
-      const T = [['list', 'الطلاب'], ['fees', 'الاشتراكات'], ['tcollect', 'تحصيل المعلمين'], ['acc', 'الحسابات']];
+      /* الحضور يفتح على الحلقة نفسها المختارة في «الطلاب» (ui.hid مشترك بينهما) */
+      const T = [['list', 'الطلاب'], ['att', 'الحضور'], ['fees', 'الاشتراكات'], ['tcollect', 'تحصيل المعلمين'], ['acc', 'الحسابات']];
       const cur = T.some(([k]) => k === ui.svw) ? ui.svw : 'list';
       const bar = `<div class="card subnav"><div class="bar" style="margin:0">${T.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-svw="${k}">${l}${k === 'tcollect' && tcollectN() ? ` <span class="count">${tcollectN()}</span>` : ''}</button>`).join('')}</div></div>`;
-      const fn = cur === 'acc' ? stuAccView : cur === 'fees' ? stuFees : cur === 'tcollect' ? stuTcol : listView;
+      const fn = cur === 'acc' ? stuAccView : cur === 'att' ? stuAtt : cur === 'fees' ? stuFees : cur === 'tcollect' ? stuTcol : listView;
       return bar + (fn ? fn() : empty('هذا القسم غير محمّل.'));
     };
     document.addEventListener('click', e => { if (e.target.closest('[data-fhnone]')) { ui.svw = 'list'; ui.fh = '__none'; render(); window.scrollTo(0, 0); } });
@@ -453,7 +455,7 @@
       /* «الأعضاء» القديم: فئات العاملين تفتح «العاملون ← الحسابات»، والطلاب «الطلاب ← الحسابات» أو «بلا حلقة» */
       if (session?.role === 'admin' && ui.tab === 'members' && isStaff(ui.msub)) ui.tab = 'accounts';
       if (session?.role === 'admin' && ui.tab === 'members' && isStu(ui.msub)) { if (ui.msub === 'nohal') { ui.svw = 'list'; ui.fh = '__none'; } else ui.svw = 'acc'; ui.tab = 'students'; saveTab(); }
-      /* «الاشتراكات» و«تحصيل المعلمين» صارا تبويبين في «الطلاب» */
+      /* «الحضور» و«الاشتراكات» و«تحصيل المعلمين» صارت تبويبات في «الطلاب» */
       if (session?.role === 'admin' && STU_TABS.includes(ui.tab)) { ui.svw = ui.tab; ui.tab = 'students'; saveTab(); }
       /* قسم صار تبويبًا: يُفتح القسم الجامع على هذا التبويب (قبل فحص صفحة البداية، وإلا أعاده إليها) */
       if (session?.role === 'admin' && OWNER[ui.tab] && OWNER[ui.tab] !== ui.tab) { sub[OWNER[ui.tab]] = ui.tab; saveSub(); ui.tab = OWNER[ui.tab]; saveTab(); }
