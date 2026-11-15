@@ -118,16 +118,24 @@
       if (inP.length && inP.length < c.length) { c = inP; why.push('المكان في الملف'); }
       else if (!c.length) { c = db.halaqat.filter(h => ids.has(h.placeId)); if (c.length) why.push('المكان في الملف'); }
     }
-    return { c, why: why.join('، ') };
+    /* أكثر من حلقة محتملة (مثل معلم له حلقتان): تُرجَّح واحدة بدل ترك الطالب بلا حلقة —
+       الحلقة التي ليس فيها طالب بالاسم نفسه، ثم الأكبر عددًا (حلقته الأساسية غالبًا) */
+    let best = c.length === 1 ? c[0] : null;
+    if (c.length > 1) {
+      const k = norm(x.name), size = h => db.students.filter(s => s.halaqaId === h.id).length;
+      const clash = h => db.students.some(s => s.halaqaId === h.id && norm(s.name) === k);
+      best = c.slice().sort((a, b) => clash(a) - clash(b) || size(b) - size(a))[0];
+    }
+    return { c, why: why.join('، '), best };
   }
   /* ===== «إضافة الكل كما هم في السجل»: ضغطة واحدة بلا أي اختيار =====
      كل واحد بالاسم نفسه، في الحلقة التي يدل عليها سجله إن دلّ على حلقة واحدة، وإلا «بلا حلقة»
      (ونص حلقته في الملف يُحفظ في بياناته). ما جاء من ملف الدفعات لا يُضاف (ليس طلابًا: زر «إصلاح»). */
   function quickAll() {
     const L = list().filter(x => !isPay(x)); if (!L.length) { toast('لا يوجد من يُضاف'); return; }
-    const picks = L.map(x => { const G = guess(x); return { x, h: G.c.length === 1 ? G.c[0] : null }; });
+    const picks = L.map(x => ({ x, h: guess(x).best }));
     const inH = picks.filter(p => p.h).length, noH = picks.length - inH;
-    ask(`إضافة ${L.length} طالبًا بأسمائهم كما في السجل؟ ${inH ? `${inH} في حلقاتهم من السجل` : ''}${inH && noH ? '، و' : ''}${noH ? `${noH} بلا حلقة (لم يدل سجلهم على حلقة واحدة؛ تجدهم في «الطلاب» بتصفية «بلا حلقة»)` : ''}. احفظ نسخة احتياطية قبلها.`, () => {
+    ask(`إضافة ${L.length} طالبًا بأسمائهم كما في السجل؟ ${inH ? `${inH} في حلقاتهم من السجل` : ''}${inH && noH ? '، و' : ''}${noH ? `${noH} بلا حلقة (لا يذكر سجلهم حلقة ولا معلمًا ولا مكانًا؛ تجدهم في «الطلاب» بتصفية «بلا حلقة»)` : ''}. احفظ نسخة احتياطية قبلها.`, () => {
       const ids = new Set();
       picks.forEach(({ x, h }) => { create(x, h || { id: '' }); ids.add(x.id); });
       db.payroll.settings.dup_students = list().filter(x => !ids.has(x.id));
@@ -150,13 +158,13 @@
     };
     let auto = 0, multi = 0, none = 0;
     const rows = L.map((x, i) => {
-      const G = guess(x), h0 = G.c.length === 1 ? G.c[0] : null, cs = new Set(G.c.map(h => h.id));
+      const G = guess(x), h0 = G.best, cs = new Set(G.c.map(h => h.id));
       const o = h => `<option value="${esc(h.id)}" ${h0?.id === h.id ? 'selected' : ''}>${esc(hlbl(h))}</option>`;
-      const opts = (G.c.length > 1 ? `<option value="">— اختر من المرجّح (${G.c.length}) —</option>` : `<option value="">بلا حلقة</option>`)
+      const opts = `<option value="">بلا حلقة</option>`
         + (G.c.length ? `<optgroup label="المرجّح من السجل">${hals.filter(h => cs.has(h.id)).map(o).join('')}</optgroup><optgroup label="كل الحلقات">` : '')
         + hals.filter(h => !cs.has(h.id)).map(o).join('') + (G.c.length ? '</optgroup>' : '');
-      if (h0) auto++; else if (G.c.length > 1) multi++; else none++;
-      const why = h0 ? `✓ اختيرت تلقائيًا: ${G.why}` : G.c.length > 1 ? `${G.c.length} حلقات محتملة (${G.why}): اختر منها` : 'لم يُعرف من السجل: اختر الحلقة';
+      if (h0 && G.c.length === 1) auto++; else if (h0) multi++; else none++;
+      const why = !h0 ? 'لم يُعرف من السجل: اختر الحلقة' : G.c.length === 1 ? `✓ اختيرت تلقائيًا: ${G.why}` : `✓ رُجّحت من ${G.c.length} حلقات (${G.why}): الأكبر وليس فيها الاسم نفسه — غيّرها إن شئت`;
       const w = twinsTxt(x.name, h0?.id || '');
       return `<div class="darow" data-darow="${esc(x.id)}"><b class="dan">${i + 1}</b><div class="dab">
         <input data-daname value="${esc(x.name)}" aria-label="اسم الطالب ${i + 1}">
@@ -165,7 +173,7 @@
     }).join('');
     const ov = document.createElement('div'); ov.className = 'overlay';
     ov.innerHTML = `<div class="modal wide"><h2>إضافة الكل طلابًا مستقلين (${L.length})</h2>
-      <p style="margin:0 0 .6rem">كل واحد يُضاف طالبًا جديدًا مستقلًا. الحلقة تُستنتج من سجله (حلقة الملف، المعلم، إخوته بالجوال نفسه، المكان المذكور): <b>${auto}</b> اختيرت تلقائيًا${multi ? `، و<b>${multi}</b> لهم حلقات محتملة قليلة تختار منها` : ''}${none ? `، و<b>${none}</b> لم تُعرف` : ''}. التنبيه الأصفر للعلم فقط ولا يمنع الإضافة.${payN ? ` <b>${payN}</b> من ملف الدفعات لا يُضافون هنا (زر «إصلاح»).` : ''}</p>
+      <p style="margin:0 0 .6rem">كل واحد يُضاف طالبًا جديدًا مستقلًا. الحلقة تُستنتج من سجله (حلقة الملف، المعلم، إخوته بالجوال نفسه، المكان المذكور): <b>${auto}</b> اختيرت تلقائيًا${multi ? `، و<b>${multi}</b> رُجّحت حلقتهم من بين حلقات معلمهم` : ''}${none ? `، و<b>${none}</b> لم تُعرف` : ''}. التنبيه الأصفر للعلم فقط ولا يمنع الإضافة.${payN ? ` <b>${payN}</b> من ملف الدفعات لا يُضافون هنا (زر «إصلاح»).` : ''}</p>
       <style>.darow{display:flex;gap:.6rem;align-items:flex-start;padding:.6rem 0;border-top:1px solid var(--line,#e5e7eb)}.darow .dan{min-width:1.6rem;padding-top:.5rem;color:var(--muted,#777)}
         .darow .dab{flex:1;min-width:0;display:grid;gap:.35rem}.darow input,.darow select{width:100%;max-width:100%}.darow .daw{color:#8a6d0b;font-weight:700}.darow .daw:empty{display:none}.darow .dag{color:#1f6b3a;font-weight:700}.darow .dam{color:#9a3b30;font-weight:700}</style>
       <div>${rows}</div>
