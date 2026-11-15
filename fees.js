@@ -76,7 +76,14 @@
   const anyGeneral = C => C.general != null || C.general3 != null || Object.keys(C.places).length > 0;
   window.QLFeeDue = feeOf; // للإيصال: مستحق الطالب للشهر
   const halOf = s => byId(db.halaqat, s.halaqaId);
-  const paidFor = (sid, y, m) => fees().filter(f => f.studentId === sid && +f.y === y && +f.m === m).reduce((a, f) => a + (+f.amount || 0), 0);
+  /* فهرس المدفوع (طالب|سنة|شهر) يُبنى مرة كلما تغيّرت قائمة الدفعات: آلاف الدفعات × آلاف الطلاب تبقى سريعة */
+  let pIdx = new Map(), pAny = new Set(), pRef = null, pLen = -1;
+  const pIndex = () => {
+    const F = fees(); if (F === pRef && F.length === pLen) return;
+    pIdx = new Map(); pAny = new Set(); pRef = F; pLen = F.length;
+    F.forEach(f => { const k = f.studentId + '|' + (+f.y) + '|' + (+f.m); pIdx.set(k, (pIdx.get(k) || 0) + (+f.amount || 0)); pAny.add(f.studentId); });
+  };
+  const paidFor = (sid, y, m) => { pIndex(); return pIdx.get(sid + '|' + (+y) + '|' + (+m)) || 0; };
   /* «بداية الاسم»: يطابق أول الاسم أو أول أي كلمة فيه */
   const starts = (text, q) => norm(text).startsWith(q) || String(text || '').split(/\s+/).some(w => norm(w).startsWith(q));
   const monthOpts = (y, m) => {
@@ -116,7 +123,7 @@
         ? `${sysSel || `<small class="muted">${esc(D ? D.src : 'الاشتراك العام')}</small>`}<br><select class="mini" data-fdisc="${esc(s.id)}" aria-label="الخصم أو الإعفاء لـ ${esc(s.name)}"><option value="">بلا خصم</option>${C0.discs.map(d => `<option value="${esc(d.id)}" ${I0.feeDisc === d.id ? 'selected' : ''}>${esc(+d.value === 100 && d.type !== 'amt' ? d.name + (/إعفاء|معفى/.test(d.name) ? '' : ' (إعفاء)') : discLabel(d))}</option>`).join('')}</select>${D?.dl && I0.feeDisc && C0.discs.find(d => d.id === I0.feeDisc)?.each ? `<br><small class="tag">${esc(D.dl)}</small>` : ''}`
         : D ? `${esc(D.src)}${D.dl ? `<br><small class="tag">${esc(D.dl)}</small>` : ''}` : '<span class="muted">—</span>';
       const dueCell = D ? (D.off ? `<span title="${money(D.base)} − ${money(D.off)}">${money(D.due)}</span> <small class="muted"><s>${money(D.base)}</s></small>` : money(D.due)) : '—';
-      const any = fees().some(f => f.studentId === s.id);
+      const any = (pIndex(), pAny.has(s.id));
       /* «تذكير» بالسداد لمن لم يسدّد (notify.js) */
       const remind = can('fees.collect') && !off && fee !== 0 && (fee ? paid < fee : !paid) ? `<button type="button" class="btn sm" data-remind="${esc(s.id)}" title="تذكير بالسداد">تذكير</button>` : '';
       return `<tr><td>${i + 1}</td><td>${esc(s.name)}</td>${grouped ? '' : `<td>${h ? esc(halaqaLabel(h)) : '<span class="muted">—</span>'}</td><td>${h ? esc(placeName(h) || '—') : '<span class="muted">—</span>'}</td>`}
@@ -166,7 +173,7 @@
     const SUG = { qs: 'fee-students', qh: 'fee-halaqat', qp: 'fee-places' };
     const box = (k, l, ph) => `<label style="margin:0">${l}<input type="search" data-fq="${k}" data-suggest="${SUG[k]}" value="${esc(st[k])}" placeholder="${ph}" autocomplete="off"></label>`;
     return `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">تحصيل اشتراكات الطلاب</h2>
-        ${can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>إعدادات الاشتراك</button>' : ''}${can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : ''}${session?.role === 'accountant' && can('students.add') ? '<button type="button" class="btn" data-act="addStudent">+ استمارة طالب</button>' : ''}
+        ${can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>إعدادات الاشتراك</button>' : ''}${can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : ''}${session?.role === 'accountant' && can('students.add') ? '<button type="button" class="btn" data-act="addStudent">+ استمارة طالب</button>' : ''}${isAdmin() && window.QLFeeImport ? '<button type="button" class="btn" data-fee-import>استيراد دفعات</button>' : ''}
         <label style="margin:0">الشهر <select data-fmonth style="width:auto">${monthOpts(st.y, st.m).map(o => `<option value="${o.v}" ${o.sel ? 'selected' : ''}>${o.l}</option>`).join('')}</select></label></div>
       ${cloudMissing() ? '<div class="note" style="color:var(--red)">جدول الاشتراكات غير موجود على الخادم بعد: نفّذ الملف <b>supabase/fees.sql</b> في Supabase ← SQL Editor ثم حدّث الصفحة.</div>' : ''}
       <div class="three">${box('qs', 'اسم الطالب', 'اكتب أو اختر الطالب')}${box('qh', 'الحلقة', 'اسم الحلقة أو المعلم')}${box('qp', 'المكان', 'اكتب أو اختر المكان')}</div>
