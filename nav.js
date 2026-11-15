@@ -115,6 +115,48 @@
       grid.forEach(r => r.forEach(x => { if (x?.first && x.c0 + x.cs <= n) { x.td.classList.add('stk-c'); x.td.style.right = off[x.c0] + 'px'; } }));
     });
   }
+  /* ===== كلمة «حلقة» قبل اسم الحلقة في كبسولة، في كل التطبيق =====
+     تُلفّ الكلمة فقط حين يليها اسم معلم (أو «بلا معلم»)، فلا تتأثر الجمل مثل «15 حلقة» أو «الحلقة».
+     النص نفسه لا يتغير (البحث والتصدير والطباعة كما هي)، والقوائم المنسدلة الأصلية تبقى نصًا. */
+  const pcss = document.createElement('style');
+  pcss.textContent = `.hpill{display:inline-block;font-size:.78em;line-height:1.55;padding:0 .5em;border-radius:999px;background:color-mix(in srgb,var(--navy,#13294b) 11%,transparent);color:var(--navy,#13294b);font-weight:700;vertical-align:.06em;white-space:nowrap}
+    .side .hpill,.pvtop .hpill{background:rgba(255,255,255,.18);color:inherit}`;
+  document.head.appendChild(pcss);
+  let pillRe = null, pillKey = '';
+  const escRe = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  function pillRegex() {
+    const names = [...new Set((db.teachers || []).map(t => (t.name || '').trim()).filter(Boolean))].sort((a, b) => b.length - a.length);
+    const key = names.join('|');
+    if (key !== pillKey) { pillKey = key; pillRe = new RegExp(`(^|[^\\u0600-\\u06FF])(حلقة)(?= (?:${names.map(escRe).join('|')}${names.length ? '|' : ''}بلا معلم))`, 'g'); }
+    return pillRe;
+  }
+  const SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'OPTION', 'SELECT', 'INPUT', 'TITLE']);
+  function pillify(root) {
+    if (!root || !session) return;
+    const re = pillRegex(), nodes = [];
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => (n.data.includes('حلقة') && n.parentNode && !SKIP.has(n.parentNode.nodeName) && !n.parentNode.closest?.('.hpill,svg') ? 1 : 2) });
+    while (w.nextNode()) nodes.push(w.currentNode);
+    nodes.forEach(n => {
+      re.lastIndex = 0; if (!re.test(n.data)) return;
+      re.lastIndex = 0;
+      const frag = document.createDocumentFragment(); let last = 0, m;
+      while ((m = re.exec(n.data))) {
+        const at = m.index + m[1].length;
+        frag.append(n.data.slice(last, at));
+        const sp = document.createElement('span'); sp.className = 'hpill'; sp.textContent = 'حلقة'; frag.append(sp);
+        last = at + 4;
+      }
+      frag.append(n.data.slice(last)); n.replaceWith(frag);
+    });
+  }
+  window.QLPill = pillify;
+  let pillQ = new Set(), pillRaf = 0;
+  new MutationObserver(ms => {
+    ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1 && !n.classList?.contains('hpill')) pillQ.add(n); else if (n.nodeType === 3 && n.parentNode) pillQ.add(n.parentNode); }));
+    if (pillQ.size && !pillRaf) pillRaf = requestAnimationFrame(() => { const q = [...pillQ]; pillQ = new Set(); pillRaf = 0; q.forEach(el => { if (el.isConnected) pillify(el); }); });
+  }).observe(document.body, { childList: true, subtree: true });
+  /* المعاينة: الإطار صفحة مستقلة، فتُلفّ كلماته بعد تحميله */
+  document.addEventListener('load', e => { const f = e.target; if (f?.classList?.contains('pvif')) try { pillify(f.contentDocument.body); } catch (err) { /* ignore */ } }, true);
   setTimeout(() => {
     if (typeof freezeTables === 'function' && typeof tableGrid === 'function') freezeTables = fastFreeze;
     const base = render;
