@@ -266,6 +266,8 @@ async function pull() {
     try { await rpc('sync_check', { since: new Date().toISOString() }); inc = true; scoped = true; }
     catch (e) { scoped = false; try { await rpc('sync_now'); inc = true; } catch (e2) { inc = false; } }
   }
+  /* عند فتح التطبيق: تُستعاد آخر مزامنة محفوظة على هذا الجهاز، فيُجلب ما تغيّر منذها فقط بدل كل البيانات */
+  if (!raw && inc && scoped) await restoreRaw(role, tables);
   /* سؤال واحد صغير للخادم: هل تغيّر شيء يخص هذا المستخدم؟ إن لم يتغير شيء لا تحدث مزامنة أصلًا */
   const chk = scoped ? await rpc('sync_check', { since: since || new Date().toISOString() }) : null;
   let mode = 'full';
@@ -349,8 +351,39 @@ async function pull() {
     db.myPerms = raw.perms;
   }
   if (mode !== 'none' || !snap) { snap = snapshotOf(db); saveLocal(db); }
+  if (inc && scoped) { if (mode !== 'none' || lastChanged) saveRaw(); else saveRawMeta(); }
   lastSync = new Date(); lastError = ''; emit();
   return db;
+}
+/* ---------------- حفظ آخر مزامنة على الجهاز ----------------
+   صفوف الخادم كما وصلت (raw) مع وقت آخر مزامنة تُحفظ في قاعدة بيانات المتصفح؛ وعند فتح التطبيق
+   تُستعاد ويُطلب من الخادم ما تغيّر بعدها فقط. سجل المحذوفات على الخادم يُحفظ يومين، فالنسخة
+   الأقدم من 36 ساعة لا تُستعمل ويُجلب كل شيء كالعادة. لكل حساب نسخته (بمعرّف المستخدم والعضو). */
+const rawKey = () => 'qcloud_raw_' + (auth?.uid || 'x');
+const RAW_MAX_AGE = 36 * 3600 * 1000;
+let rawVer = 0;
+function rawMeta() { return { mid: auth?.member?.id || '', role: raw.role, since, savedAt: Date.now(), ver: rawVer }; }
+function saveRaw() {
+  if (!raw || !since) return;
+  const tables = {};
+  for (const t of Object.keys(SYNC_TABLES)) if (raw[t]) tables[t] = [...raw[t].values()];
+  rawVer++;
+  persist(rawKey(), { v: 1, ...rawMeta(), hal: raw.hal, stu: raw.stu, staffNames: raw.staffNames, extras: raw.extras, perms: raw.perms, tables });
+  persist(rawKey() + '_m', rawMeta());
+}
+/* لم يتغير شيء: يكفي تحديث وقت آخر مزامنة (صغير) دون إعادة كتابة الصفوف */
+function saveRawMeta() { if (raw && since && rawVer) persist(rawKey() + '_m', rawMeta()); }
+async function restoreRaw(role, tables) {
+  try {
+    const [r, m] = await Promise.all([IDB.get(rawKey()), IDB.get(rawKey() + '_m')]);
+    if (!r || r.v !== 1 || r.role !== role || r.mid !== (auth?.member?.id || '') || !r.since) return;
+    if (!tables.every(t => Array.isArray(r.tables?.[t]))) return;
+    const meta = m && m.mid === r.mid && m.ver === r.ver && m.since ? m : r;
+    if (Date.now() - meta.savedAt > RAW_MAX_AGE) return;
+    const R = { role, hal: r.hal, stu: r.stu, staffNames: r.staffNames, extras: r.extras, perms: r.perms };
+    for (const t of tables) R[t] = new Map(r.tables[t].map(x => [pkOf(t, x), x]));
+    raw = R; since = meta.since; rawVer = r.ver; lastFull = Date.now();
+  } catch (e) { /* بلا نسخة محفوظة صالحة: جلب كامل كالعادة */ }
 }
 const feeRows = list => list.map(f => ({ id: f.id, studentId: f.student_id, y: f.y, m: f.m, amount: +f.amount, date: f.date || '', by: f.by_name || '', byMember: f.by_member || '', note: f.note || '' }));
 const absFromRow = a => ({ id: a.id, y: a.y, m: a.m, date: a.date || '', eid: a.emp_id, name: a.name || '', place: a.place || '', perm: a.perm || '', reason: a.reason || '', proof: a.proof || '', note: a.note || '', by: a.by_name || '', byMember: a.by_member || '', ts: a.created_at });
