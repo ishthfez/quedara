@@ -145,7 +145,8 @@
      النص نفسه لا يتغير (البحث والتصدير والطباعة كما هي)، والقوائم المنسدلة الأصلية تبقى نصًا. */
   const pcss = document.createElement('style');
   pcss.textContent = `.hpill{display:inline-block;font-size:.78em;line-height:1.55;padding:0 .5em;border-radius:999px;background:color-mix(in srgb,var(--navy,#13294b) 11%,transparent);color:var(--navy,#13294b);font-weight:700;vertical-align:.06em;white-space:nowrap}
-    .side .hpill,.pvtop .hpill{background:rgba(255,255,255,.18);color:inherit}`;
+    .side .hpill,.pvtop .hpill{background:rgba(255,255,255,.18);color:inherit}
+    .hpill.ppill{background:color-mix(in srgb,var(--gold,#b08a3e) 20%,transparent);color:#6b4f12;margin-inline-start:.15em}`;
   document.head.appendChild(pcss);
   let pillRe = null, pillKey = null; // null: لم يُبنَ بعد (حتى لو لم يوجد معلمون)
   const escRe = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -172,6 +173,25 @@
         last = at + 4;
       }
       frag.append(n.data.slice(last)); n.replaceWith(frag);
+    });
+    placeify(root);
+  }
+  /* للمعلم أكثر من حلقة في أماكن مختلفة: «حلقة فلان — المكان» ← اسم المكان في كبسولة بجانب الاسم */
+  let plRe = null, plKey = null;
+  function placeRegex() {
+    const names = [...new Set((db.places || []).map(p => (p.name || '').trim()).filter(Boolean))].sort((a, b) => b.length - a.length);
+    const key = names.join('|');
+    if (key !== plKey) { plKey = key; plRe = names.length ? new RegExp(`^([^—]*?) — (${names.map(escRe).join('|')})(?=$| ·|[^\\u0600-\\u06FF])`) : null; }
+    return plRe;
+  }
+  function placeify(root) {
+    const re = placeRegex(); if (!re || !root.querySelectorAll) return;
+    root.querySelectorAll('.hpill').forEach(p => {
+      const n = p.nextSibling; if (!n || n.nodeType !== 3 || !n.data.includes(' — ')) return;
+      const m = re.exec(n.data); if (!m) return;
+      const sp = document.createElement('span'); sp.className = 'hpill ppill'; sp.textContent = m[2];
+      const rest = n.data.slice(m[0].length);
+      n.replaceWith(document.createTextNode(m[1] + ' '), sp, ...(rest ? [document.createTextNode(rest)] : []));
     });
   }
   window.QLPill = pillify;
