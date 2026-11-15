@@ -102,4 +102,64 @@
       <button type="button" class="btn sm primary" data-fixpay-go style="margin-inline-start:.4rem">إصلاح</button></div>`);
   }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
   document.addEventListener('click', e => { if (e.target.closest('[data-fixpay-go]') && session?.role === 'admin') dialog(); });
+
+  /* ===== 3) «مكرر للمراجعة»: دمج من في المكان نفسه أو الحلقة نفسها =====
+     الاسم المطابق في الحلقة نفسها أو المسجد نفسه هو الطالب نفسه بالتأكيد: يُحذف من القائمة، ويُكمل الطالب الموجود
+     بما ينقصه من بيانات الملف (الجوال، رقم الطالب القديم). ومن في مكان آخر يبقى للمراجعة.
+     حلقة الملف: بمعرّفها إن وُجد، وإلا باسم الحلقة أو معلمها؛ وإن كان للمعلم حلقات في أكثر من مكان ولم تطابق الحلقة نفسها، يبقى للمراجعة. */
+  const halsOf = x => {
+    const hid = x.vals?.['core:halaqaId']; if (hid && byId(db.halaqat, hid)) return [byId(db.halaqat, hid)];
+    const q = x.halaqa || x.vals?.['core:halaqa']; if (!q) return [];
+    const ks = halaqaQKeys(q), direct = db.halaqat.filter(h => halaqaKeys(h).some(k => ks.includes(k)));
+    if (direct.length) return direct;
+    /* اسم المعلم في الملف أطول أو أقصر من اسمه في النظام (مثل «مازن حسين» و«مازن محمد حسين»):
+       كلمات الأقصر كلها في الأطول بالترتيب، والاسم الأول واحد؛ ويُعتمد إن طابق معلمًا واحدًا فقط */
+    const toks = t => norm(String(t).replace(/^\s*حلقة\s+/, '')).split(' ').filter(Boolean);
+    const sub = (a, b) => { let i = 0; for (const w of b) if (w === a[i]) i++; return i === a.length; };
+    const qt = toks(q); if (qt.length < 2) return [];
+    const ts = db.teachers.filter(t => { const tt = toks(t.name); if (tt.length < 2 || tt[0] !== qt[0]) return false; return qt.length <= tt.length ? sub(qt, tt) : sub(tt, qt); });
+    return ts.length === 1 ? db.halaqat.filter(h => h.teacherId === ts[0].id) : [];
+  };
+  function sameTriage() {
+    const list = db.payroll?.settings?.dup_students || [];
+    const byName = new Map(); db.students.forEach(s => { const k = norm(s.name); byName.set(k, [...(byName.get(k) || []), s]); });
+    const merge = [], other = [], unknown = [];
+    list.forEach(x => {
+      if (Object.keys(x.extra || {}).some(isPayHeader)) return;   // من ملف الدفعات: يُصلَح بالأداة أعلاه
+      const ex = byName.get(norm(x.name)) || []; if (!ex.length) { unknown.push(x); return; }
+      const hs = halsOf(x), hids = new Set(hs.map(h => h.id)), pids = new Set(hs.map(h => h.placeId).filter(Boolean));
+      const sameHal = ex.find(s => hids.has(s.halaqaId));
+      const samePlace = pids.size === 1 ? ex.find(s => pids.has(byId(db.halaqat, s.halaqaId)?.placeId)) : null;
+      const t = sameHal || samePlace;
+      if (t) merge.push({ x, t }); else if (!hs.length || pids.size > 1) unknown.push(x); else other.push(x);
+    });
+    return { merge, other, unknown };
+  }
+  function doMerge() {
+    const { merge } = sameTriage(); const ids = new Set();
+    merge.forEach(({ x, t }) => {
+      const ph = x.vals?.['core:phone']; if (ph && !t.phone) t.phone = ph;
+      const oc = x.vals?.['info:oldCode'] || x.extra?.['الرقم القديم'] || x.extra?.['رقم الطالب القديم'];
+      if (oc && !t.info?.oldCode) t.info = { ...(t.info || {}), oldCode: String(oc) };
+      ids.add(x.id);
+    });
+    db.payroll.settings.dup_students = (db.payroll.settings.dup_students || []).filter(x => !ids.has(x.id));
+    save(); render();
+    return ids.size;
+  }
+  window.QLFixPay.triage = sameTriage;
+  new MutationObserver(() => {
+    if (session?.role !== 'admin' || ui.tab !== 'members' || ui.msub !== 'dups') return;
+    const note = document.querySelector('main .card > .note:not([data-fixpay])'); if (!note || document.querySelector('[data-samego]')) return;
+    const r = sameTriage(); if (!r.merge.length) return;
+    note.insertAdjacentHTML('afterend', `<div class="bar" style="margin:.2rem 0 .7rem"><span class="muted grow" style="font-size:.88rem">${r.merge.length} في الحلقة نفسها أو المسجد نفسه (الطالب نفسه)${r.other.length ? ` · ${r.other.length} في مكان آخر للمراجعة` : ''}${r.unknown.length ? ` · ${r.unknown.length} حلقتهم في الملف غير محددة` : ''}</span>
+      <button type="button" class="btn sm primary" data-samego>دمج من في المكان نفسه (${r.merge.length})</button></div>`);
+  }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('[data-samego]') || session?.role !== 'admin') return;
+    const r = sameTriage();
+    ask(`دمج ${r.merge.length} اسمًا مع الطالب الموجود بالاسم نفسه في الحلقة نفسها أو المسجد نفسه؟ يُحذفون من القائمة ويُكمل الطالب الموجود بجواله ورقمه القديم إن نقصا. ويبقى ${r.other.length + r.unknown.length} للمراجعة.`, () => {
+      const n = doMerge(); toast(`دُمج ${n} — بقي ${(db.payroll.settings.dup_students || []).length} للمراجعة`);
+    });
+  });
 })();
