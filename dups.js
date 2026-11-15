@@ -61,35 +61,51 @@
     const existing = x => (idx.get(norm(x.name)) || []).map(s => `${esc(s.name)}<br><small class="muted">${esc(hName(s.halaqaId) || 'بلا حلقة')}</small>`).join('<hr style="margin:.25rem 0;border:0;border-top:1px solid var(--line)">') || '<span class="muted">لم يعد موجودًا</span>';
     const extra = x => [x.vals?.['core:phone'] ? `الجوال: <span dir="ltr">${esc(x.vals['core:phone'])}</span>` : '', ...Object.entries(x.extra || {}).map(([k, v]) => `${esc(k)}: ${esc(v)}`)].filter(Boolean).join('<br>') || '—';
     const rows = L.map((x, i) => `<tr><td>${i + 1}</td><td><b>${esc(x.name)}</b><br><small class="muted">${esc(x.halaqa || 'بلا حلقة')}</small></td><td style="font-size:.9em">${extra(x)}</td><td>${existing(x)}</td>
-      <td><button type="button" class="btn sm primary" data-dupadd="${x.id}" title="إضافته طالبًا مستقلًا بعد تمييز اسمه">طالب مستقل</button> <button type="button" class="btn sm" data-dupsame="${x.id}" title="هو الطالب الموجود نفسه: يُحذف من القائمة">نفس الطالب</button></td></tr>`).join('');
+      <td><button type="button" class="btn sm primary" data-dupadd="${x.id}" title="إضافته طالبًا مستقلًا في حلقته">طالب مستقل</button> <button type="button" class="btn sm" data-dupsame="${x.id}" title="هو الطالب الموجود نفسه: يُحذف من القائمة">نفس الطالب</button></td></tr>`).join('');
     return `<div class="card"><div class="bar">${pick}</div>
-      <div class="note">طلاب لم يُستوردوا لأن أسماءهم تطابق طلابًا موجودين <b>في حلقة أخرى</b>. لكل واحد: <b>«طالب مستقل»</b> إن كان شخصًا آخر (ميّز اسمه، مثلًا باسم الجد) فيُضاف إلى حلقته، أو <b>«نفس الطالب»</b> فيُحذف من هذه القائمة.</div>
+      <div class="note">طلاب لم يُستوردوا لأن أسماءهم تطابق طلابًا موجودين <b>في حلقة أخرى</b>. لكل واحد: <b>«طالب مستقل»</b> إن كان شخصًا آخر فيُضاف إلى حلقته (إن كان في مكان آخر يُضاف باسمه كما هو، فالمكان يميّز بينهما؛ وفي المكان نفسه تميّز اسمه، مثلًا باسم الجد)، أو <b>«نفس الطالب»</b> فيُحذف من هذه القائمة.</div>
       ${L.length ? `<div class="tbl"><table><tr><th>#</th><th>الاسم وحلقته في الملف</th><th>بيانات إضافية</th><th>الطالب الموجود بالاسم نفسه</th><th></th></tr>${rows}</table></div>` : empty('لا يوجد طلاب مكررون للمراجعة ✓')}</div>`;
   }
 
   /* إضافة المكرر طالبًا مستقلًا: بالاسم المميَّز، في حلقته، ومعه جواله وبياناته الإضافية (في «بيانات معلّقة» كبقية الاستيراد) */
+  /* إنشاء الطالب من بيانات القائمة: في حلقته، ومعه جواله وبياناته الإضافية */
+  function create(x, name, h) {
+    if (!h && x.halaqa) {
+      const t = db.teachers.find(tt => halaqaQKeys(x.halaqa).includes(norm(tt.name)));
+      h = { id: uid(), name: t ? '' : (/^\s*حلقة/.test(x.halaqa) ? x.halaqa : 'حلقة ' + x.halaqa), teacherId: t ? t.id : '', supervisorId: '', placeId: '' };
+      db.halaqat.push(h);
+    }
+    const m = { id: uid(), name, halaqaId: h ? h.id : '', phone: '', pin: genPass() };
+    Object.entries(x.vals || {}).forEach(([k, val]) => { if (k !== 'core:halaqa' && k !== 'core:halaqaId') setField(m, k, val); });
+    db.students.push(m); ui.shown[m.id] = true;
+    Object.entries(x.extra || {}).forEach(([header, val]) => {
+      const p = db.pending.find(pp => pp.kind === 'students' && pp.header === header);
+      if (p) p.values.push({ mid: m.id, v: val }); else db.pending.push({ id: uid(), kind: 'students', header, values: [{ mid: m.id, v: val }], date: today() });
+    });
+    db.payroll.settings.dup_students = list().filter(y => y.id !== x.id);
+    return h;
+  }
+  const placeOfS = s => byId(db.halaqat, s.halaqaId)?.placeId || '';
   function addAsNew(x) {
+    /* المكان يميّز: إن كانت حلقة الطالب في الملف معروفة، وكل من يحمل اسمه في أماكن أخرى، يُضاف باسمه كما هو بلا تعديل */
+    const hs = window.QLFixPay?.halsOf ? window.QLFixPay.halsOf(x) : [findHalaqa(x.halaqa)].filter(Boolean);
+    const h0 = hs.length === 1 ? hs[0] : null;
+    const twins = db.students.filter(s => norm(s.name) === norm(x.name));
+    if (h0?.placeId && twins.every(s => placeOfS(s) && placeOfS(s) !== h0.placeId)) {
+      ask(`إضافة «${x.name}» طالبًا مستقلًا في ${halaqaLabel(h0)} — ${placeName(h0)}؟ يوجد بالاسم نفسه في ${[...new Set(twins.map(s => placeName(byId(db.halaqat, s.halaqaId))))].join('، ')}، والمكان يميّز بينهما فلا يلزم تعديل الاسم.`, () => {
+        create(x, x.name, h0); save(); render(); toast(`أُضيف «${x.name}» إلى ${halaqaLabel(h0)} — ${placeName(h0)}`);
+      });
+      return;
+    }
     openForm('إضافة طالب مستقل', [
-      { type: 'note', label: `الاسم «${x.name}» مطابق لطالب موجود. عدّله ليتميز عنه (مثلًا بإضافة اسم الجد)، ثم احفظ.` },
+      { type: 'note', label: `الاسم «${x.name}» مطابق لطالب موجود في المكان نفسه (أو لم تُعرف حلقته). عدّله ليتميز عنه (مثلًا بإضافة اسم الجد)، ثم احفظ.` },
       { name: 'name', label: 'اسم الطالب', value: x.name, required: true }
     ], v => {
       const name = String(v.name || '').trim().replace(/\s+/g, ' ');
       if (!name) return 'اكتب الاسم';
-      if (db.students.some(s => norm(s.name) === norm(name))) return 'الاسم ما زال مطابقًا لطالب موجود — أضف ما يميزه';
-      let h = findHalaqa(x.halaqa);
-      if (!h && x.halaqa) {
-        const t = db.teachers.find(tt => halaqaQKeys(x.halaqa).includes(norm(tt.name)));
-        h = { id: uid(), name: t ? '' : (/^\s*حلقة/.test(x.halaqa) ? x.halaqa : 'حلقة ' + x.halaqa), teacherId: t ? t.id : '', supervisorId: '', placeId: '' };
-        db.halaqat.push(h);
-      }
-      const m = { id: uid(), name, halaqaId: h ? h.id : '', phone: '', pin: genPass() };
-      Object.entries(x.vals || {}).forEach(([k, val]) => { if (k !== 'core:halaqa') setField(m, k, val); });
-      db.students.push(m); ui.shown[m.id] = true;
-      Object.entries(x.extra || {}).forEach(([header, val]) => {
-        const p = db.pending.find(pp => pp.kind === 'students' && pp.header === header);
-        if (p) p.values.push({ mid: m.id, v: val }); else db.pending.push({ id: uid(), kind: 'students', header, values: [{ mid: m.id, v: val }], date: today() });
-      });
-      db.payroll.settings.dup_students = list().filter(y => y.id !== x.id);
+      const hx = h0 || findHalaqa(x.halaqa);
+      if (db.students.some(s => norm(s.name) === norm(name) && (!hx?.placeId || !placeOfS(s) || placeOfS(s) === hx.placeId))) return 'الاسم ما زال مطابقًا لطالب في المكان نفسه — أضف ما يميزه';
+      const h = create(x, name, hx);
       setTimeout(() => toast(`أُضيف «${name}»${h ? ' إلى ' + hName(h.id) : ''}`), 50);
     });
   }
