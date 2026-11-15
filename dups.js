@@ -65,7 +65,7 @@
       ${L.length ? `<div class="tbl"><table><tr><th>#</th><th>الاسم وحلقته في الملف</th><th>بيانات إضافية</th><th>الطالب الموجود بالاسم نفسه</th><th></th></tr>${rows}</table></div>` : empty('لا يوجد طلاب مكررون للمراجعة ✓')}</div>`;
   }
 
-  /* إضافة المكرر طالبًا مستقلًا: بالاسم المميَّز، في حلقته، ومعه جواله وبياناته الإضافية (في «بيانات معلّقة» كبقية الاستيراد) */
+  /* إضافة المكرر طالبًا مستقلًا: بالاسم المميَّز، في حلقته، ومعه جواله وبياناته الإضافية (في «بيانات معلّقة» كبقية الاستيراد) */
   function addAsNew(x) {
     openForm('إضافة طالب مستقل', [
       { type: 'note', label: `الاسم «${x.name}» مطابق لطالب موجود. عدّله ليتميز عنه (مثلًا بإضافة اسم الجد)، ثم احفظ.` },
@@ -102,4 +102,33 @@
       });
     }
   });
+
+  /* ===== «تجاهل» في نافذة الأسماء المتشابهة: لا تُقترح المجموعة مرة أخرى أبدًا =====
+     يُحفظ كل زوج تجاهلتَه (عضو|عضو) في إعداد خاص بالمدير (priv_dups) يُزامَن مع الخادم،
+     فلا يعود الاقتراح بعد التحديث أو على جهاز آخر، ولا إن تغيّر عدد أفراد المجموعة. */
+  const pairsOf = ids => { const a = [...new Set(ids)].sort(), out = []; for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) out.push(a[i] + '|' + a[j]); return out; };
+  const ignoredPairs = () => {
+    const S = new Set(Array.isArray(db.settings.priv_dups) ? db.settings.priv_dups : []);
+    /* ما تجاهلتَه قبل هذا التحديث (محفوظ على هذا الجهاز فقط) */
+    (db.settings.dupIgnore || []).forEach(k => pairsOf(String(k).replace(/^[^:]*:/, '').split(',')).forEach(p => S.add(p)));
+    return S;
+  };
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof dupGroups !== 'function') return;
+    const base = dupGroups;
+    dupGroups = function () {
+      const S = ignoredPairs();
+      return base.apply(this, arguments).filter(g => !pairsOf(g.items.map(m => m.id)).every(p => S.has(p)));
+    };
+  });
+  /* قبل «تنفيذ»: كل مجموعة عليها «تجاهل» تُحفظ أزواجها (ثم يحفظ التنفيذ نفسه ويزامن) */
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#dupdlg [data-dupok]')) return;
+    const S = ignoredPairs(); let n = 0;
+    document.querySelectorAll('#dupdlg .dupg').forEach(box => {
+      if (!box.querySelector('[data-ignore]')?.checked) return;
+      pairsOf([...box.querySelectorAll('input[type=radio]')].map(r => r.value)).forEach(p => { if (!S.has(p)) { S.add(p); n++; } });
+    });
+    if (n) db.settings.priv_dups = [...S];
+  }, true);
 })();
