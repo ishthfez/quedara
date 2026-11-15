@@ -4,7 +4,7 @@
      - ينتقل شريط البطاقة إلى صف أدوات الجدول نفسه (التكبير وExcel وPDF والطباعة)، فيصيران صفًا واحدًا.
        (شريط البطاقة هو الذي ينتقل لا العكس: أزرار الجدول تجد جدولها بأنه العنصر الذي يلي صفها مباشرة)
      - الأزرار المعروفة تصير أيقونات، واسمها يظهر عند الوقوف عليها (وعند الضغط المطوّل على الجوال)، والعدد في رقم صغير.
-     - Excel وPDF أيقونتان ملوّنتان (جدول أخضر، ومستند أحمر مكتوب عليه PDF) بدل الكلمة.
+     - Excel وPDF في زر واحد «حفظ»: الضغط عليه يُظهر الخيارين (جدول أخضر Excel، ومستند أحمر PDF).
      - ملاحظة الإرشاد تحت الشريط تُخفى، ما عدا التنبيهات المهمة (شريط «إصلاح» وما فيه أزرار).
      - زر «إضافة» آخر الصف (على اليسار)، والأزرار متجاورة بعد التصفية والبحث.
      - صف الطالب المنقطع والعامل المتوقف كله بالأحمر في كل الجداول (يُعرف من علامة «منقطع/متوقف» في صفه أو خانة حالته).
@@ -16,6 +16,7 @@
      - «استمارة طالب» صارت التبويب الأخير في نافذة «إضافة طالب» (بعد «طالب واحد» و«عدة طلاب»)، فلا زر مستقل لها.
      - اسم الطالب في أي جدول يفتح ملفه (بدل زر «الملف»).
      - أزرار صف الطالب (السجل، تعديل، نقل) أيقونات صغيرة، واسمها يظهر عند الوقوف عليها.
+     - أسفل جدول الطلاب سطر واحد لعرض المزيد بالعدد الحقيقي (كان سطرين: حد الطلاب في staff.js وحد الخمسين في pager.js).
    عرض فقط: لا يغيّر أي وظيفة ولا بيانات. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./toolbar.js')) VFILES.push('./toolbar.js'); } catch (e) { /* ignore */ } });
@@ -45,10 +46,20 @@
   };
   /* مفتاح الأيقونة: data-act، أو إحدى السمات المعروفة */
   const keyOf = b => b.dataset.act || ['wmk', 'feeCfg', 'feeBulk', 'feeImport', 'remindAll', 'sdel'].find(k => k in b.dataset) || '';
-  /* أيقونتا التصدير: جدول أخضر، ومستند أحمر عليه PDF (أشكال عامة لا شعارات الشركات) */
+  /* أيقونتا التصدير: جدول أخضر، ومستند أحمر عليه PDF (أشكال عامة لا شعارات الشركات)، وأيقونة «حفظ» (سهم إلى الأسفل) */
   const XLS = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3.5" fill="#1d6f42"/><path d="M3 9h18M3 15h18M9.5 9v12M15 9v12" stroke="#fff" stroke-width="1.4" opacity=".9"/><rect x="3" y="3" width="18" height="6" rx="3.5" fill="#185c37"/></svg>';
   const PDF = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 2.5h8.5L19 7v13a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20V4a1.5 1.5 0 0 1 1-1.5z" fill="#b3372f"/><path d="M14.5 2.5V7H19" fill="#e07d74"/><text x="12" y="17.2" text-anchor="middle" font-family="Arial,sans-serif" font-size="6.2" font-weight="700" fill="#fff">PDF</text></svg>';
 
+  const SAVE = S('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/>');
+  /* قائمة «حفظ»: تُفتح وتُغلق بالضغط، وتُغلق بالضغط خارجها أو Esc؛ والخيار يضغط الزر الأصلي المخفي (Excel أو PDF) */
+  const closeSave = () => document.querySelectorAll('.qsmenu:not([hidden])').forEach(m => { m.hidden = true; m.previousElementSibling?.setAttribute('aria-expanded', 'false'); });
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-qsave]'), it = e.target.closest('[data-qsv]');
+    if (it) { const tp = it.closest('.tblprint'); closeSave(); tp?.querySelector(`.btn.texp[data-${it.dataset.qsv}]`)?.click(); return; }
+    if (b) { const m = b.nextElementSibling, open = m.hidden; closeSave(); m.hidden = !open; b.setAttribute('aria-expanded', open); if (open) m.querySelector('button')?.focus({ preventScroll: true }); return; }
+    if (!e.target.closest('.qsmenu')) closeSave();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSave(); });
   const css = document.createElement('style');
   css.textContent = `.tblprint.qtb{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem;margin-bottom:.6rem}
     .tblprint.qtb > .bar{display:contents}
@@ -89,6 +100,19 @@
     .tblprint.qtb input[type=search]{flex:1 1 13rem;max-width:22rem;min-width:9rem}
     .btn.icon-only.primary svg{stroke:currentColor}
     .qnote-hidden{display:none!important}
+    main p.qstall-src{display:none!important}
+    .pgmore.qpgjoin [data-pgall]{display:none!important}
+    /* التكبير على الجوال: style.css يثبّت خط الخلايا على الشاشات الصغيرة (th,td{font-size:.9rem}) فيتجاهل التكبير؛ هنا يتبعه */
+    @media (max-width:600px){main .tbl th,main .tbl td,.overlay .tbl th,.overlay .tbl td{font-size:calc(.9rem * var(--tz,1))}}
+    main .tbl select.mini{font-size:.9em}
+    .tblprint .btn.texp{display:none!important}
+    .qsave{position:relative;display:inline-flex}
+    .qsave > .btn{width:auto!important;min-width:38px;height:36px;padding:0 .55rem;gap:.25rem;font-weight:700}
+    .qsmenu{position:absolute;top:calc(100% + .3rem);inset-inline-end:0;z-index:60;min-width:11rem;background:var(--card,#fff);border:1px solid var(--line,#e5e7eb);border-radius:12px;box-shadow:0 10px 26px rgba(15,25,50,.2);padding:.3rem;display:flex;flex-direction:column;gap:.15rem}
+    .qsmenu[hidden]{display:none}
+    .qsmenu button{display:flex;align-items:center;gap:.55rem;width:100%;padding:.5rem .6rem;border:0;border-radius:8px;background:none;font:inherit;font-weight:700;color:var(--text);cursor:pointer;text-align:start}
+    .qsmenu button:hover,.qsmenu button:focus-visible{background:var(--navy-l,#eaeef5)}
+    .qsmenu svg{width:22px;height:22px;flex:none}
     .tblprint.qtb .btn{white-space:nowrap}
     .tblprint.qtb .btn:not(.icon-only):not(.texp):not(.qri){width:auto!important;min-width:max-content;padding-inline:.7rem}
     main .card > .bar:has(> .qcombo > [data-fplace]) > .attdate{order:3;flex:0 0 auto;display:flex;align-items:center;gap:.4rem;white-space:nowrap}
@@ -100,7 +124,14 @@
     .lnk.sname{text-decoration:none;text-align:start;font:inherit;color:inherit}.lnk.sname:hover{text-decoration:underline;text-decoration-color:var(--gold,#b08a3e)}
     main [data-act="addStudent"]:has(~ [data-qadd]),main [data-qadd] ~ [data-act="addStudent"]{display:none!important}
     main .tbl tr.qoffr > td,main .tbl tr.qoffr > td :is(b,small,.lnk,.muted,span:not(.tag):not(.av):not(.cnt),select){color:var(--red,#b3372f)!important}
-    @media (max-width:600px){.tblprint.qtb .qsp{flex-basis:100%;height:0}}`;
+    @media (max-width:600px){.tblprint.qtb .qsp{flex-basis:100%;height:0}
+      /* الجوال: العنوان والبحث بعرض السطر، والقوائم تملأ سطرها (اثنتان جنبًا إلى جنب)، فلا تنحاز يسارًا مع الأزرار */
+      .tblprint.qtb > .bar > h2{flex:1 1 100%}
+      .tblprint.qtb > .bar > :is(select,.qcombo),.qbar > :is(select,.qcombo){flex:1 1 40%!important;max-width:none!important;min-width:0!important;width:auto!important}
+      .tblprint.qtb > .bar > :is(input[type=search],.msearch),.tblprint.qtb .msearch,.qbar > input[type=search]{flex:1 1 100%!important;max-width:none!important;min-width:0!important}
+      main .card > .bar:has(> .qcombo > [data-fplace]) > :is(select,.qcombo){flex:1 1 40%!important;max-width:none!important;min-width:0!important}
+      main .card:not(.subnav) > .bar > :is(select,.qcombo){flex:1 1 40%;max-width:none;min-width:0;margin-inline-start:0}
+      main .card:not(.subnav) > .bar:has(> :is(select,.qcombo)) > h2{flex:1 1 100%}}`;
   document.head.appendChild(css);
 
   const label = b => b.textContent.trim().replace(/\s+/g, ' ').replace(/^\+\s*/, 'إضافة ');
@@ -231,6 +262,30 @@
       const ic = ROW_ICONS[b.dataset.act || ('move' in b.dataset ? 'move' : '')]; if (!ic) return;
       b.classList.add('qri'); b.title = ic[1]; b.setAttribute('aria-label', ic[1]); b.innerHTML = ic[0];
     });
+    /* زر «حفظ» واحد بدل Excel وPDF: يبقى الزران الأصليان في مكانهما مخفيين (يجدان جدولهما منه) ويُضغطان من القائمة */
+    document.querySelectorAll('main .tblprint').forEach(tp => {
+      if (tp.querySelector('.qsave') || !tp.querySelector('.btn.texp[data-xls]')) return;
+      tp.querySelector('.btn.texp[data-xls]').insertAdjacentHTML('beforebegin', `<span class="qsave noprint"><button type="button" class="btn" data-qsave title="حفظ الجدول" aria-label="حفظ الجدول" aria-haspopup="menu" aria-expanded="false">${SAVE}<span>حفظ</span></button>
+        <span class="qsmenu" role="menu" hidden><button type="button" role="menuitem" data-qsv="xls">${XLS}ملف Excel</button><button type="button" role="menuitem" data-qsv="pdf">${PDF}ملف PDF</button></span></span>`);
+    });
+    /* ===== سطر واحد لعرض المزيد أسفل جدول الطلاب =====
+       staff.js يقطع القائمة (200، و60 على الجوال) ويكتب سطرًا بزر «عرض الكل»، وpager.js يعرض منها 50 بسطر آخر.
+       يُخفى سطر staff.js، ويصير سطر pager.js بالعدد الحقيقي، و«عرض الكل» فيه (أو «عرض المزيد» حين تنتهي القطعة) يضغط زر staff.js المخفي. */
+    const stall = document.querySelector('main p > [data-stall]');
+    if (stall) {
+      const src = stall.parentElement; src.classList.add('qstall-src');
+      const N = +((src.textContent.match(/من (\d+)/) || [])[1] || 0);
+      const line = [src.previousElementSibling, src.previousElementSibling?.previousElementSibling].find(x => x?.classList?.contains('pgmore'));
+      if (line && N) {
+        line.classList.add('qpgjoin');
+        const sm = line.querySelector('small');
+        if (sm) { const shown = +((sm.textContent.match(/(\d+)/) || [])[1] || 0), all = /الكل/.test(sm.textContent); const t = `يظهر ${shown} من ${N}`; if (sm.textContent !== t && (all || shown)) sm.textContent = t; }
+        if (!line.querySelector('[data-qstall]')) {
+          const more = !line.querySelector('[data-pgmore]');
+          line.insertAdjacentHTML('beforeend', `<button type="button" class="btn sm ${more ? 'primary' : ''}" data-qstall>${more ? 'عرض المزيد' : 'عرض الكل'} </button>`);
+        }
+      }
+    }
     /* زر الحجم الواحد في كل صف أدوات (مدموجًا أو لا) بدل أ−/أ+ */
     document.querySelectorAll('main .tblprint').forEach(tp => { const tz = tp.querySelector('.tzoom'); if (tz && !tp.querySelector('.qzoom')) tz.insertAdjacentHTML('afterend', zoomBtn()); });
     /* أيقونتا Excel وPDF في كل مكان (حتى في البطاقات التي لم تُدمج) */
@@ -238,6 +293,14 @@
     /* أزرار الإضافة آخر الصف (ومنها «إضافة طالب» السريعة التي تُضاف بعد الرسم) */
     document.querySelectorAll('main .tblprint.qtb :is([data-act="addTeacher"],[data-act="addMember"],[data-act="addStudent"],[data-qadd]):not(.qadd)').forEach(b => b.classList.add('qadd'));
   }
+  /* بعد أن يجلب staff.js بقية الطلاب، يُكمل pager.js في الضغطة نفسها: 50 أخرى («عرض المزيد») أو الكل («عرض الكل») */
+  document.addEventListener('click', e => {
+    const q = e.target.closest('[data-qstall]'); if (!q) return;
+    const all = q.textContent.includes('الكل');
+    document.querySelector('main [data-stall]')?.click();
+    const finish = () => { const l = [...document.querySelectorAll('main .pgmore')].find(x => x.offsetParent); l?.querySelector(all ? '[data-pgall]' : '[data-pgmore]')?.click(); };
+    requestAnimationFrame(() => requestAnimationFrame(finish));
+  });
   let raf = 0;
   new MutationObserver(ms => { if (!raf && ms.some(m => m.addedNodes.length)) raf = requestAnimationFrame(merge); }).observe(document.body, { childList: true, subtree: true });
   /* ===== «استمارة طالب» تبويبًا أخيرًا في نافذة «إضافة طالب» =====
