@@ -8,7 +8,7 @@
    - أي زر قديم يفتح قسمًا صار تبويبًا (مثل «+ تسجيل غياب» أو «النسخ الاحتياطية…») يفتح القسم الجامع على تبويبه.
    يُحمَّل بعد كل الملفات التي تضيف أقسامًا، وقبل app-actions.js. */
 (() => {
-  setTimeout(() => { try { if (!VFILES.includes('./nav.js')) VFILES.push('./nav.js'); } catch (e) { /* ignore */ } }, 0);
+  document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./nav.js')) VFILES.push('./nav.js'); } catch (e) { /* ignore */ } });
   const label = k => (TABS.admin.find(t => t[0] === k) || [k, k])[1];
   const GROUPS = {
     fees: [['fees', 'التحصيل'], ['tcollect', 'تحصيل المعلمين']],
@@ -22,9 +22,8 @@
   const saveSub = () => { try { sessionStorage.setItem('halaqat_sub', JSON.stringify(sub)); } catch (e) { /* ignore */ } };
 
   /* «الاشتراكات» بلا بحث تعرض حتى 300 طالب دفعة واحدة؛ على الهاتف تكفي 60 حتى يُطلب المزيد (البحث يضيّقها) */
-  const feesBase = adminViews.fees;
   let feesAll = false, feesN = -1;
-  if (feesBase) adminViews.fees = () => {
+  const capFees = feesBase => () => {
     const h = feesBase(), cap = matchMedia('(max-width:860px)').matches ? 60 : 300;
     const i = h.indexOf('<div class="tbl"><table>'), end = i < 0 ? -1 : h.indexOf('</table>', i);
     if (end < 0 || h.indexOf('<div class="tbl"><table>', end) > -1) return h; // العرض المجمّع بالحلقات يبقى كما هو
@@ -35,6 +34,9 @@
       + `<p class="muted" style="margin:.6rem 0 0">يظهر أول ${cap} طالبًا. اكتب في مربعات البحث للتضييق، أو <button type="button" class="btn sm" data-feesall>عرض المزيد</button></p>`
       + h.slice(h.indexOf('</div>', end) + 6);
   };
+  if (adminViews.fees) adminViews.fees = capFees(adminViews.fees);
+  /* والمحاسب كذلك: «الاشتراكات» صفحته الأولى */
+  if (VIEWS.accountant?.fees) VIEWS.accountant.fees = capFees(VIEWS.accountant.fees);
   document.addEventListener('click', e => { if (e.target.closest('[data-feesall]')) { feesAll = true; render(); } });
   /* القسم الجامع يعرض شريط تبويباته ثم محتوى التبويب المختار (بالدالة الأصلية لكل قسم) */
   const ORIG = {};
@@ -160,7 +162,9 @@
      ولجداول «المعاينة». الحجم واحد لكل الجداول ويُحفظ على الجهاز. */
   const zcss = document.createElement('style');
   zcss.textContent = `.overlay .tbl table{font-size:calc(.95rem * var(--tz,1))}.ztools{display:flex;justify-content:flex-end;gap:.3rem;margin:.2rem 0 .35rem}
-    .ztools .btn{width:auto;min-width:34px;padding:0 .45rem;font-weight:700;font-size:.85rem}`;
+    .ztools .btn{width:auto;min-width:34px;padding:0 .45rem;font-weight:700;font-size:.85rem}
+    .tzoom .btn,.ztools .btn{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+    @media (max-width:860px),(pointer:coarse){.tblprint .tzoom .btn,.ztools .btn{min-width:44px;min-height:40px;font-size:1rem}}`;
   document.head.appendChild(zcss);
   const zBar = (attr, label) => `<div class="ztools noprint"><button type="button" class="btn sm" ${attr}="-1" title="تصغير النص" aria-label="تصغير النص">أ−</button><button type="button" class="btn sm" ${attr}="0" ${attr === 'data-tz' ? 'data-tzv' : 'data-pvtzv'} title="الحجم الأصلي" aria-label="الحجم الأصلي">${label}</button><button type="button" class="btn sm" ${attr}="1" title="تكبير النص" aria-label="تكبير النص">أ+</button></div>`;
   const zPct = () => Math.round((+getComputedStyle(document.documentElement).getPropertyValue('--tz') || 1) * 100) + '%';
@@ -187,7 +191,8 @@
       d.head.insertAdjacentHTML('beforeend', '<style>main [data-pvtz]{pointer-events:auto!important;opacity:1!important}</style>');
     } catch (err) { /* ignore */ }
   }, true);
-  setTimeout(() => {
+  /* بعد تحميل كل الملفات (ومنها app-actions.js)، لا بمؤقّت: على الشبكات البطيئة قد يسبق المؤقّتُ تحميلَ الملف التالي */
+  document.addEventListener('DOMContentLoaded', () => {
     if (typeof freezeTables === 'function' && typeof tableGrid === 'function') freezeTables = fastFreeze;
     const base = render;
     render = function () {
@@ -198,5 +203,5 @@
       return r;
     };
     if (session) render();
-  }, 0);
+  });
 })();
