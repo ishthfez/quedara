@@ -16,7 +16,9 @@
      - حسابات الدخول بحسب أصحابها (القائمة نفسها بفئات مختلفة):
        العاملون وغير المصنفين من المرتبات ← «العاملون ← الحسابات»؛ الطلاب ← «الطلاب ← الحسابات»؛
        «طلاب بلا حلقة» ← «الطلاب ← بلا حلقة»؛ والمديرون وحدهم ← «الإعدادات ← حسابات المديرين».
-     - «الطلاب» شريط واحد: كل الطلاب · حسب الحلقة · بلا حلقة (حين يوجد) · الحسابات.
+     - «الطلاب» تبويبان فقط: «الطلاب» و«الحسابات». في «الطلاب» التصفية تحدد ما يظهر:
+       كل الحلقات ← الجدول العام؛ حلقة معينة ← أدوات الحلقة (المنتظمون/المنقطعون، التسميع، الإشعار)؛
+       «بلا حلقة» ← أداة تعيين الحلقات. (كان: كل الطلاب · حسب الحلقة · بلا حلقة — ثلاثة عروض للشيء نفسه)
      الدوال الأصلية لكل قسم كما هي؛ والأزرار القديمة (data-v="members" أو "payroll"…) تفتح القسم الجامع على تبويبها. */
   const dupsN = () => (db.payroll?.settings?.dup_students || []).length;
   const GROUPS = {
@@ -407,22 +409,44 @@
     if (baseToggle) A.navToggle = d => { const was = ui.nav; baseToggle(d); if (!was && ui.nav) history.pushState(navState({ layer: true }), ''); else if (was && !ui.nav) popLayer(); };
     if (baseClose) A.navClose = d => { const was = ui.nav; baseClose(d); if (was) popLayer(); };
     if (typeof freezeTables === 'function' && typeof tableGrid === 'function') freezeTables = fastFreeze;
-    /* «الطلاب»: شريط واحد بدل «كل الطلاب / حسب الحلقة» (أزراره data-svw يعالجها mine.js) */
-    const SV = [['all', 'كل الطلاب'], ['hal', 'حسب الحلقة'], ['nohal', 'بلا حلقة', () => noHalN() > 0], ['acc', 'الحسابات']];
-    adminViews.students = () => {
-      const vis = SV.filter(([, , show]) => !show || show());
-      const cur = vis.some(([k]) => k === ui.svw) ? ui.svw : 'all';
-      const bar = `<div class="card subnav"><div class="bar" style="margin:0">${vis.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-svw="${k}">${l}${k === 'nohal' ? ` <span class="count">${noHalN()}</span>` : ''}</button>`).join('')}</div></div>`;
-      const body = cur === 'hal' ? (adminViews.mine ? adminViews.mine() : '') : cur === 'nohal' ? noHalView() : cur === 'acc' ? stuAccView() : stuBase();
-      return bar + body;
+    /* «الطلاب»: تبويبان «الطلاب» و«الحسابات» (أزرارهما data-svw يعالجها mine.js)، والتصفية تحدد العرض */
+    const inPl = h => !ui.fp || (!!h && h.placeId === ui.fp);
+    /* شريط التصفية نفسه (المكان ← الحلقة) لعرضي الحلقة و«بلا حلقة»، بالأسماء نفسها التي يعالجها cascade.js وapp-actions.js */
+    const filters = () => {
+      const places = db.places.slice().sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+      const hs = db.halaqat.filter(inPl).sort((a, b) => halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'));
+      const pSel = `<select data-fplace aria-label="المكان"><option value="">كل الأماكن</option>${places.map(p => `<option value="${esc(p.id)}" ${p.id === ui.fp ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>`;
+      const hSel = `<select data-change="fh" aria-label="الحلقة"><option value="">كل الحلقات</option>${hs.map(h => `<option value="${esc(h.id)}" ${h.id === ui.fh ? 'selected' : ''}>${esc(halaqaLabel(h))}</option>`).join('')}${noHalN() ? `<option value="__none" ${ui.fh === '__none' ? 'selected' : ''}>بلا حلقة (${noHalN()})</option>` : ''}</select>`;
+      return `<div class="card"><div class="bar" style="margin:0">${pSel}${hSel}</div></div>`;
     };
+    const listView = () => {
+      if (ui.fh === '__none') return noHalN() ? filters() + noHalView() : (ui.fh = '', stuBase());
+      const h = ui.fh && byId(db.halaqat, ui.fh);
+      if (h && adminViews.mine) {
+        /* حلقة معينة: جدول الحلقة بأدواته، وعنوانه اسمها بدل قائمة اختيار الحلقة (فالتصفية فوقه تكفي) */
+        ui.hid = h.id;
+        const v = adminViews.mine().replace(/<label style="margin:0;flex:1 1 16rem;max-width:28rem">الحلقة[\s\S]*?<\/label>/, `<h2 class="grow" style="margin:0">${esc(halaqaLabel(h))}</h2>`);
+        return filters() + v;
+      }
+      if (ui.fh) ui.fh = '';
+      let html = stuBase().replace(/غير مصنف \(بلا حلقة\)/g, 'بلا حلقة');
+      /* تنبيه بالطلاب بلا حلقة (وكانوا تبويبًا مستقلًا) */
+      const n = noHalN();
+      if (n) html = `<div class="note" style="margin:0 0 .8rem">${n} طالب بلا حلقة. <button type="button" class="btn sm" data-fhnone>عرضهم وتعيين حلقاتهم</button></div>` + html;
+      return html;
+    };
+    adminViews.students = () => {
+      const cur = ui.svw === 'acc' ? 'acc' : 'list';
+      const bar = `<div class="card subnav"><div class="bar" style="margin:0">${[['list', 'الطلاب'], ['acc', 'الحسابات']].map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-svw="${k}">${l}</button>`).join('')}</div></div>`;
+      return bar + (cur === 'acc' ? stuAccView() : listView());
+    };
+    document.addEventListener('click', e => { if (e.target.closest('[data-fhnone]')) { ui.svw = 'list'; ui.fh = '__none'; render(); window.scrollTo(0, 0); } });
     unifyTabs();
     const base = render;
     render = function () {
       /* «الأعضاء» القديم: فئات العاملين تفتح «العاملون ← الحسابات»، والطلاب «الطلاب ← الحسابات» أو «بلا حلقة» */
       if (session?.role === 'admin' && ui.tab === 'members' && isStaff(ui.msub)) ui.tab = 'accounts';
-      if (session?.role === 'admin' && ui.tab === 'members' && isStu(ui.msub)) { ui.svw = ui.msub === 'nohal' ? 'nohal' : 'acc'; ui.tab = 'students'; saveTab(); }
-      if (ui.svw === 'nohal' && !noHalN()) ui.svw = 'all';
+      if (session?.role === 'admin' && ui.tab === 'members' && isStu(ui.msub)) { if (ui.msub === 'nohal') { ui.svw = 'list'; ui.fh = '__none'; } else ui.svw = 'acc'; ui.tab = 'students'; saveTab(); }
       /* قسم صار تبويبًا: يُفتح القسم الجامع على هذا التبويب (قبل فحص صفحة البداية، وإلا أعاده إليها) */
       if (session?.role === 'admin' && OWNER[ui.tab] && OWNER[ui.tab] !== ui.tab) { sub[OWNER[ui.tab]] = ui.tab; saveSub(); ui.tab = OWNER[ui.tab]; saveTab(); }
       /* صفحة البداية لكل فئة كما كانت (لا أول القائمة بعد توحيد الترتيب) */
