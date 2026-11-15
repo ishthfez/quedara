@@ -150,7 +150,7 @@
     save(); render();
     return ids.size;
   }
-  window.QLFixPay.triage = sameTriage;
+  window.QLFixPay.triage = sameTriage; window.QLFixPay.halsOf = halsOf;
   let tCache = null, tSig = '';
   const triageCached = () => { const g = dsig(); if (g !== tSig) { tSig = g; tCache = sameTriage(); } return tCache; };
   new MutationObserver(() => {
