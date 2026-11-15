@@ -217,7 +217,7 @@ const SYNC_TABLES = {
 let feesOk = null; // هل جدول الاشتراكات موجود على الخادم؟
 const MEMBER_COLS = 'id,user_id,login_email,role,name,phone,halaqa_id,cat,info,extra,has_photo';
 const FULL_EVERY = 30 * 60000;
-let raw = null, since = null, lastFull = 0, inc = null, scoped = false, lastChanged = true;
+let raw = null, since = null, lastFull = 0, inc = null, scoped = false, lastChanged = true, leaveTried = false;
 const photoCache = new Map();   // معرّف العضو ← الصورة ('' = بلا صورة)
 const photoSent = new Map();    // معرّف العضو ← بصمة الصورة كما هي على الخادم (للصور المعروفة فقط)
 const hashStr = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return s.length + ':' + h; };
@@ -326,6 +326,9 @@ async function pull() {
       closed: closed.map(c => c.y + '-' + c.m),
       absences: abs.map(absFromRow)
     };
+    /* هل نُفّذ supabase/absence_proof.sql؟ (الإثبات «خصم» لا يُرسل قبله فيرفضه الخادم) */
+    if (mode === 'full' || raw.leaveOK === undefined) { try { await rpc('leave_rules'); raw.leaveOK = true; } catch (e) { raw.leaveOK = false; } }
+    db.payroll.leaveOK = !!raw.leaveOK;
   } else if (role === 'accountant') {
     db.fees = feeRows(rows('fees'));
     /* أسماء المعلمين والمشرفين لتسمية الحلقات فقط: تُجلب عند الجلب الكامل أو تغيّر الأعضاء */
@@ -335,10 +338,13 @@ async function pull() {
     raw.staffNames.forEach(m => { const c = db[ROLE_COLL[m.role]]; if (c && !c.some(x => x.id === m.id)) c.push({ id: m.id, name: m.name, phone: '', extra: {} }); });
   } else if (role === 'supervisor') {
     /* قائمة العاملين وشهر المرتبات الحالي: تُجلب عند الجلب الكامل أو إن تغيّرت فقط */
-    if (mode === 'full' || !raw.extras || !scoped || chk.tables.includes('staff')) { raw.extras = await Promise.all([rpc('staff_list'), rpc('current_pay_month').catch(() => null)]); lastChanged = true; }
-    const abs = rows('absences'), [staff, cur] = raw.extras;
-    const c = Array.isArray(cur) ? cur[0] : cur;
-    db.payroll = { settings: {}, employees: (staff || []).map(e => ({ id: e.id, code: e.code || '', name: e.name, place: e.place || '', status: e.status })), rows: [], closed: [], absences: abs.map(absFromRow), curMonth: c && c.y ? { y: c.y, m: c.m } : null, readOnly: true };
+    /* معلومات الرصيد (بعد absence_proof.sql) تُطلب كذلك إن لم تكن في النسخة المحفوظة، مرة في كل فتح للتطبيق */
+    const needRules = !raw.extras || raw.extras.length < 3 || (raw.extras[2] == null && !leaveTried);
+    if (mode === 'full' || needRules || !scoped || chk.tables.includes('staff')) { leaveTried = true; raw.extras = await Promise.all([rpc('staff_list'), rpc('current_pay_month').catch(() => null), rpc('leave_rules').catch(() => null)]); lastChanged = true; }
+    const abs = rows('absences'), [staff, cur, rules] = raw.extras;
+    const c = Array.isArray(cur) ? cur[0] : cur, lv = Array.isArray(rules) ? rules[0] : rules;
+    /* بعد supabase/absence_proof.sql: نظام العمل وأيام الرصيد لحساب رصيد الإجازات، والإثبات (بلا أي مبالغ) */
+    db.payroll = { settings: lv ? { lv3: lv.lv3, lv6: lv.lv6 } : {}, employees: (staff || []).map(e => ({ id: e.id, code: e.code || '', name: e.name, place: e.place || '', status: e.status, sys: e.sys || '' })), rows: [], closed: [], absences: abs.map(absFromRow), curMonth: c && c.y ? { y: c.y, m: c.m } : null, readOnly: true, leaveOK: !!lv };
   }
   /* صلاحيات المستخدم (غير المدير) كما يحسبها الخادم: تُجلب عند الجلب الكامل أو تغيّر الإعدادات فقط */
   if (role !== 'admin') {
