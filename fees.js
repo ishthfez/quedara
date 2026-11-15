@@ -154,7 +154,7 @@
     const SUG = { qs: 'fee-students', qh: 'fee-halaqat', qp: 'fee-places' };
     const box = (k, l, ph) => `<label style="margin:0">${l}<input type="search" data-fq="${k}" data-suggest="${SUG[k]}" value="${esc(st[k])}" placeholder="${ph}" autocomplete="off"></label>`;
     return `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">تحصيل اشتراكات الطلاب</h2>
-        ${isAdmin() ? '<button type="button" class="btn" data-fee-cfg>إعدادات الاشتراك</button>' : ''}${can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : ''}${session?.role === 'accountant' && can('students.add') ? '<button type="button" class="btn" data-act="addStudent">+ استمارة طالب</button>' : ''}
+        ${can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>إعدادات الاشتراك</button>' : ''}${can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : ''}${session?.role === 'accountant' && can('students.add') ? '<button type="button" class="btn" data-act="addStudent">+ استمارة طالب</button>' : ''}
         <label style="margin:0">الشهر <select data-fmonth style="width:auto">${monthOpts(st.y, st.m).map(o => `<option value="${o.v}" ${o.sel ? 'selected' : ''}>${o.l}</option>`).join('')}</select></label></div>
       ${cloudMissing() ? '<div class="note" style="color:var(--red)">جدول الاشتراكات غير موجود على الخادم بعد: نفّذ الملف <b>supabase/fees.sql</b> في Supabase ← SQL Editor ثم حدّث الصفحة.</div>' : ''}
       <div class="three">${box('qs', 'اسم الطالب', 'اكتب أو اختر الطالب')}${box('qh', 'الحلقة', 'اسم الحلقة أو المعلم')}${box('qp', 'المكان', 'اكتب أو اختر المكان')}</div>
@@ -347,7 +347,7 @@
     const l = e.target.closest('[data-fee-log]'); if (l) { log(l.dataset.feeLog); return; }
     const d = e.target.closest('[data-fee-del]'); if (d) { del(d.dataset.feeDel); return; }
     const g = e.target.closest('[data-fee-assign]'); if (g && can('fees.amount')) { assignDialog([byId(db.students, g.dataset.feeAssign)].filter(Boolean)); return; }
-    if (e.target.closest('[data-fee-cfg]')) { if (isAdmin()) cfgDialog(); return; }
+    if (e.target.closest('[data-fee-cfg]')) { if (can('fees.amount')) cfgDialog(); return; }   // المدير ومن له «قيمة الاشتراك» (المحاسب)
     if (e.target.closest('[data-fee-bulk]') && can('fees.amount')) assignDialog(filtered());
   });
 })();
