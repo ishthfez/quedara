@@ -69,13 +69,56 @@
     ov.querySelector('[data-close]').onclick = () => ov.remove();
     ov.querySelector('[data-dallok]').onclick = () => { ov.remove(); run(); };
   }
-  window.QLDupsAll = { plan };
+  window.QLDupsAll = { plan, guess: x => guess(x) };
 
   /* ===== «إضافة الكل مستقلين»: قرار المدير لكل الباقين، بلا فرز =====
      جدول بكل الباقين: الاسم (يُعدَّل إن شئت) والحلقة (من الملف، أو تختارها لمن حلقته غير محددة)،
      وتنبيه أصفر لمن بالاسم نفسه طالب في المكان نفسه أو بلا حلقة — للعلم فقط، لا يمنع الإضافة.
      ما جاء من ملف الدفعات لا يُضاف هنا (يُصلَح بزر «إصلاح»). */
   const isPay = x => Object.keys(x.extra || {}).some(h => PAYH.includes(String(h).trim()));
+
+  /* ===== استنتاج الحلقة من سجل الطالب نفسه (بدل الاختيار من كل الحلقات) =====
+     القرائن بالترتيب: 1) حلقة الملف (بمعرّفها أو اسمها أو معلمها الوحيد)
+     2) اسم المعلم في الملف ولو طابق أكثر من معلم (الاسم الأول نفسه وبقية كلمات الأقصر في الأطول)
+     3) إخوته بالجوال نفسه (ولي الأمر نفسه) وحلقاتهم
+     4) اسم مكان مذكور في أي خانة من السجل: يضيّق ما سبق، أو يحدد حلقات ذلك المكان إن لم يوجد غيره.
+     النتيجة: الحلقات المرجّحة وسببها؛ إن كانت واحدة تُختار تلقائيًا. */
+  const toks = t => norm(String(t || '').replace(/^\s*حلقة\s+/, '')).split(' ').filter(Boolean);
+  const subseq = (a, b) => { let i = 0; for (const w of b) if (w === a[i]) i++; return i === a.length; };
+  const teacherLike = q => {
+    const qt = toks(q); if (qt.length < 2) return [];
+    return db.teachers.filter(t => { const tt = toks(t.name); if (tt.length < 2 || tt[0] !== qt[0]) return false; return qt.length <= tt.length ? subseq(qt, tt) : subseq(tt, qt); });
+  };
+  const phoneOf = v => { const d = String(v || '').replace(/[٠-٩]/g, c => c.charCodeAt(0) - 1632).replace(/\D/g, ''); return d.length >= 9 ? d.slice(-10) : ''; };
+  function guess(x) {
+    const why = [];
+    let c = halsOf(x);
+    if (c.length) why.push('حلقة الملف');
+    if (!c.length && x.halaqa) {
+      const ts = new Set(teacherLike(x.halaqa).map(t => t.id));
+      c = db.halaqat.filter(h => ts.has(h.teacherId));
+      if (c.length) why.push('المعلم في الملف');
+    }
+    /* الإخوة بالجوال نفسه */
+    const ph = [x.vals?.['core:phone'], x.vals?.['info:whatsapp']].map(phoneOf).filter(Boolean);
+    const sib = ph.length ? db.students.filter(s => norm(s.name) !== norm(x.name) && s.halaqaId && [s.phone, s.info?.gPhone, s.info?.phone, s.info?.whatsapp].map(phoneOf).some(p => p && ph.includes(p))) : [];
+    const sibH = [...new Set(sib.map(s => s.halaqaId))].map(id => byId(db.halaqat, id)).filter(Boolean);
+    if (sibH.length) {
+      const both = c.filter(h => sibH.includes(h));
+      if (!c.length) { c = sibH; why.push(`أخوه بالجوال نفسه (${esc(sib[0].name)})`); }
+      else if (both.length && both.length < c.length) { c = both; why.push('وأخوه بالجوال نفسه فيها'); }
+    }
+    /* المكان المذكور في السجل */
+    const text = norm([x.halaqa, ...Object.values(x.vals || {}), ...Object.values(x.extra || {})].join(' '));
+    const pls = (db.places || []).filter(p => { const n = norm(p.name || ''); return n.length > 2 && text.includes(n); });
+    if (pls.length) {
+      const ids = new Set(pls.map(p => p.id));
+      const inP = c.filter(h => ids.has(h.placeId));
+      if (inP.length && inP.length < c.length) { c = inP; why.push('المكان في الملف'); }
+      else if (!c.length) { c = db.halaqat.filter(h => ids.has(h.placeId)); if (c.length) why.push('المكان في الملف'); }
+    }
+    return { c, why: why.join('، ') };
+  }
   function allDialog() {
     const L = list().filter(x => !isPay(x)), payN = list().length - L.length;
     if (!L.length) { toast('لا يوجد من يُضاف'); return; }
@@ -88,20 +131,26 @@
       const same = tw.filter(s => !placeOfS(s) || !pid || placeOfS(s) === pid);
       return same.length ? `بالاسم نفسه ${same.length > 1 ? same.length + ' طلاب' : 'طالب'} ${same.some(s => !placeOfS(s)) ? 'بلا حلقة أو ' : ''}في المكان نفسه` : '';
     };
+    let auto = 0, multi = 0, none = 0;
     const rows = L.map((x, i) => {
-      const hs = halsOf(x), h0 = hs.length === 1 ? hs[0] : null;
-      const opts = `<option value="">بلا حلقة</option>${hals.map(h => `<option value="${esc(h.id)}" ${h0?.id === h.id ? 'selected' : ''}>${esc(hlbl(h))}</option>`).join('')}`;
+      const G = guess(x), h0 = G.c.length === 1 ? G.c[0] : null, cs = new Set(G.c.map(h => h.id));
+      const o = h => `<option value="${esc(h.id)}" ${h0?.id === h.id ? 'selected' : ''}>${esc(hlbl(h))}</option>`;
+      const opts = (G.c.length > 1 ? `<option value="">— اختر من المرجّح (${G.c.length}) —</option>` : `<option value="">بلا حلقة</option>`)
+        + (G.c.length ? `<optgroup label="المرجّح من السجل">${hals.filter(h => cs.has(h.id)).map(o).join('')}</optgroup><optgroup label="كل الحلقات">` : '')
+        + hals.filter(h => !cs.has(h.id)).map(o).join('') + (G.c.length ? '</optgroup>' : '');
+      if (h0) auto++; else if (G.c.length > 1) multi++; else none++;
+      const why = h0 ? `✓ اختيرت تلقائيًا: ${G.why}` : G.c.length > 1 ? `${G.c.length} حلقات محتملة (${G.why}): اختر منها` : 'لم يُعرف من السجل: اختر الحلقة';
       const w = twinsTxt(x.name, h0?.id || '');
       return `<div class="darow" data-darow="${esc(x.id)}"><b class="dan">${i + 1}</b><div class="dab">
         <input data-daname value="${esc(x.name)}" aria-label="اسم الطالب ${i + 1}">
         <select data-dahal data-nosearch aria-label="حلقة الطالب ${i + 1}">${opts}</select>
-        <small class="muted">في الملف: ${esc(x.halaqa || 'بلا حلقة')}</small><small data-dawarn class="daw">${w ? '⚠ ' + esc(w) : ''}</small></div></div>`;
+        <small class="muted">في الملف: ${esc(x.halaqa || 'بلا حلقة')}</small><small class="${h0 ? 'dag' : 'dam'}">${why}</small><small data-dawarn class="daw">${w ? '⚠ ' + esc(w) : ''}</small></div></div>`;
     }).join('');
     const ov = document.createElement('div'); ov.className = 'overlay';
     ov.innerHTML = `<div class="modal wide"><h2>إضافة الكل طلابًا مستقلين (${L.length})</h2>
-      <p style="margin:0 0 .6rem">كل واحد يُضاف طالبًا جديدًا مستقلًا. عدّل الاسم أو الحلقة إن شئت، ثم «إضافة الكل». التنبيه الأصفر للعلم فقط ولا يمنع الإضافة.${payN ? ` <b>${payN}</b> من ملف الدفعات لا يُضافون هنا (زر «إصلاح»).` : ''}</p>
+      <p style="margin:0 0 .6rem">كل واحد يُضاف طالبًا جديدًا مستقلًا. الحلقة تُستنتج من سجله (حلقة الملف، المعلم، إخوته بالجوال نفسه، المكان المذكور): <b>${auto}</b> اختيرت تلقائيًا${multi ? `، و<b>${multi}</b> لهم حلقات محتملة قليلة تختار منها` : ''}${none ? `، و<b>${none}</b> لم تُعرف` : ''}. التنبيه الأصفر للعلم فقط ولا يمنع الإضافة.${payN ? ` <b>${payN}</b> من ملف الدفعات لا يُضافون هنا (زر «إصلاح»).` : ''}</p>
       <style>.darow{display:flex;gap:.6rem;align-items:flex-start;padding:.6rem 0;border-top:1px solid var(--line,#e5e7eb)}.darow .dan{min-width:1.6rem;padding-top:.5rem;color:var(--muted,#777)}
-        .darow .dab{flex:1;min-width:0;display:grid;gap:.35rem}.darow input,.darow select{width:100%;max-width:100%}.darow .daw{color:#8a6d0b;font-weight:700}.darow .daw:empty{display:none}</style>
+        .darow .dab{flex:1;min-width:0;display:grid;gap:.35rem}.darow input,.darow select{width:100%;max-width:100%}.darow .daw{color:#8a6d0b;font-weight:700}.darow .daw:empty{display:none}.darow .dag{color:#1f6b3a;font-weight:700}.darow .dam{color:#9a3b30;font-weight:700}</style>
       <div>${rows}</div>
       <p class="note" style="margin:.6rem 0">احفظ نسخة احتياطية قبل التنفيذ (الإعدادات ← النسخ الاحتياطية).</p>
       <div class="row"><button type="button" class="btn primary" data-daok>إضافة الكل (${L.length})</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
@@ -113,6 +162,8 @@
     ov.querySelector('[data-daok]').onclick = () => {
       const picks = [...ov.querySelectorAll('[data-darow]')].map(tr => ({ x: L.find(y => y.id === tr.dataset.darow), name: tr.querySelector('[data-daname]').value.trim().replace(/\s+/g, ' '), h: byId(db.halaqat, tr.querySelector('[data-dahal]').value) }));
       const bad = picks.find(p => !p.name); if (bad) { toast('اكتب اسم كل طالب'); return; }
+      const noH = picks.filter(p => !p.h).length;
+      if (noH && !ov.dataset.okNoH) { ask(`${noH} لم تُختر حلقته وسيُضاف «بلا حلقة». متابعة؟`, () => { ov.dataset.okNoH = '1'; ov.querySelector('[data-daok]').click(); }); return; }
       const ids = new Set();
       picks.forEach(({ x, name, h }) => { if (!x) return; create({ ...x, name }, h || { id: '' }); ids.add(x.id); });
       db.payroll.settings.dup_students = list().filter(x => !ids.has(x.id));
