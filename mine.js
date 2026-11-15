@@ -30,8 +30,8 @@
     const meta = [placeName(h), timeText(h)].filter(Boolean).join(' · ');
     const rows = list.map((s, i) => `<tr data-mn="${esc(norm(s.name))}"${match(s, st.q) ? '' : ' style="display:none"'}><td>${i + 1}</td><td>${esc(s.name)}</td>
       ${st.tab === 'off' ? `<td>${esc(s.info?.statusDate || '—')}</td>` : `<td>${esc(lastHifz(s.id))}</td><td>${attRate(s.id)}</td>`}
-      <td class="noprint">${st.tab === 'on' && canRec ? `<button class="btn sm primary" data-act="rec" data-id="${s.id}">تسجيل تسميع</button>` : ''}<button class="btn sm" data-act="hist" data-id="${s.id}">السجل</button><button class="btn sm" data-act="studentCard" data-id="${s.id}">الملف</button></td></tr>`).join('');
-    return `<div class="card"><div class="bar" style="margin:0 0 .4rem">${head}<span class="muted">${all.length} طالب</span></div>
+      <td class="noprint">${st.tab === 'on' && canRec ? `<button class="btn sm primary" data-act="rec" data-id="${s.id}">تسجيل تسميع</button>` : ''}<button class="btn sm" data-act="hist" data-id="${s.id}">السجل</button><button class="btn sm" data-act="studentCard" data-id="${s.id}">الملف</button><button class="btn sm" data-mnote="${s.id}" title="إشعار لهذا الطالب">إشعار</button></td></tr>`).join('');
+    return `<div class="card"><div class="bar" style="margin:0 0 .4rem">${head}<span class="muted">${all.length} طالب</span><button type="button" class="btn sm primary" data-mnote="*">إشعار للطلاب</button></div>
       ${meta ? `<p class="muted" style="margin:0 0 .6rem;font-size:.88rem">${esc(meta)}</p>` : ''}
       <div class="bar" style="margin:0 0 .6rem"><div class="plseg mtabs">
         <button type="button" class="btn ${st.tab === 'on' ? 'on' : ''}" data-mtab="on">المنتظمون <span class="count">${on.length}</span></button>
@@ -43,6 +43,38 @@
   }
   teacherViews.mine = view;
   supervisorViews.mine = view;
+  /* ===== إشعار للطلاب: رسالة حرة تصل الطالب في «الإعلانات» على حسابه (notify_students على الخادم) ===== */
+  function noteDialog(one) {
+    const h = byId(db.halaqat, ui.hid); if (!h) return;
+    const all = db.students.filter(s => s.halaqaId === h.id), on = all.filter(s => !stOff(s)), off = all.filter(stOff);
+    const s1 = one && byId(db.students, one);
+    const groups = s1 ? null : [['on', `المنتظمون (${on.length})`, on], ['off', `المنقطعون (${off.length})`, off], ['all', `الكل (${all.length})`, all]].filter(g => g[2].length);
+    openForm(s1 ? 'إشعار: ' + s1.name : 'إشعار لطلاب ' + halaqaLabel(h), [
+      ...(groups ? [{ name: 'to', label: 'إلى', type: 'select', value: 'on', options: groups.map(([v, l]) => ({ v, l })) }] : []),
+      { name: 'body', label: 'نص الإشعار', type: 'textarea', required: true },
+      { type: 'note', label: 'يصل كل طالب في «الإعلانات» على حسابه، باسمك.' }
+    ], v => {
+      const body = (v.body || '').trim();
+      if (body.length < 2) return 'اكتب نص الإشعار';
+      if (body.length > 1000) return 'النص طويل (1000 حرف على الأكثر)';
+      const ids = s1 ? [s1.id] : (groups.find(g => g[0] === v.to) || groups[0])[2].map(s => s.id);
+      send(ids, body);
+    });
+  }
+  async function send(ids, body) {
+    if (!CLOUD) {
+      ids.forEach(id => db.news.push({ id: uid(), text: body, audience: 'm:' + id, date: today(), author: (ROLE_L[session.role] || '') + ' ' + (me()?.name || ''), authorId: session.id }));
+      save(); render(); toast(`أُرسل الإشعار إلى ${ids.length} طالب`); return;
+    }
+    try {
+      toast('جارٍ الإرسال…');
+      const n = await window.Cloud.rpc('notify_students', { students: ids, body });
+      toast(n ? `أُرسل الإشعار إلى ${n} طالب` : 'لم يُرسل شيء: أُرسل النص نفسه اليوم، أو ليس لك صلاحية على هؤلاء الطلاب');
+    } catch (e) {
+      toast(/notify_students|PGRST202|404/i.test(String(e.message || e)) ? 'نفّذ ملف supabase/notify.sql على الخادم أولًا' : 'تعذّر الإرسال: ' + (e.message || e));
+    }
+  }
+  document.addEventListener('click', e => { const b = e.target.closest('[data-mnote]'); if (b) noteDialog(b.dataset.mnote === '*' ? '' : b.dataset.mnote); });
   /* الحضور: للمنتظمين فقط (المنقطع لا يُسجَّل حضوره) */
   function attView() {
     const hs = halaqatOf();

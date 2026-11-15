@@ -74,10 +74,10 @@
       let h; db.news = all.filter(n => !toStudent(n));
       try { h = b(); } finally { db.news = all; }
       const month = today().slice(0, 7), thisMonth = st.filter(n => String(n.date || '').startsWith(month));
-      const pay = thisMonth.filter(n => /^تأكيد دفع/.test(n.text)).length, rem = thisMonth.length - pay;
+      const pay = thisMonth.filter(n => /^تأكيد دفع/.test(n.text)).length, rem = thisMonth.filter(n => /^تذكير/.test(n.text)).length, msg = thisMonth.length - pay - rem;
       const last = st.slice(-6).reverse().map(n => `<div class="news">${byLine(n)}<b>إلى ${esc(byId(db.students, n.audience.slice(2))?.name || '')}:</b> ${esc(n.text)}<br><small>${esc(n.date)}</small></div>`).join('');
-      return h + `<div class="card"><div class="bar" style="margin:0"><h2 class="grow" style="margin:0">رسائل الطلاب</h2><span class="muted">هذا الشهر: ${pay} تأكيد دفع · ${rem} تذكير</span></div>
-        <p class="muted" style="font-size:.85rem">تصل كل طالب في «الإعلانات» على حسابه، ولا تظهر في القائمة أعلاه حتى لا تزدحم. آخرها:</p>${last}</div>`;
+      return h + `<div class="card"><div class="bar" style="margin:0"><h2 class="grow" style="margin:0">رسائل الطلاب</h2><span class="muted">هذا الشهر: ${pay} تأكيد دفع · ${rem} تذكير${msg ? ` · ${msg} إشعار` : ''}</span></div>
+        <p class="muted" style="font-size:.85rem">تأكيدات الدفع والتذكيرات وإشعارات المعلمين: تصل كل طالب في «الإعلانات» على حسابه، ولا تظهر في القائمة أعلاه حتى لا تزدحم. آخرها:</p>${last}</div>`;
     };
   }
 })();
