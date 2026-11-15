@@ -20,7 +20,7 @@
     ['«الأعضاء» ← «المشرفون»', '«العاملون» (التصفية: المشرفون)'],
     ['من تبويبات الأعضاء', 'من «العاملون» (زر «إنشاء الحسابات الناقصة»)'],
     ['من فئات الأعضاء', 'من «العاملون» (زر «إنشاء الحسابات الناقصة»)'],
-    ['من «الأعضاء»', 'من «العاملون» و«الطلاب ← الحسابات»'],
+    ['من «الأعضاء»', 'من «العاملون» و«الطلاب»'],
     ['الأعضاء والحسابات', 'الحسابات']
   ];
   const fixText = t => { if (typeof t !== 'string' || !t.includes('الأعضاء')) return t; FIX.forEach(([a, b]) => { t = t.split(a).join(b); }); return t; };
@@ -36,6 +36,8 @@
   new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => fixNodes(n.nodeType === 3 ? n.parentNode : n))))
     .observe(document.body, { childList: true, subtree: true });
 
+  /* «حذف الطالب» من ملفه: يُغلق الملف أولًا ثم تظهر نافذة الحذف (بكلمة المرور) */
+  document.addEventListener('click', e => { const b = e.target.closest('.overlay .scard [data-act="delMember"]'); if (b) b.closest('.overlay')?.remove(); }, true);
   if (typeof studentCard !== 'function') return;
   const base = studentCard;
   studentCard = function (st) {
@@ -54,7 +56,7 @@
     const html = `<h3 class="sc-h">الاشتراكات</h3><div class="tbl"><table>${feesRows}</table></div>
       ${fees.length ? `<div class="row noprint" style="margin:.4rem 0 0"><button type="button" class="btn sm" data-fee-log="${esc(st.id)}">سجل الدفعات</button></div>` : ''}
       <h3 class="sc-h">حساب الدخول</h3><div class="tbl"><table>${row('الحالة', acc)}</table></div>
-      ${CLOUD ? `<div class="row noprint" style="margin:.4rem 0 0"><button type="button" class="btn sm" data-act="cloudPw" data-id="${esc(st.id)}" data-k="students">${st.hasLogin ? 'كلمة مرور جديدة' : 'إنشاء حساب دخول'}</button></div>` : ''}`;
+      <div class="row noprint" style="margin:.4rem 0 0">${CLOUD ? `<button type="button" class="btn sm" data-act="cloudPw" data-id="${esc(st.id)}" data-k="students">${st.hasLogin ? 'كلمة مرور جديدة' : 'إنشاء حساب دخول'}</button>` : ''}<button type="button" class="btn sm danger" data-act="delMember" data-k="students" data-id="${esc(st.id)}">حذف الطالب</button></div>`;
     const actions = box.querySelector(':scope > .row.noprint:last-child');
     if (actions) actions.insertAdjacentHTML('beforebegin', html); else box.insertAdjacentHTML('beforeend', html);
   };
