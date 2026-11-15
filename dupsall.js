@@ -71,6 +71,57 @@
   }
   window.QLDupsAll = { plan };
 
+  /* ===== «إضافة الكل مستقلين»: قرار المدير لكل الباقين، بلا فرز =====
+     جدول بكل الباقين: الاسم (يُعدَّل إن شئت) والحلقة (من الملف، أو تختارها لمن حلقته غير محددة)،
+     وتنبيه أصفر لمن بالاسم نفسه طالب في المكان نفسه أو بلا حلقة — للعلم فقط، لا يمنع الإضافة.
+     ما جاء من ملف الدفعات لا يُضاف هنا (يُصلَح بزر «إصلاح»). */
+  const isPay = x => Object.keys(x.extra || {}).some(h => PAYH.includes(String(h).trim()));
+  function allDialog() {
+    const L = list().filter(x => !isPay(x)), payN = list().length - L.length;
+    if (!L.length) { toast('لا يوجد من يُضاف'); return; }
+    const hals = db.halaqat.slice().sort((a, b) => (placeName(a) || '').localeCompare(placeName(b) || '', 'ar') || halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'));
+    const hlbl = h => { const l = halaqaLabel(h), pn = placeName(h); return pn && !l.includes(pn) ? `${l} — ${pn}` : l; };
+    const twinsTxt = (name, hid) => {
+      const pid = byId(db.halaqat, hid)?.placeId || '';
+      const tw = db.students.filter(s => norm(s.name) === norm(name));
+      if (!pid) return tw.length ? `بلا حلقة، وبالاسم نفسه ${tw.length > 1 ? tw.length + ' طلاب' : 'طالب'} موجود` : '';
+      const same = tw.filter(s => !placeOfS(s) || !pid || placeOfS(s) === pid);
+      return same.length ? `بالاسم نفسه ${same.length > 1 ? same.length + ' طلاب' : 'طالب'} ${same.some(s => !placeOfS(s)) ? 'بلا حلقة أو ' : ''}في المكان نفسه` : '';
+    };
+    const rows = L.map((x, i) => {
+      const hs = halsOf(x), h0 = hs.length === 1 ? hs[0] : null;
+      const opts = `<option value="">بلا حلقة</option>${hals.map(h => `<option value="${esc(h.id)}" ${h0?.id === h.id ? 'selected' : ''}>${esc(hlbl(h))}</option>`).join('')}`;
+      const w = twinsTxt(x.name, h0?.id || '');
+      return `<div class="darow" data-darow="${esc(x.id)}"><b class="dan">${i + 1}</b><div class="dab">
+        <input data-daname value="${esc(x.name)}" aria-label="اسم الطالب ${i + 1}">
+        <select data-dahal data-nosearch aria-label="حلقة الطالب ${i + 1}">${opts}</select>
+        <small class="muted">في الملف: ${esc(x.halaqa || 'بلا حلقة')}</small><small data-dawarn class="daw">${w ? '⚠ ' + esc(w) : ''}</small></div></div>`;
+    }).join('');
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    ov.innerHTML = `<div class="modal wide"><h2>إضافة الكل طلابًا مستقلين (${L.length})</h2>
+      <p style="margin:0 0 .6rem">كل واحد يُضاف طالبًا جديدًا مستقلًا. عدّل الاسم أو الحلقة إن شئت، ثم «إضافة الكل». التنبيه الأصفر للعلم فقط ولا يمنع الإضافة.${payN ? ` <b>${payN}</b> من ملف الدفعات لا يُضافون هنا (زر «إصلاح»).` : ''}</p>
+      <style>.darow{display:flex;gap:.6rem;align-items:flex-start;padding:.6rem 0;border-top:1px solid var(--line,#e5e7eb)}.darow .dan{min-width:1.6rem;padding-top:.5rem;color:var(--muted,#777)}
+        .darow .dab{flex:1;min-width:0;display:grid;gap:.35rem}.darow input,.darow select{width:100%;max-width:100%}.darow .daw{color:#8a6d0b;font-weight:700}.darow .daw:empty{display:none}</style>
+      <div>${rows}</div>
+      <p class="note" style="margin:.6rem 0">احفظ نسخة احتياطية قبل التنفيذ (الإعدادات ← النسخ الاحتياطية).</p>
+      <div class="row"><button type="button" class="btn primary" data-daok>إضافة الكل (${L.length})</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
+    document.body.appendChild(ov);
+    const upd = tr => { const n = tr.querySelector('[data-daname]').value.trim(), w = twinsTxt(n, tr.querySelector('[data-dahal]').value); tr.querySelector('[data-dawarn]').textContent = w ? '⚠ ' + w : ''; };
+    ov.addEventListener('input', e => { const tr = e.target.closest('[data-darow]'); if (tr) upd(tr); });
+    ov.addEventListener('change', e => { const tr = e.target.closest('[data-darow]'); if (tr) upd(tr); });
+    ov.querySelector('[data-close]').onclick = () => ov.remove();
+    ov.querySelector('[data-daok]').onclick = () => {
+      const picks = [...ov.querySelectorAll('[data-darow]')].map(tr => ({ x: L.find(y => y.id === tr.dataset.darow), name: tr.querySelector('[data-daname]').value.trim().replace(/\s+/g, ' '), h: byId(db.halaqat, tr.querySelector('[data-dahal]').value) }));
+      const bad = picks.find(p => !p.name); if (bad) { toast('اكتب اسم كل طالب'); return; }
+      const ids = new Set();
+      picks.forEach(({ x, name, h }) => { if (!x) return; create({ ...x, name }, h || { id: '' }); ids.add(x.id); });
+      db.payroll.settings.dup_students = list().filter(x => !ids.has(x.id));
+      ov.remove(); save(); render();
+      const left = list().length;
+      toast(`أُضيف ${ids.size} طالبًا مستقلًا${left ? ` — بقي ${left} (من ملف الدفعات)` : ' — القائمة فارغة ✓'}`);
+    };
+  }
+
   /* الزر في «مكرر للمراجعة»، تحت الملاحظة (وبعد شريط «دمج من في المكان نفسه» إن وُجد) */
   let cache = null, csig = '';
   const sig = () => `${list().length}|${db.students.length}|${db.halaqat.length}`;
@@ -79,10 +130,15 @@
     if (document.querySelector('[data-dupsall]')) return;
     const note = document.querySelector('main .card > .note:not([data-fixpay])'); if (!note) return;
     const g = sig(); if (g !== csig) { csig = g; cache = plan(); }
-    if (!cache.add.length) return;
+    const allN = list().filter(x => !isPay(x)).length;
+    if (!cache.add.length && !allN) return;
     const at = note.nextElementSibling?.querySelector?.('[data-samego]') ? note.nextElementSibling : note;
-    at.insertAdjacentHTML('afterend', `<div class="bar" style="margin:.2rem 0 .7rem"><span class="muted grow" style="font-size:.88rem">${cache.add.length} اسمًا صاحبُ اسمهم في مكان آخر فقط: يُضافون بأسمائهم كما هي، والمكان يميّز</span>
-      <button type="button" class="btn sm primary" data-dupsall>إضافة الباقين مستقلين (${cache.add.length})</button></div>`);
+    at.insertAdjacentHTML('afterend', `<div class="bar" data-dupsall style="margin:.2rem 0 .7rem"><span class="muted grow" style="font-size:.88rem">${cache.add.length ? `${cache.add.length} اسمًا صاحبُ اسمهم في مكان آخر فقط: يُضافون بأسمائهم كما هي، والمكان يميّز` : 'اعتبار الباقين كلهم طلابًا مستقلين (تراجع الاسم والحلقة لكل واحد قبل الإضافة)'}</span>
+      ${cache.add.length ? `<button type="button" class="btn sm primary" data-dupsgo>إضافة الباقين مستقلين (${cache.add.length})</button>` : ''}${allN ? `<button type="button" class="btn sm" data-dupsevery>إضافة الكل مستقلين (${allN})</button>` : ''}</div>`);
   }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
-  document.addEventListener('click', e => { if (e.target.closest('[data-dupsall]') && session?.role === 'admin') dialog(); });
+  document.addEventListener('click', e => {
+    if (session?.role !== 'admin') return;
+    if (e.target.closest('[data-dupsgo]')) dialog();
+    else if (e.target.closest('[data-dupsevery]')) allDialog();
+  });
 })();
