@@ -9,13 +9,29 @@
    يُحمَّل بعد كل الملفات التي تضيف أقسامًا، وقبل app-actions.js. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./nav.js')) VFILES.push('./nav.js'); } catch (e) { /* ignore */ } });
+  /* إعادة التنظيم (المرحلة الأولى، الشكل فقط): العناصر الأساسية طالب وعامل وحلقة ومكان.
+     - «الأعضاء» لم يعد قسمًا: صار «حسابات الدخول» في «الإعدادات»، و«مكرر للمراجعة» تبويبًا مستقلًا بجانبه (يظهر حين يوجد فيه أسماء).
+     - «العاملون»: القائمة الموحدة + الغياب. «المالية»: التحصيل + تحصيل المعلمين + المرتبات.
+     الدوال الأصلية لكل قسم كما هي؛ والأزرار القديمة (data-v="members" أو "payroll"…) تفتح القسم الجامع على تبويبها. */
+  const dupsN = () => (db.payroll?.settings?.dup_students || []).length;
   const GROUPS = {
-    fees: [['fees', 'التحصيل'], ['tcollect', 'تحصيل المعلمين']],
-    payroll: [['payroll', 'المرتبات'], ['absence', 'غياب المعلمين']],
-    settings: [['settings', 'الإعدادات'], ['perms', 'الصلاحيات'], ['backup', 'النسخ الاحتياطية'], ['pending', 'بيانات معلّقة']]
+    teachers: [['teachers', 'العاملون'], ['absence', 'الغياب']],
+    fees: [['fees', 'التحصيل'], ['tcollect', 'تحصيل المعلمين'], ['payroll', 'المرتبات']],
+    settings: [['settings', 'الإعدادات'], ['members', 'حسابات الدخول'], ['dups', 'مكرر للمراجعة', () => dupsN() > 0], ['perms', 'الصلاحيات'], ['backup', 'النسخ الاحتياطية'], ['pending', 'بيانات معلّقة']]
+  };
+  /* «مكرر للمراجعة» تبويب مستقل: هو فئة «dups» من قائمة الأعضاء نفسها، بلا قائمة الفئات */
+  const baseMem = adminViews.members;
+  const MSEL = /<select class="msubsel"[\s\S]*?<\/select>/;
+  adminViews.dups = () => {
+    ui.msub = 'dups';
+    return baseMem().replace(MSEL, '<h2 class="grow" style="margin:0">مكرر للمراجعة</h2>');
+  };
+  adminViews.members = () => {
+    if (ui.msub === 'dups') { ui.msub = 'staff'; saveTab(); }
+    return baseMem().replace(/<option value="dups"[^>]*>[^<]*<\/option>/, '');
   };
   /* ترتيب الشريط الجانبي وعناوين مجموعاته */
-  const ORDER = [['dash'], ['members'], ['students', 'التعليم'], ['teachers'], ['halaqat'], ['fees', 'المالية'], ['payroll'], ['news', 'التواصل'], ['settings', 'النظام']];
+  const ORDER = [['dash'], ['students', 'التعليم'], ['teachers'], ['halaqat'], ['fees', 'المالية'], ['news', 'التواصل'], ['settings', 'النظام']];
   const OWNER = {}; Object.entries(GROUPS).forEach(([g, subs]) => subs.forEach(([k]) => { OWNER[k] = g; }));
   const sub = {}; try { Object.assign(sub, JSON.parse(sessionStorage.getItem('halaqat_sub') || '{}')); } catch (e) { /* ignore */ }
   const saveSub = () => { try { sessionStorage.setItem('halaqat_sub', JSON.stringify(sub)); } catch (e) { /* ignore */ } };
@@ -42,25 +58,31 @@
   Object.entries(GROUPS).forEach(([g, subs]) => {
     subs.forEach(([k]) => { ORIG[k] = adminViews[k]; });
     adminViews[g] = () => {
-      const cur = subs.some(([k]) => k === sub[g]) ? sub[g] : subs[0][0];
-      const cnt = k => k === 'pending' ? (db.pending || []).length : k === 'tcollect' ? (db.collections || []).filter(c => c.status === 'sent').length : 0;
-      const bar = `<div class="card subnav"><div class="bar" style="margin:0">${subs.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-subtab="${k}" data-g="${g}">${l}${cnt(k) ? ` <span class="count">${cnt(k)}</span>` : ''}</button>`).join('')}</div></div>`;
+      const vis = subs.filter(([, , show]) => !show || show());
+      const cur = vis.some(([k]) => k === sub[g]) ? sub[g] : vis[0][0];
+      const cnt = k => k === 'pending' ? (db.pending || []).length : k === 'tcollect' ? (db.collections || []).filter(c => c.status === 'sent').length : k === 'dups' ? dupsN() : 0;
+      const bar = `<div class="card subnav"><div class="bar" style="margin:0">${vis.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-subtab="${k}" data-g="${g}">${l}${cnt(k) ? ` <span class="count">${cnt(k)}</span>` : ''}</button>`).join('')}</div></div>`;
       const fn = ORIG[cur] || adminViews[cur];
       return bar + (fn ? fn() : empty('هذا القسم غير محمّل.'));
     };
   });
   /* أقسام الشريط الجانبي الجديدة */
   const keep = new Map(TABS.admin.map(t => [t[0], t[1]]));
-  keep.set('fees', 'الاشتراكات'); keep.set('payroll', 'المرتبات'); keep.set('settings', 'الإعدادات');
+  keep.set('teachers', 'العاملون'); keep.set('fees', 'المالية'); keep.set('settings', 'الإعدادات');
+  /* التبويب الفعلي المعروض الآن (داخل القسم الجامع)، لمن يحتاج معرفته: pager.js وfixpay.js… */
+  const curSub = g => { const subs = GROUPS[g]; if (!subs) return g; const vis = subs.filter(([, , show]) => !show || show()); return vis.some(([k]) => k === sub[g]) ? sub[g] : vis[0][0]; };
+  window.QLView = () => (session?.role === 'admin' && GROUPS[ui.tab] ? curSub(ui.tab) : ui.tab);
   TABS.admin.splice(0, TABS.admin.length, ...ORDER.filter(([k]) => keep.has(k)).map(([k]) => [k, keep.get(k)]),
     /* أي قسم أضافه ملف آخر ولم يُذكر هنا يبقى في آخر القائمة */
     ...[...keep.keys()].filter(k => !ORDER.some(o => o[0] === k) && !OWNER[k]).map(k => [k, keep.get(k)]));
 
   /* «تحصيل المعلمين» لا عمود فيه للمكان، فاسم الحلقة فيه بمكانها (كما كان قسمًا مستقلًا) */
   const baseLabel = halaqaLabel;
+  /* (وعمومًا: داخل قسم جامع تُسمّى الحلقات كما في تبويبها الأصلي) */
   halaqaLabel = function (h) {
-    if (ui.tab !== 'fees' || sub.fees !== 'tcollect') return baseLabel(h);
-    ui.tab = 'tcollect'; try { return baseLabel(h); } finally { ui.tab = 'fees'; }
+    const g = ui.tab, v = session?.role === 'admin' && GROUPS[g] ? curSub(g) : g;
+    if (v === g) return baseLabel(h);
+    ui.tab = v; try { return baseLabel(h); } finally { ui.tab = g; }
   };
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-subtab]'); if (!b) return;
@@ -77,7 +99,7 @@
      الأقسام المتقابلة متجاورة (طلاب المدير وطلاب المعلم، التحصيل وتحصيل المعلمين…)، والصفحة التي
      تفتح عند الدخول تبقى كما هي لكل فئة (الحضور للمعلم والمشرف، والاشتراكات للمحاسب…). */
   const MASTER = [['dash'], ['me'], ['members'],
-    ['students', 'التعليم'], ['mine', 'التعليم'], ['att', 'التعليم'], ['hist', 'التعليم'], ['teachers', 'التعليم'], ['halaqat', 'التعليم'], ['absence', 'التعليم'],
+    ['students', 'التعليم'], ['mine', 'التعليم'], ['teachers', 'التعليم'], ['halaqat', 'التعليم'], ['att', 'التعليم'], ['hist', 'التعليم'], ['absence', 'التعليم'],
     ['fees', 'المالية'], ['tcollect', 'المالية'], ['collect', 'المالية'], ['payroll', 'المالية'],
     ['news', 'التواصل'], ['notes', 'التواصل'],
     ['settings', 'النظام'], ['preview', 'النظام'],
@@ -95,14 +117,18 @@
     if (!session) return;
     const nav = document.querySelector('.side nav.tabs'); if (!nav || nav.querySelector('.navgrp')) return;
     let last = '';
-    nav.querySelectorAll(':scope > button[data-v]').forEach(b => {
+    const btns = [...nav.querySelectorAll(':scope > button[data-v]')];
+    btns.forEach((b, i) => {
       const g = GRP.get(b.dataset.v) || '';
-      if (g && g !== last) b.insertAdjacentHTML('beforebegin', `<div class="navgrp">${g}</div>`);
+      /* عنوان المجموعة لا يُكرَّر إن كان قسمها الوحيد بالاسم نفسه («المالية») */
+      const alone = (GRP.get(btns[i + 1]?.dataset.v) || '') !== g && b.textContent.trim().startsWith(g);
+      if (g && g !== last && !alone) b.insertAdjacentHTML('beforebegin', `<div class="navgrp">${g}</div>`);
+      else if (g && g !== last && alone && i) b.insertAdjacentHTML('beforebegin', '<div class="navgrp" aria-hidden="true"></div>');
       last = g;
     });
     if (session.role !== 'admin') return;
     const badge = (k, n) => { const b = nav.querySelector(`button[data-v="${k}"]`); if (b && n && !b.querySelector('.count')) b.insertAdjacentHTML('beforeend', `<span class="count">${n}</span>`); };
-    badge('settings', (db.pending || []).length);
+    badge('settings', (db.pending || []).length + dupsN());
     badge('fees', (db.collections || []).filter(c => c.status === 'sent').length);
   }
 
@@ -347,10 +373,10 @@
     unifyTabs();
     const base = render;
     render = function () {
+      /* قسم صار تبويبًا: يُفتح القسم الجامع على هذا التبويب (قبل فحص صفحة البداية، وإلا أعاده إليها) */
+      if (session?.role === 'admin' && OWNER[ui.tab] && OWNER[ui.tab] !== ui.tab) { sub[OWNER[ui.tab]] = ui.tab; saveSub(); ui.tab = OWNER[ui.tab]; saveTab(); }
       /* صفحة البداية لكل فئة كما كانت (لا أول القائمة بعد توحيد الترتيب) */
       if (session && TABS[session.role] && !TABS[session.role].some(t => t[0] === ui.tab) && HOME[session.role]) ui.tab = HOME[session.role];
-      /* قسم صار تبويبًا: يُفتح القسم الجامع على هذا التبويب */
-      if (session?.role === 'admin' && OWNER[ui.tab] && OWNER[ui.tab] !== ui.tab) { sub[OWNER[ui.tab]] = ui.tab; saveSub(); ui.tab = OWNER[ui.tab]; }
       const r = base.apply(this, arguments);
       try { decorate(); } catch (err) { /* لا يعطّل العرض */ }
       try { afterRender(); } catch (err) { /* لا يعطّل العرض */ }
