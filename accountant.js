@@ -1,6 +1,6 @@
 'use strict';
 /* ============ المحاسب ============
-   أقسامه الظاهرة: الاشتراكات (الرئيسية، ومعها أعمال الطلاب: إضافة، منقطع/منتظم، نقل)، وتحصيل المعلمين، وملاحظات للإدارة، والإعلانات.
+   أقسامه الظاهرة: الاشتراكات (الرئيسية، ومعها أعمال الطلاب: إضافة، منقطع/منتظم، نقل)، والطلاب (في حدود صلاحياته)، وتحصيل المعلمين، وملاحظات للإدارة، والإعلانات.
    كل عمل مربوط بصلاحية يملكها المحاسب افتراضيًا، ويمكن للمدير سحبها منه أو منحها لغيره من قسم «الصلاحيات».
    الخادم يتحقق من كل صلاحية، ولا يسمح لغير المدير بتعديل بيانات الطالب الأخرى. */
 (() => {
@@ -32,10 +32,10 @@
   const statusCell = s => stOff(s) ? `<span class="tag tag-no">منقطع</span>${s.info?.statusDate ? ` <small class="muted">${esc(s.info.statusDate)}</small>` : ''}` : '<span class="tag tag-ok">منتظم</span>';
   /* جدول طلاب (بأعمدة الحلقة والمكان أو بدونها) */
   function studentTable(list, withHal) {
-    const shown = list.slice(0, 300);
+    const lim = matchMedia('(max-width:860px)').matches ? 60 : 300, shown = list.slice(0, lim); // على الهاتف 60 صفًا يكفي (البحث يضيّق)
     return `<div class="tbl"><table><tr><th>#</th><th>الطالب</th>${withHal ? '<th>الحلقة</th><th>المكان</th>' : ''}<th>الحالة</th><th class="noprint"></th></tr>
       ${shown.map((s, i) => { const h = halOf(s); return `<tr><td>${i + 1}</td><td>${esc(s.name)}</td>${withHal ? `<td>${h ? esc(halaqaLabel(h)) : '<span class="muted">—</span>'}</td><td>${h ? esc(placeName(h) || '—') : '<span class="muted">—</span>'}</td>` : ''}<td>${statusCell(s)}</td><td class="noprint">${actions(s)}</td></tr>`; }).join('')}</table></div>
-      ${list.length > 300 ? `<p class="muted" style="margin:.4rem 0 0">يظهر أول 300 من ${list.length} — اكتب للتضييق</p>` : ''}`;
+      ${list.length > lim ? `<p class="muted" style="margin:.4rem 0 0">يظهر أول ${lim} من ${list.length} — اكتب للتضييق</p>` : ''}`;
   }
   /* سطر حلقة قابل للفتح، وتحته طلابها إن فُتحت */
   function halaqaBlock(h, withChip) {
@@ -134,10 +134,10 @@
       ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>الفئة</th><th>السن</th><th>الحالة</th></tr>${list.map((s, i) => `<tr><td>${i + 1}</td><td>${esc(s.name)}</td><td>${CATS[s.cat || 'child']}</td><td>${ageOf(s) === '' ? '—' : ageOf(s)}</td><td>${statusCell(s)}</td></tr>`).join('')}</table></div>` : empty('لا يوجد طلاب في هذه الحلقة بعد.')}`);
   }
   document.addEventListener('click', e => { const b = e.target.closest('[data-ahstu]'); if (b) halaqaStudentsAcc(byId(db.halaqat, b.dataset.ahstu)); });
-  /* واجهة المحاسب: «الاشتراكات» هي الرئيسية (أول قسم)، و«الطلاب» و«الأماكن والحلقات» مخفيان؛
-     أعماله على الطلاب (استمارة طالب، نقل، منقطع/منتظم) صارت داخل «الاشتراكات» وبالبحث نفسه.
-     (عرضا «الطلاب» و«الأماكن والحلقات» باقيان هنا إن احتجنا إظهارهما لاحقًا) */
-  { const i = TABS.accountant.findIndex(t => t[0] === 'students'); if (i > -1) TABS.accountant.splice(i, 1); }
+  /* واجهة المحاسب: «الاشتراكات» هي الرئيسية (أول قسم)، ثم «الطلاب» في حدود صلاحياته:
+     يطّلع على الطلاب وحلقاتهم وأماكنهم وحالتهم، ولا يظهر له من الأعمال إلا ما مُنح (استمارة طالب، نقل، منقطع/منتظم).
+     الخادم لا يسمح له بغير ذلك أصلًا. («الأماكن والحلقات» يبقى مخفيًا) */
+  { const i = TABS.accountant.findIndex(t => t[0] === 'students'); if (i > -1) { const [t] = TABS.accountant.splice(i, 1); TABS.accountant.splice(TABS.accountant.findIndex(x => x[0] === 'fees') + 1, 0, t); } }
 
   TAB_ICONS.notes = svg('<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>');
   VIEWS.accountant = { students: studentsView, halaqat: placesView, fees: () => window.FeesView(), notes: notesView, news: () => newsView('accountant') };
