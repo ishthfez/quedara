@@ -61,7 +61,7 @@
 
 1. `schema.sql` ثم `admin_bootstrap.sql` (أول حساب مدير)
 2. `sync_incremental.sql` ← `sync_scope.sql`
-3. `fees.sql` ← `fees_private.sql` ← `accountant.sql` ← `perms.sql` ← `collections.sql` ← `notes.sql`
+3. `fees.sql` ← `fees_private.sql` ← `perms.sql` ← `accountant.sql` ← `student_edit.sql` ← `collections.sql` ← `notes.sql`
 4. `roles.sql` (الإداري والمشرف العام) ← `notify.sql` (تأكيد الدفع والتذكير بالسداد للطلاب)
 5. `backup.sql` ثم `select public.backup_new_token();` ← `backup_status.sql` ← `restore.sql`
 

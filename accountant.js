@@ -8,6 +8,7 @@
     ['students.add', 'إضافة طالب', 'استمارة طالب جديد'],
     ['students.status', 'حالة الطالب', 'منقطع أو منتظم'],
     ['students.move', 'نقل طالب', 'من حلقة إلى أخرى أو من مكان لآخر'],
+    ['students.edit', 'تعديل استمارة الطالب', 'كل ما في الاستمارة: الاسم والهاتف والبيانات والصورة والحلقة'],
     ['fees.collect', 'تحصيل الاشتراكات', 'تسجيل ما يُدفع وحذف ما سجّله بنفسه'],
     ['fees.amount', 'قيمة الاشتراك', 'تحديد فئة الطالب وخصمه ومبلغه وتغييرها'],
     ['notes.send', 'ملاحظات للإدارة', 'تظهر في إعلانات المدير أو المشرفين باسم صاحبها']
@@ -28,7 +29,7 @@
   const nameOk = s => has(s.name, st.qn);
   const studentsOf = h => db.students.filter(s => s.halaqaId === h.id && statusOk(s)).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
   const chip = h => { const pn = placeName(h); return pn ? `<span class="tag" role="button" tabindex="0" data-apl="${esc(pn)}" title="عرض حلقات هذا المكان" style="cursor:pointer">${esc(pn)}</span>` : '<span class="tag">بلا مكان</span>'; };
-  const actions = s => `${can('students.move') ? `<button type="button" class="btn sm" data-move="${esc(s.id)}">نقل</button>` : ''}${can('students.status') ? `<button type="button" class="btn sm" data-stat="${esc(s.id)}">${stOff(s) ? 'منتظم' : 'منقطع'}</button>` : ''}`;
+  const actions = s => `${can('students.edit') ? `<button type="button" class="btn sm primary" data-act="editStudent" data-id="${esc(s.id)}">تعديل</button>` : ''}${can('students.move') ? `<button type="button" class="btn sm" data-move="${esc(s.id)}">نقل</button>` : ''}${can('students.status') ? `<button type="button" class="btn sm" data-stat="${esc(s.id)}">${stOff(s) ? 'منتظم' : 'منقطع'}</button>` : ''}`;
   const statusCell = s => stOff(s) ? `<span class="tag tag-no">منقطع</span>${s.info?.statusDate ? ` <small class="muted">${esc(s.info.statusDate)}</small>` : ''}` : '<span class="tag tag-ok">منتظم</span>';
   /* جدول طلاب (بأعمدة الحلقة والمكان أو بدونها) */
   function studentTable(list, withHal) {
@@ -135,7 +136,7 @@
   }
   document.addEventListener('click', e => { const b = e.target.closest('[data-ahstu]'); if (b) halaqaStudentsAcc(byId(db.halaqat, b.dataset.ahstu)); });
   /* واجهة المحاسب: «الاشتراكات» هي الرئيسية (أول قسم)، ثم «الطلاب» في حدود صلاحياته:
-     يطّلع على الطلاب وحلقاتهم وأماكنهم وحالتهم، ولا يظهر له من الأعمال إلا ما مُنح (استمارة طالب، نقل، منقطع/منتظم).
+     يطّلع على الطلاب وحلقاتهم وأماكنهم وحالتهم، ولا يظهر له من الأعمال إلا ما مُنح (استمارة طالب، تعديل الاستمارة، نقل، منقطع/منتظم).
      الخادم لا يسمح له بغير ذلك أصلًا. («الأماكن والحلقات» يبقى مخفيًا) */
   { const i = TABS.accountant.findIndex(t => t[0] === 'students'); if (i > -1) { const [t] = TABS.accountant.splice(i, 1); TABS.accountant.splice(TABS.accountant.findIndex(x => x[0] === 'fees') + 1, 0, t); } }
 
