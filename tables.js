@@ -361,7 +361,8 @@
   const LBL = () => db.settings.col_labels || {};
   const thsOf = tbl => [...tbl.rows].slice(0, firstData(tbl)).flatMap(tr => [...tr.cells]);
   const origOf = th => th.dataset.orig ?? (th.dataset.orig = th.textContent.replace(/\s+/g, ' ').trim());
-  const keyOf = tbl => (ui.tab || '') + '::' + thsOf(tbl).map(origOf).join('|');
+  /* القسم الفعلي (بعد إعادة التنظيم صارت أقسام تبويبات داخل غيرها، فـ ui.tab وحده يتغير: «الاشتراكات» داخل «الطلاب» مثلًا) */
+  const keyOf = tbl => ((window.QLView ? window.QLView() : ui.tab) || '') + '::' + thsOf(tbl).map(origOf).join('|');
   function setThText(th, t) {
     const tn = [...th.childNodes].find(n => n.nodeType === 3 && n.textContent.trim());
     if (tn) tn.textContent = t; else if (!th.children.length) th.textContent = t;
