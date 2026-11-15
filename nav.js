@@ -73,10 +73,34 @@
     .shell.collapsed .side .navgrp{font-size:0;padding:.35rem 0;border-top:1px solid rgba(255,255,255,.14);margin:0 .6rem}
     .subnav{padding:.55rem .7rem;margin-bottom:.8rem}.subnav .btn{white-space:nowrap}`;
   document.head.appendChild(css);
+  /* ===== القائمة الجانبية: ترتيب واحد وعناوين واحدة لكل الفئات، وكل فئة ترى المتاح لها فقط =====
+     الأقسام المتقابلة متجاورة (طلاب المدير وطلاب المعلم، التحصيل وتحصيل المعلمين…)، والصفحة التي
+     تفتح عند الدخول تبقى كما هي لكل فئة (الحضور للمعلم والمشرف، والاشتراكات للمحاسب…). */
+  const MASTER = [['dash'], ['me'], ['members'],
+    ['students', 'التعليم'], ['mine', 'التعليم'], ['att', 'التعليم'], ['hist', 'التعليم'], ['teachers', 'التعليم'], ['halaqat', 'التعليم'], ['absence', 'التعليم'],
+    ['fees', 'المالية'], ['tcollect', 'المالية'], ['collect', 'المالية'], ['payroll', 'المالية'],
+    ['news', 'التواصل'], ['notes', 'التواصل'],
+    ['settings', 'النظام'], ['preview', 'النظام'],
+    ['profile', 'حسابي']];
+  const MI = new Map(MASTER.map(([k], i) => [k, i])), GRP = new Map(MASTER.map(([k, g]) => [k, g || '']));
+  const HOME = {};
+  function unifyTabs() {
+    Object.entries(TABS).forEach(([role, list]) => {
+      if (!HOME[role] && list[0]) HOME[role] = list[0][0];
+      const pos = new Map(list.map((t, i) => [t, i]));
+      list.sort((a, b) => (MI.has(a[0]) ? MI.get(a[0]) : 900 + pos.get(a)) - (MI.has(b[0]) ? MI.get(b[0]) : 900 + pos.get(b)));
+    });
+  }
   function decorate() {
-    if (session?.role !== 'admin') return;
+    if (!session) return;
     const nav = document.querySelector('.side nav.tabs'); if (!nav || nav.querySelector('.navgrp')) return;
-    ORDER.filter(o => o[1]).forEach(([k, t]) => { const b = nav.querySelector(`button[data-v="${k}"]`); if (b) b.insertAdjacentHTML('beforebegin', `<div class="navgrp">${t}</div>`); });
+    let last = '';
+    nav.querySelectorAll(':scope > button[data-v]').forEach(b => {
+      const g = GRP.get(b.dataset.v) || '';
+      if (g && g !== last) b.insertAdjacentHTML('beforebegin', `<div class="navgrp">${g}</div>`);
+      last = g;
+    });
+    if (session.role !== 'admin') return;
     const badge = (k, n) => { const b = nav.querySelector(`button[data-v="${k}"]`); if (b && n && !b.querySelector('.count')) b.insertAdjacentHTML('beforeend', `<span class="count">${n}</span>`); };
     badge('settings', (db.pending || []).length);
     badge('fees', (db.collections || []).filter(c => c.status === 'sent').length);
@@ -300,8 +324,11 @@
     if (baseToggle) A.navToggle = d => { const was = ui.nav; baseToggle(d); if (!was && ui.nav) history.pushState(navState({ layer: true }), ''); else if (was && !ui.nav) popLayer(); };
     if (baseClose) A.navClose = d => { const was = ui.nav; baseClose(d); if (was) popLayer(); };
     if (typeof freezeTables === 'function' && typeof tableGrid === 'function') freezeTables = fastFreeze;
+    unifyTabs();
     const base = render;
     render = function () {
+      /* صفحة البداية لكل فئة كما كانت (لا أول القائمة بعد توحيد الترتيب) */
+      if (session && TABS[session.role] && !TABS[session.role].some(t => t[0] === ui.tab) && HOME[session.role]) ui.tab = HOME[session.role];
       /* قسم صار تبويبًا: يُفتح القسم الجامع على هذا التبويب */
       if (session?.role === 'admin' && OWNER[ui.tab] && OWNER[ui.tab] !== ui.tab) { sub[OWNER[ui.tab]] = ui.tab; saveSub(); ui.tab = OWNER[ui.tab]; }
       const r = base.apply(this, arguments);
