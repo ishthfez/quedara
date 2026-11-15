@@ -15,7 +15,8 @@
   document.head.appendChild(css);
 
   const limits = new Map(); let page = '';
-  const pageKey = () => `${session?.role}|${ui.tab}|${ui.msub || ''}|${ui.svw || ''}`;
+  const view = () => (window.QLView ? window.QLView() : ui.tab);
+  const pageKey = () => `${session?.role}|${view()}|${ui.msub || ''}|${ui.svw || ''}`;
   const firstData = t => { const i = [...t.rows].findIndex(r => [...r.cells].some(x => x.tagName === 'TD')); return i < 0 ? t.rows.length : i; };
   const sig = new WeakMap();   // جدول لم يتغير منذ آخر مرة لا يُعاد فحصه (المراقب يعمل مع كل تغيير في الصفحة)
   function apply(t, key, force, skip) {
@@ -47,7 +48,7 @@
     raf = 0;
     if (!session) return;
     const pk = pageKey(); if (pk !== page) { page = pk; limits.clear(); }
-    const skipMain = SKIP_TABS.includes(ui.tab);
+    const skipMain = SKIP_TABS.includes(view());
     document.querySelectorAll('main .tbl table').forEach((t, i) => apply(t, 'm' + i, false, skipMain));
     document.querySelectorAll('.overlay .tbl table').forEach((t, i) => apply(t, 'o' + i));
   }
