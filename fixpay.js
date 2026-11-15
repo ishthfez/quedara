@@ -97,7 +97,7 @@
   new MutationObserver(() => {
     if (session?.role !== 'admin' || window.QL_DEMO) return;
     const main = document.querySelector('main'); if (!main || main.querySelector('[data-fixpay]')) return;
-    if (!(ui.tab === 'members' || ui.tab === 'students')) return;
+    if (!['members', 'dups', 'students'].includes((window.QLView ? window.QLView() : ui.tab))) return;
     const r = found(); if (!r) return;
     const card = main.querySelector('.card'); if (!card) return;
     card.insertAdjacentHTML('afterbegin', `<div class="note" data-fixpay style="border:1px solid var(--red,#b3372f);margin:0 0 .7rem">
@@ -154,7 +154,7 @@
   let tCache = null, tSig = '';
   const triageCached = () => { const g = dsig(); if (g !== tSig) { tSig = g; tCache = sameTriage(); } return tCache; };
   new MutationObserver(() => {
-    if (session?.role !== 'admin' || ui.tab !== 'members' || ui.msub !== 'dups') return;
+    if (session?.role !== 'admin' || (window.QLView ? window.QLView() : ui.tab) !== 'dups' || ui.msub !== 'dups') return;
     const note = document.querySelector('main .card > .note:not([data-fixpay])'); if (!note || document.querySelector('[data-samego]')) return;
     const r = triageCached(); if (!r.merge.length) return;
     note.insertAdjacentHTML('afterend', `<div class="bar" style="margin:.2rem 0 .7rem"><span class="muted grow" style="font-size:.88rem">${r.merge.length} في الحلقة نفسها أو المسجد نفسه (الطالب نفسه)${r.other.length ? ` · ${r.other.length} في مكان آخر للمراجعة` : ''}${r.unknown.length ? ` · ${r.unknown.length} حلقتهم في الملف غير محددة` : ''}</span>
