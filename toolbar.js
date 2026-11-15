@@ -7,7 +7,7 @@
      - Excel وPDF أيقونتان ملوّنتان (جدول أخضر، ومستند أحمر مكتوب عليه PDF) بدل الكلمة.
      - ملاحظة الإرشاد تحت الشريط تُخفى، ما عدا التنبيهات المهمة (شريط «إصلاح» وما فيه أزرار).
      - زر «إضافة» آخر الصف (على اليسار)، والأزرار متجاورة بعد التصفية والبحث.
-     - اسم الطالب المنقطع والعامل المتوقف بالأحمر في كل الجداول (يُعرف من علامة «منقطع/متوقف» في صفه أو خانة حالته).
+     - صف الطالب المنقطع والعامل المتوقف كله بالأحمر في كل الجداول (يُعرف من علامة «منقطع/متوقف» في صفه أو خانة حالته).
      - المحاذاة في كل الأقسام: العنوان والقوائم المنسدلة والبحث على اليمين في سطر واحد، والأزرار وحدها على اليسار
        (في الصف المدموج وفي كل شريط آخر، عدا شرائط التبويبات).
      - التكبير والتصغير زر واحد يفتح شريطًا رأسيًا يُسحب بالإصبع أو الفأرة (يسري على كل الجداول كما كان).
@@ -89,11 +89,17 @@
     .tblprint.qtb input[type=search]{flex:1 1 13rem;max-width:22rem;min-width:9rem}
     .btn.icon-only.primary svg{stroke:currentColor}
     .qnote-hidden{display:none!important}
+    .tblprint.qtb .btn{white-space:nowrap}
+    .tblprint.qtb .btn:not(.icon-only):not(.texp):not(.qri){width:auto!important;min-width:max-content;padding-inline:.7rem}
+    main .card > .bar:has(> .qcombo > [data-fplace]) > .attdate{order:3;flex:0 0 auto;display:flex;align-items:center;gap:.4rem;white-space:nowrap}
+    main .card > .bar:has(> .qcombo > [data-fplace]) > .attdate input{width:auto}
+    @media (max-width:700px){main .card > .bar:has(> .qcombo > [data-fplace]) > .attdate{order:6;flex:1 1 100%}main .card > .bar:has(> .qcombo > [data-fplace]) > .attdate input{flex:1}}
+    main .tbl td.attcell{white-space:nowrap}
     main .tbl td .btn.qri{width:32px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle}
     main .tbl td .btn.qri svg{width:17px;height:17px}
     .lnk.sname{text-decoration:none;text-align:start;font:inherit;color:inherit}.lnk.sname:hover{text-decoration:underline;text-decoration-color:var(--gold,#b08a3e)}
     main [data-act="addStudent"]:has(~ [data-qadd]),main [data-qadd] ~ [data-act="addStudent"]{display:none!important}
-    main .tbl td.qoffn,main .tbl td.qoffn b,main .tbl td.qoffn .lnk,main .tbl td.qoffn span:not(.tag):not(.av){color:var(--red,#b3372f)!important}
+    main .tbl tr.qoffr > td,main .tbl tr.qoffr > td :is(b,small,.lnk,.muted,span:not(.tag):not(.av):not(.cnt),select){color:var(--red,#b3372f)!important}
     @media (max-width:600px){.tblprint.qtb .qsp{flex-basis:100%;height:0}}`;
   document.head.appendChild(css);
 
@@ -201,7 +207,7 @@
       [...tbl.rows].forEach(r => {
         if (r === head || !r.cells[ni]) return;
         const off = offTab || !!r.querySelector('select.qoff') || [...r.querySelectorAll('.tag')].some(t => /^(منقطع|متوقف)$/.test(t.textContent.trim()));
-        r.cells[ni].classList.toggle('qoffn', off);
+        r.classList.toggle('qoffr', off);   // الصف كله بالأحمر
       });
     });
     /* اسم الطالب يفتح ملفه، ويُحذف زر «الملف» من صفه */
