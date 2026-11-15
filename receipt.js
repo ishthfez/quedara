@@ -17,7 +17,7 @@
 
   function receiptHtml(f) {
     const s = byId(db.students, f.studentId) || { name: '—' }, h = byId(db.halaqat, s.halaqaId);
-    const due = window.QLFeeDue ? window.QLFeeDue(s) : null, paid = paidFor(f.studentId, f.y, f.m);
+    const due = window.QLFeeDue ? window.QLFeeDue(s, +f.y) : null, paid = paidFor(f.studentId, f.y, f.m);
     const rest = due != null && due > paid ? due - paid : 0;
     const w = width(), fs = w === 80 ? 13 : 11.5;
     const now = new Date(), time = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
