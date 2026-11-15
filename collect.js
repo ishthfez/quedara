@@ -1,7 +1,7 @@
 'use strict';
 /* ============ تحصيل المعلمين ============
    المعلم (تبويب «التحصيل»): يختار الحلقة والشهر، فيرى طلابه بمستحق كل منهم، ويكتب ما حصّله وملاحظته، ثم «إرسال للمحاسب».
-   المحاسب والمدير (تبويب «تحصيل المعلمين»): يراجع القوائم المرسلة، فيؤكد الأسماء السليمة (تُسجَّل دفعات في الاشتراكات)
+   المحاسب والمدير (تبويب «تحصيل المعلمين»): يراجع القوائم المرسلة، فيؤكد الأسماء السليمة (تُسجَّل دفعات في الاشتراكات)
    أو يعيد ما فيه مشكلة بملاحظة، فتعود للمعلم ليصححها ويرسلها مرة أخرى. المؤكد لا يتغير.
    كل حفظ ومراجعة عبر دوال الخادم (save_collection / review_collection) التي تتحقق من الصلاحيات. */
 (() => {
@@ -34,6 +34,8 @@
 
   /* مستحقات الطلاب من الخادم (الرقم فقط) */
   async function loadDues(hid, force) {
+    /* بلا خادم: المستحق محسوبًا على الجهاز من إعدادات الاشتراك (fees.js) */
+    if (!CLOUD && hid && window.QLFeeDue && st.duesFor !== hid) { st.dues = Object.fromEntries(db.students.filter(s => s.halaqaId === hid).map(s => [s.id, window.QLFeeDue(s)])); st.duesFor = hid; st.duesAt = Date.now(); return; }
     if (!CLOUD || !hid || st.loading || (!force && st.duesFor === hid && Date.now() - st.duesAt < 60000)) return;
     st.loading = true;
     try {
@@ -67,13 +69,24 @@
         <td>${fixed ? esc(note) : `<input data-cnote="${s.id}" value="${esc(note)}" placeholder="اختياري" style="min-width:10rem">`}</td>
         <td>${L ? tag(LINE[L.state] || LINE.pending) : ''}${L?.accNote ? `<br><small style="color:var(--red)">${esc(L.accNote)}</small>` : ''}</td></tr>`;
     }).join('');
+    /* عدّادات الشهر: المستحق على المنتظمين، وما أكّده المحاسب، وما عنده للمراجعة، والباقي */
+    const act = list.filter(s => !stOff(s)), duesOk = st.duesFor === st.hid;
+    const expected = duesOk ? act.reduce((a, s) => a + (+st.dues[s.id] || 0), 0) : null;
+    const sumBy = f => (c?.lines || []).filter(f).reduce((a, l) => a + (+l.amount || 0), 0);
+    const okSum = sumBy(l => l.state === 'ok'), pendSum = c?.status === 'sent' || c?.status === 'returned' ? sumBy(l => l.state === 'pending') : 0;
+    const issueSum = sumBy(l => l.state === 'issue');
+    const paidN = act.filter(s => lineOf(s.id)?.state === 'ok' && (!duesOk || +lineOf(s.id).amount >= (+st.dues[s.id] || 0))).length;
+    const rest = expected == null ? null : Math.max(0, expected - okSum - pendSum);
+    const stat = (v, l, cls) => `<div class="stat${cls ? ' ' + cls : ''}"><b>${v}</b><span>${l}</span></div>`;
+    const stats = `<div class="grid cstats">${stat(expected == null ? '…' : money(expected), 'المستحق على طلابي')}${stat(money(okSum), 'سلّمته (أكّده المحاسب)')}${stat(money(pendSum), 'عند المحاسب للمراجعة')}${issueSum ? stat(money(issueSum), 'مُعاد للتصحيح') : ''}${stat(rest == null ? '…' : money(rest), 'الباقي لم يُسلَّم')}${stat(`${paidN} / ${act.length}`, 'طلاب سدّدوا')}</div>`;
     const banner = !c ? '' : c.status === 'sent' ? `أُرسلت للمحاسب — بانتظار المراجعة.` : c.status === 'done' ? `أكّد المحاسب القائمة كاملة${c.reviewedBy ? ' (' + esc(c.reviewedBy) + ')' : ''}.` :
       c.status === 'returned' ? `أعاد المحاسب ${c.lines.filter(l => l.state === 'issue').length} اسمًا (بالأحمر): صحّحها ثم «إرسال للمحاسب».${c.accNote ? '<br>ملاحظة المحاسب: ' + esc(c.accNote) : ''}` : 'مسودة محفوظة لم تُرسل بعد.';
     return `<div class="card"><div class="bar">${hs.length > 1 ? `<select data-chal style="width:auto">${hs.map(h => `<option value="${h.id}" ${h.id === st.hid ? 'selected' : ''}>${esc(halaqaLabel(h))}</option>`).join('')}</select>` : `<b>${esc(halaqaLabel(hs[0]))}</b>`}
         <select data-cmon style="width:auto">${monthOpts().map(([y, m]) => `<option value="${y}-${m}" ${y === st.y && m === st.m ? 'selected' : ''}>${MONTHS[m - 1]} ${y}</option>`).join('')}</select>
         <span class="grow"></span>${c ? tag(STATUS[c.status]) : ''}</div>
+      ${stats}
       ${banner ? `<div class="note">${banner}</div>` : '<p class="muted" style="font-size:.85rem;margin:0 0 .6rem">اكتب ما حصّلته من كل طالب هذا الشهر (والملاحظة إن وُجدت)، ثم «إرسال للمحاسب». الطالب الذي لم يدفع اترك خانته فارغة.</p>'}
-      ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>المستحق</th><th>المحصَّل</th><th>ملاحظة</th><th>الحالة</th></tr>${rows}
+      ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>المستحق</th><th>المحصَّل</th><th>ملاحظة</th><th>الحالة</th></tr>${rows}
         <tr class="sum"><td colspan="3">الإجمالي</td><td>${money(total)}</td><td colspan="2"></td></tr></table></div>` : empty('لا يوجد طلاب في هذه الحلقة.')}
       ${locked || !list.length ? '' : `<div class="row"><button type="button" class="btn primary" data-csend="1">إرسال للمحاسب</button><button type="button" class="btn" data-csend="0">حفظ مسودة</button></div>`}</div>`;
   }
@@ -125,7 +138,7 @@
     const ov = document.createElement('div'); ov.className = 'overlay';
     ov.innerHTML = `<div class="modal wide"><h2>تحصيل ${esc(c.teacherName)} — ${MONTHS[c.m - 1]} ${c.y}</h2>
       <p class="muted" style="margin:0 0 .6rem">${h ? esc(halaqaLabel(h)) : ''} · ${c.lines.length} طالبًا · الإجمالي ${money(sum)} جنيه ${tag(STATUS[c.status])}</p>
-      <div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>المستحق</th><th>المحصَّل</th><th>الفرق</th><th>ملاحظة المعلم</th><th>القرار</th><th>ملاحظة المحاسب</th></tr>${rows}</table></div>
+      <div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>المستحق</th><th>المحصَّل</th><th>الفرق</th><th>ملاحظة المعلم</th><th>القرار</th><th>ملاحظة المحاسب</th></tr>${rows}</table></div>
       ${open ? '<label style="margin-top:.6rem">ملاحظة عامة للمعلم (اختيارية)<input data-rall></label>' : c.accNote ? `<p class="note">ملاحظة المحاسب: ${esc(c.accNote)}</p>` : ''}
       <div class="row">${open ? '<button type="button" class="btn primary" data-rsave>تنفيذ القرار</button>' : ''}<button type="button" class="btn" data-close>إغلاق</button></div></div>`;
     document.body.appendChild(ov);
