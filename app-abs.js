@@ -3,6 +3,19 @@
 (() => {
   const MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
+  /* ---- CSS: صف المنقطع أحمر ---- */
+  const css = document.createElement('style');
+  css.textContent = `tr.tr-off td{color:var(--red,#b3372f)!important;opacity:.75} tr.tr-off .tag,tr.tr-off .btn{opacity:.85}`;
+  document.head.appendChild(css);
+
+  /* ---- اسم الحلقة بدون كبسولة «حلقة» وبدون اسم المكان ---- */
+  const cleanHName = (hid) => {
+    const h = byId(db.halaqat, hid); if (!h) return '\u2014';
+    /* hName() يرجع "حلقة فلان" مع كبسولة، نريد اسم المحفظ فقط */
+    const teacher = byId(db.members, h.teacherId);
+    return teacher ? teacher.name : (h.name || '\u2014');
+  };
+
   /* ---- غياب الشهر ---- */
   function absMonth(sid) {
     const fy = window.QLFees?.y || new Date().getFullYear(), fm = window.QLFees?.m || (new Date().getMonth() + 1);
@@ -48,7 +61,6 @@
       if (stOff(s)) return;
       if (fee === 0) { freeN++; return; }
       if (fee) expected += fee;
-      /* من دفع = مسدّد، من لم يدفع = لم يسدّد */
       if (paid > 0) { paidN++; }
       else if (fee) { noneN++; unpaid.push(s.id); }
     });
@@ -76,7 +88,7 @@
     ${unpaid.length && can('fees.collect') ? `<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">${unpaid.length} طالب لم يسدّد اشتراك ${MONTH_NAMES[fm - 1]}.</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (${unpaid.length})</button></div>` : ''}`;
   }
 
-  /* ---- عمود المستحق: دفع = مسدّد (أخضر)، لم يدفع = مستحق ---- */
+  /* ---- عمود المستحق ---- */
   if (window.QLFeesEmbed) {
     window.QLFeesEmbed.cells = function(s) {
       if (!can('fees.collect') && !can('fees.amount')) return '';
@@ -93,14 +105,13 @@
       if (!can('fees.collect') && !can('fees.amount')) return '';
       const fee = window.QLFeeDue?.(s) ?? null, off = stOff(s);
       const cloudMissing = typeof CLOUD !== 'undefined' && CLOUD && window.Cloud?.feesReady === false;
-      const fy = window.QLFees?.y, fm = window.QLFees?.m;
-      const paid = getPaid(s.id, fy, fm);
+      const paid = getPaid(s.id, window.QLFees?.y, window.QLFees?.m);
       const needRemind = can('fees.collect') && !off && fee !== 0 && fee && paid <= 0;
       return `${can('fees.collect') ? `<button type="button" class="btn sm primary" data-fee-pay2="${esc(s.id)}" ${cloudMissing || fee === 0 ? 'disabled' : ''}>تحصيل</button>` : ''}${needRemind ? `<button type="button" class="btn sm" data-remind="${esc(s.id)}" title="تذكير">تذكير</button>` : ''}`;
     };
   }
 
-  /* ---- نافذة تحصيل: تطلب سبب لو المبلغ أقل من المستحق ---- */
+  /* ---- نافذة تحصيل ---- */
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-fee-pay2]'); if (!b || !can('fees.collect')) return;
     e.stopPropagation();
@@ -129,19 +140,12 @@
     ov.querySelector('[data-close]').onclick = () => ov.remove();
     const amtInput = ov.querySelector('[name=amount]');
     const reasonWrap = ov.querySelector('[data-reason-wrap]');
-    const checkReason = () => {
-      const amt = +amtInput.value || 0;
-      const needReason = fee && amt > 0 && amt < fee;
-      reasonWrap.hidden = !needReason;
-      if (!needReason) ov.querySelector('[name=reason]').value = '';
-    };
+    const checkReason = () => { const amt = +amtInput.value || 0; const need = fee && amt > 0 && amt < fee; reasonWrap.hidden = !need; if (!need) ov.querySelector('[name=reason]').value = ''; };
     amtInput.addEventListener('input', checkReason);
     ov.querySelector('[data-dosave]').onclick = () => {
       const amt = +amtInput.value;
       if (!(amt > 0)) { toast('اكتب مبلغاً صحيحاً'); return; }
-      if (fee && amt < fee && !ov.querySelector('[name=reason]').value) {
-        toast('اختر سبب دفع مبلغ أقل من المستحق'); return;
-      }
+      if (fee && amt < fee && !ov.querySelector('[name=reason]').value) { toast('اختر سبب دفع مبلغ أقل من المستحق'); return; }
       const [sy, sm] = ov.querySelector('[name=month]').value.split('-').map(Number);
       const reason = ov.querySelector('[name=reason]').value;
       const note = [(ov.querySelector('[name=note]').value || '').trim(), reason].filter(Boolean).join(' — ');
@@ -154,7 +158,7 @@
     };
   }, true);
 
-  /* ---- سجل الاشتراكات والفئة في ملف الطالب ---- */
+  /* ---- ملف الطالب: اشتراك + سجل ---- */
   const _origCard = typeof studentCard === 'function' ? studentCard : null;
   if (_origCard) {
     window.studentCard = function(st) {
@@ -208,7 +212,7 @@
     <button class="btn primary" data-act="addStudent">+ استمارة طالب</button></div>
     ${list.length ? `<div class="tbl"><table><tr><th>الاسم</th><th>السن</th><th>الحلقة</th><th>المكان</th><th>آخر حفظ</th><th>الحالة</th><th>غياب الشهر</th>${feeH}<th></th></tr>${list.map(st => {
       const off = stOff(st);
-      return `<tr><td><span class="who">${avatar(st)}<span>${esc(st.name)}</span></span></td><td>${ageOf(st) === '' ? '\u2014' : ageOf(st)}</td><td>${esc(hName(st.halaqaId))}</td><td>${esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014')}</td><td>${esc(lastHifz(st.id))}</td><td><button type="button" class="btn sm${off ? ' danger' : ''}" data-stat="${st.id}">${off ? 'منقطع' : 'منتظم'}</button></td><td><button type="button" class="lnk" data-abs-log="${st.id}">${absMonth(st.id) || '\u0660'}</button></td>${hasFees ? F.cells(st) : ''}<td><button class="btn sm primary" data-act="studentCard" data-id="${st.id}">الملف</button><button class="btn sm" data-act="hist" data-id="${st.id}">السجل</button><button class="btn sm" data-act="editStudent" data-id="${st.id}">تعديل</button>${db.fields.students.length ? `<button class="btn sm" data-act="editExtra" data-k="students" data-id="${st.id}">إضافية</button>` : ''}${hasFees ? F.actions(st) : ''}</td></tr>`;
+      return `<tr${off ? ' class="tr-off"' : ''}><td><span class="who">${avatar(st)}<span>${esc(st.name)}</span></span></td><td>${ageOf(st) === '' ? '\u2014' : ageOf(st)}</td><td>${esc(cleanHName(st.halaqaId))}</td><td>${esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014')}</td><td>${esc(lastHifz(st.id))}</td><td><button type="button" class="btn sm${off ? ' danger' : ''}" data-stat="${st.id}">${off ? 'منقطع' : 'منتظم'}</button></td><td><button type="button" class="lnk" data-abs-log="${st.id}">${absMonth(st.id) || '\u0660'}</button></td>${hasFees ? F.cells(st) : ''}<td><button class="btn sm primary" data-act="studentCard" data-id="${st.id}">الملف</button><button class="btn sm" data-act="hist" data-id="${st.id}">السجل</button><button class="btn sm" data-act="editStudent" data-id="${st.id}">تعديل</button>${db.fields.students.length ? `<button class="btn sm" data-act="editExtra" data-k="students" data-id="${st.id}">إضافية</button>` : ''}${hasFees ? F.actions(st) : ''}</td></tr>`;
     }).join('')}</table></div>` : empty('لا يوجد طلاب.')}</div>`;
   };
 })();
