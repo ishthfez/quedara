@@ -586,6 +586,14 @@
       if (n) html = `<div class="note" style="margin:0 0 .8rem">${n} طالب بلا حلقة. <button type="button" class="btn sm" data-fhnone>عرضهم وتعيين حلقاتهم</button></div>` + html;
       return html;
     };
+    /* ===== حاضر/غائب في زر واحد (أخضر لحاضر، أحمر لغائب)، و«متأخر» زر مستقل، وبلا «معتذر» =====
+       الضغط يبدّل بين حاضر وغائب: الحالة الافتراضية أو «متأخر» تُعرض محايدة بنص «حاضر» (الضغط يسجّله حاضرًا). */
+    const attBtns = (cur, sid) => {
+      const abs = cur === 'absent', pa = cur === 'present' || abs;
+      const next = cur === 'present' ? 'absent' : 'present';
+      return `<button type="button" class="btn sm ${pa ? 'on ' + cur : ''}" data-act="att" data-sid="${esc(sid)}" data-st="${next}">${abs ? 'غائب' : 'حاضر'}</button>
+        <button type="button" class="btn sm ${cur === 'late' ? 'on late' : ''}" data-act="att" data-sid="${esc(sid)}" data-st="late">متأخر</button>`;
+    };
     /* ===== «الطلاب ← الحضور»: مساحة عمل الحلقة =====
        أدوات الحلقة (المنتظمون/المنقطعون، البحث، التسميع، السجل، الإشعار، النقل) ومعها تسجيل الحضور في عمود «حضور اليوم»
        بتاريخ يُختار. الحلقة تُختار بالمكان ثم الحلقة (ui.hid مشترك مع «طلابي»)، والتسجيل بالإجراء نفسه (data-act="att"). */
@@ -609,7 +617,7 @@
         [...tbl.rows].slice(1).forEach(r => {
           const sid = r.querySelector('[data-act="hist"]')?.dataset.id; if (!sid || !r.cells[1]) return;
           const cur = db.attendance.find(a => a.studentId === sid && a.date === ui.date)?.status;
-          r.cells[1].insertAdjacentHTML('afterend', `<td class="attcell">${Object.entries(STATUS).map(([k, l]) => `<button type="button" class="btn sm ${cur === k ? 'on ' + k : ''}" data-act="att" data-sid="${esc(sid)}" data-st="${k}">${l}</button>`).join(' ')}</td>`);
+          r.cells[1].insertAdjacentHTML('afterend', `<td class="attcell">${attBtns(cur, sid)}</td>`);
         });
       }
       return top + t.innerHTML;
