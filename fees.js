@@ -11,6 +11,21 @@
 
   TABS.admin.splice(TABS.admin.findIndex(t => t[0] === 'payroll') + 1, 0, ['fees', 'الاشتراكات']);
   TAB_ICONS.fees = svg('<rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.6"/><path d="M6 9.5v6M18 9.5v6"/>');
+  /* بطاقتا ملخص «الاشتراكات»: صف واحد لكل بيان، والقيمة والبيان في السطر نفسه */
+  const feecss = document.createElement('style');
+  feecss.textContent = `.feecards{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin:0 0 1rem}
+    @media (max-width:700px){.feecards{grid-template-columns:1fr}}
+    .feecard h3{margin:0 0 .7rem;font-size:1rem}
+    .feerow{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.6rem .9rem;border-radius:10px;margin-bottom:.5rem;font-weight:700}
+    .feerow b{font-size:1.2rem}
+    .feerow.fr-ok{background:color-mix(in srgb,var(--leaf,#4e7d45) 16%,transparent);color:var(--leaf,#4e7d45)}
+    .feerow.fr-no{background:color-mix(in srgb,var(--red,#b3372f) 14%,transparent);color:var(--red,#b3372f)}
+    .feerow.fr-info{background:color-mix(in srgb,var(--navy,#13294b) 10%,transparent);color:var(--navy,#13294b)}
+    .feerow.fr-plain{background:var(--navy-l,#eef1f6);color:var(--navy,#13294b)}
+    .feebar{background:var(--line,#e5e7eb);border-radius:999px;height:10px;overflow:hidden;margin:.5rem 0 .3rem}
+    .feebar>span{display:block;height:100%;background:var(--leaf,#4e7d45);border-radius:999px}
+    .feebar-label{display:flex;justify-content:space-between;font-size:.85rem;color:var(--muted,#6b7280)}`;
+  document.head.appendChild(feecss);
   adminViews.fees = () => view();
   window.FeesView = () => view();
   /* يُضاف هذا الملف لفحص التحديث التلقائي (القائمة تُعرَّف في app-actions.js الذي يُحمَّل بعده) */
@@ -156,10 +171,25 @@
     });
     /* من لم يسدّد (كليًا أو جزئيًا) في كل نتائج البحث، لا في الصفوف الظاهرة فقط: لزر «تذكير غير المسددين» */
     window.QLFees = { unpaid, y: st.y, m: st.m };
-    const stat = (v, l) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
-    /* خمسة عدادات: إيراد الشهر الفعلي، والمتوقع منه، وباقي المستحق (الفرق بين مسدَّد ومستحق فعلي للمدفوعين جزئيًا أو لا شيء)،
-       وعدد من سدّد، وعدد من لم يسدّد كامل الاشتراك (جزئي أو لا شيء) */
-    return `<div class="grid">${stat(money(got), 'إيراد الشهر')}${stat(money(expected), 'الإيراد المتوقع')}${stat(money(remaining), 'باقي المستحق')}${stat(paidN, 'سدد الاشتراك')}${stat(partN + noneN, 'لم يسدد')}</div>
+    /* بطاقتان: «الطلاب» (مسددون/غير مسددين/معفون) و«الإيرادات» (متوقعة/فعلية/باقي المستحق) مع شريط نسبة التحصيل.
+       كل صف: البيان والقيمة في السطر نفسه. */
+    const pct = expected > 0 ? Math.round(got / expected * 100) : 0;
+    const feeRow = (cls, v, l) => `<div class="feerow ${cls}"><span>${esc(l)}</span><b>${v}</b></div>`;
+    const feeCards = `<div class="feecards">
+      <div class="card feecard"><h3>الطلاب</h3>
+        ${feeRow('fr-ok', paidN, 'عدد المسددين')}
+        ${feeRow('fr-no', partN + noneN, 'عدد غير المسددين')}
+        ${feeRow('fr-info', freeN, 'عدد المعفيين')}
+      </div>
+      <div class="card feecard"><h3>الإيرادات</h3>
+        ${feeRow('fr-plain', money(expected), 'الإيرادات المتوقعة')}
+        ${feeRow('fr-ok', money(got), 'الإيرادات الفعلية')}
+        ${feeRow('fr-no', money(remaining), 'باقي المستحق')}
+        <div class="feebar"><span style="width:${Math.min(pct, 100)}%"></span></div>
+        <div class="feebar-label"><span>${pct}%</span><span>نسبة التحصيل</span></div>
+      </div>
+    </div>`;
+    return `${feeCards}
       ${unpaid.length && can('fees.collect') ? `<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">${unpaid.length} طالب لم يسدّد اشتراك ${MONTHS[st.m - 1]} (في نتائج البحث).</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (${unpaid.length})</button></div>` : ''}
       ${grouped ? groupedView(list, table) : list.length ? table(list, true) : empty(st.qs || st.qh || st.qp ? 'لا توجد نتائج مطابقة.' : 'لا يوجد طلاب بعد.')}`;
   }
