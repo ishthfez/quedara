@@ -8,8 +8,15 @@ try {
   css.textContent = 'tr.tr-off td{color:var(--red,#b3372f)!important;opacity:.75} tr.tr-off .tag,tr.tr-off .btn{opacity:.85} body,table,input,select,textarea,.card,.stat,.feerow,.feebar-label,.tbl,.tag,.btn,.modal{font-feature-settings:"tnum";-webkit-locale:"en"} .feerow b,.feebar-label span,.tag,.stat b,.stat .num{unicode-bidi:plaintext;direction:ltr}';
   document.head.appendChild(css);
 
+  /* اسم الحلقة: نص فقط بدون كبسولات HTML */
   function cleanHName(hid) {
-    try { var h = byId(db.halaqat, hid); if (!h) return '\u2014'; var t = byId(db.members, h.teacherId); return t ? t.name : (h.name || '\u2014'); } catch(e) { return '\u2014'; }
+    try {
+      var raw = hName(hid);
+      /* hName يرجع HTML فيه <span class="tag">حلقة</span> — نزيل كل tags */
+      var tmp = document.createElement('span');
+      tmp.innerHTML = raw;
+      return tmp.textContent || tmp.innerText || '\u2014';
+    } catch(e) { return '\u2014'; }
   }
 
   var _absCache = { key: '', absMap: {}, activeH: {} };
@@ -42,7 +49,7 @@ try {
       var myAbs = idx.absMap[st.id] || 0;
       if (myAbs > 0) return '<button type="button" class="lnk" data-abs-log="' + st.id + '">' + myAbs + '</button>';
       if (idx.activeH[st.halaqaId]) return '<button type="button" class="lnk" data-abs-log="' + st.id + '">0</button>';
-      return '<span class="muted" style="font-size:.8rem">غير مفعل</span>';
+      return '<span class="muted" style="font-size:.8rem">\u063a\u064a\u0631 \u0645\u0641\u0639\u0644</span>';
     } catch(e) { return '\u2014'; }
   }
 
@@ -52,18 +59,18 @@ try {
       var all = db.attendance.filter(function(a) { return a.studentId === sid; }).sort(function(a, b) { return b.date.localeCompare(a.date); });
       var months = {};
       all.forEach(function(a) { var ym = a.date ? a.date.slice(0, 7) : ''; if (!ym) return; if (!months[ym]) months[ym] = []; months[ym].push(a); });
-      var stL = { present: 'حاضر', late: 'متأخر', excused: 'معتذر', absent: 'غائب' };
+      var stL = { present: '\u062d\u0627\u0636\u0631', late: '\u0645\u062a\u0623\u062e\u0631', excused: '\u0645\u0639\u062a\u0630\u0631', absent: '\u063a\u0627\u0626\u0628' };
       var stC = { present: 'tag-ok', late: '', excused: '', absent: 'tag-no' };
       var html = '';
       Object.keys(months).sort().reverse().forEach(function(ym) {
         var list = months[ym]; var parts = ym.split('-'); var yy = +parts[0]; var mm = +parts[1];
         var abs = list.filter(function(a) { return a.status === 'absent' || a.status === 'excused'; }).length;
         var pres = list.filter(function(a) { return a.status === 'present' || a.status === 'late'; }).length;
-        html += '<h3 style="font-size:1rem;margin:1rem 0 .4rem">' + MONTH_NAMES[mm - 1] + ' ' + yy + ' <small class="muted">(حضور ' + pres + ' · غياب ' + abs + ')</small></h3>';
-        html += '<div class="tbl"><table><tr><th>التاريخ</th><th>الحالة</th></tr>' + list.map(function(a) { return '<tr><td dir="ltr" style="text-align:right">' + esc(a.date) + '</td><td><span class="tag ' + (stC[a.status] || '') + '">' + (stL[a.status] || a.status) + '</span></td></tr>'; }).join('') + '</table></div>';
+        html += '<h3 style="font-size:1rem;margin:1rem 0 .4rem">' + MONTH_NAMES[mm - 1] + ' ' + yy + ' <small class="muted">(\u062d\u0636\u0648\u0631 ' + pres + ' \u00b7 \u063a\u064a\u0627\u0628 ' + abs + ')</small></h3>';
+        html += '<div class="tbl"><table><tr><th>\u0627\u0644\u062a\u0627\u0631\u064a\u062e</th><th>\u0627\u0644\u062d\u0627\u0644\u0629</th></tr>' + list.map(function(a) { return '<tr><td dir="ltr" style="text-align:right">' + esc(a.date) + '</td><td><span class="tag ' + (stC[a.status] || '') + '">' + (stL[a.status] || a.status) + '</span></td></tr>'; }).join('') + '</table></div>';
       });
-      if (!html) html = empty('لا يوجد سجل حضور بعد.');
-      openInfo('سجل الحضور والغياب: ' + s.name, html);
+      if (!html) html = empty('\u0644\u0627 \u064a\u0648\u062c\u062f \u0633\u062c\u0644 \u062d\u0636\u0648\u0631 \u0628\u0639\u062f.');
+      openInfo('\u0633\u062c\u0644 \u0627\u0644\u062d\u0636\u0648\u0631 \u0648\u0627\u0644\u063a\u064a\u0627\u0628: ' + s.name, html);
     } catch(e) { console.error('absLog error:', e); }
   }
   document.addEventListener('click', function(e) { var b = e.target.closest('[data-abs-log]'); if (b) absLog(b.dataset.absLog); });
@@ -102,7 +109,7 @@ try {
         var d = new Date(fy, fm - 1 + k, 1), yy = d.getFullYear(), mm = d.getMonth() + 1;
         mOpts += '<option value="' + yy + '-' + mm + '"' + (yy === fy && mm === fm ? ' selected' : '') + '>' + MONTH_NAMES[mm - 1] + ' ' + yy + '</option>';
       }
-      return '<div class="card feecard" style="margin:0 0 1rem"><div style="display:flex;align-items:center;gap:.7rem;margin:0 0 .8rem;flex-wrap:wrap"><h3 style="margin:0;flex:1">الاشتراكات</h3><select data-fmonth style="width:auto">' + mOpts + '</select></div><div class="feecards" style="margin:0"><div>' + feeRow('fr-plain', activeN, 'عدد الطلاب') + feeRow('fr-ok', paidN, 'مسدَّد') + feeRow('fr-no', noneN, 'لم يسدّد') + feeRow('fr-info', freeN, 'معفى') + '</div><div>' + feeRow('fr-plain', money(expected), 'المتوقع') + feeRow('fr-ok', money(got), 'المحصّل') + feeRow('fr-no', money(remaining), 'الباقي') + '<div class="feebar"><span style="width:' + Math.min(pct, 100) + '%"></span></div><div class="feebar-label"><span>' + pct + '%</span><span>نسبة التحصيل</span></div></div></div></div>' + (unpaid.length && can('fees.collect') ? '<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">' + unpaid.length + ' طالب لم يسدّد اشتراك ' + MONTH_NAMES[fm - 1] + '.</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (' + unpaid.length + ')</button></div>' : '');
+      return '<div class="card feecard" style="margin:0 0 1rem"><div style="display:flex;align-items:center;gap:.7rem;margin:0 0 .8rem;flex-wrap:wrap"><h3 style="margin:0;flex:1">\u0627\u0644\u0627\u0634\u062a\u0631\u0627\u0643\u0627\u062a</h3><select data-fmonth style="width:auto">' + mOpts + '</select></div><div class="feecards" style="margin:0"><div>' + feeRow('fr-plain', activeN, '\u0639\u062f\u062f \u0627\u0644\u0637\u0644\u0627\u0628') + feeRow('fr-ok', paidN, '\u0645\u0633\u062f\u064e\u0651\u062f') + feeRow('fr-no', noneN, '\u0644\u0645 \u064a\u0633\u062f\u0651\u062f') + feeRow('fr-info', freeN, '\u0645\u0639\u0641\u0649') + '</div><div>' + feeRow('fr-plain', money(expected), '\u0627\u0644\u0645\u062a\u0648\u0642\u0639') + feeRow('fr-ok', money(got), '\u0627\u0644\u0645\u062d\u0635\u0651\u0644') + feeRow('fr-no', money(remaining), '\u0627\u0644\u0628\u0627\u0642\u064a') + '<div class="feebar"><span style="width:' + Math.min(pct, 100) + '%"></span></div><div class="feebar-label"><span>' + pct + '%</span><span>\u0646\u0633\u0628\u0629 \u0627\u0644\u062a\u062d\u0635\u064a\u0644</span></div></div></div></div>' + (unpaid.length && can('fees.collect') ? '<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">' + unpaid.length + ' \u0637\u0627\u0644\u0628 \u0644\u0645 \u064a\u0633\u062f\u0651\u062f \u0627\u0634\u062a\u0631\u0627\u0643 ' + MONTH_NAMES[fm - 1] + '.</span><button type="button" class="btn sm" data-remind-all="fees">\u062a\u0630\u0643\u064a\u0631 \u063a\u064a\u0631 \u0627\u0644\u0645\u0633\u062f\u062f\u064a\u0646 (' + unpaid.length + ')</button></div>' : '');
     } catch(e) { console.error('buildSummary error:', e); return ''; }
   }
 
@@ -115,10 +122,10 @@ try {
         var fm = (window.QLFees && window.QLFees.m) || (new Date().getMonth() + 1);
         var paid = getPaid(s.id, fy, fm);
         if (stOff(s)) return '<td><span class="muted">\u2014</span></td>';
-        if (fee === 0) return '<td><span class="tag tag-ok">معفى</span></td>';
+        if (fee === 0) return '<td><span class="tag tag-ok">\u0645\u0639\u0641\u0649</span></td>';
         if (fee == null) return '<td><span class="muted">\u2014</span></td>';
-        if (paid > 0) return '<td><b style="color:var(--leaf,#4e7d45)">' + money(fee) + '</b><br><span class="tag tag-ok">مسدّد</span></td>';
-        return '<td>' + money(fee) + '<br><span class="tag tag-no">مستحق</span></td>';
+        if (paid > 0) return '<td><b style="color:var(--leaf,#4e7d45)">' + money(fee) + '</b><br><span class="tag tag-ok">\u0645\u0633\u062f\u0651\u062f</span></td>';
+        return '<td>' + money(fee) + '<br><span class="tag tag-no">\u0645\u0633\u062a\u062d\u0642</span></td>';
       } catch(e) { return '<td>\u2014</td>'; }
     };
     window.QLFeesEmbed.actions = function(s) {
@@ -127,12 +134,11 @@ try {
         var fee = window.QLFeeDue ? window.QLFeeDue(s) : null;
         var paid = getPaid(s.id, window.QLFees && window.QLFees.y, window.QLFees && window.QLFees.m);
         var needRemind = can('fees.collect') && !stOff(s) && fee !== 0 && fee && paid <= 0;
-        return (can('fees.collect') ? '<button type="button" class="btn sm primary" data-fee-pay2="' + esc(s.id) + '"' + (fee === 0 ? ' disabled' : '') + '>تحصيل</button>' : '') + (needRemind ? '<button type="button" class="btn sm" data-remind="' + esc(s.id) + '" title="تذكير">تذكير</button>' : '');
+        return (can('fees.collect') ? '<button type="button" class="btn sm primary" data-fee-pay2="' + esc(s.id) + '"' + (fee === 0 ? ' disabled' : '') + '>\u062a\u062d\u0635\u064a\u0644</button>' : '') + (needRemind ? '<button type="button" class="btn sm" data-remind="' + esc(s.id) + '" title="\u062a\u0630\u0643\u064a\u0631">\u062a\u0630\u0643\u064a\u0631</button>' : '');
       } catch(e) { return ''; }
     };
   }
 
-  /* نافذة تحصيل */
   document.addEventListener('click', function(e) {
     try {
       var b = e.target.closest('[data-fee-pay2]'); if (!b || !can('fees.collect')) return;
@@ -143,28 +149,27 @@ try {
       var mOpts = '';
       for (var k = -12; k <= 2; k++) { var d = new Date(fy, fm - 1 + k, 1), yy = d.getFullYear(), mm = d.getMonth() + 1; mOpts += '<option value="' + yy + '-' + mm + '"' + (yy === fy && mm === fm ? ' selected' : '') + '>' + MONTH_NAMES[mm - 1] + ' ' + yy + '</option>'; }
       var ov = document.createElement('div'); ov.className = 'overlay';
-      ov.innerHTML = '<div class="modal"><h2>تحصيل اشتراك: ' + esc(s.name) + '</h2>' + (fee ? '<p class="muted" style="margin:0 0 .6rem">المستحق: ' + money(fee) + ' جنيه</p>' : '') + '<label>المبلغ<input type="number" min="0" name="amount" value="' + (fee || '') + '" required></label><label>عن شهر<select name="month">' + mOpts + '</select></label><label>تاريخ<input type="date" name="date" value="' + today() + '"></label><label>ملاحظة<input name="note"></label><div data-reason-wrap hidden><label>سبب مبلغ أقل<select name="reason"><option value="">— اختر —</option><option value="متأخر">متأخر</option><option value="حالة خاصة">حالة خاصة</option></select></label></div><div class="row"><button type="button" class="btn primary" data-dosave>حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div></div>';
+      ov.innerHTML = '<div class="modal"><h2>\u062a\u062d\u0635\u064a\u0644 \u0627\u0634\u062a\u0631\u0627\u0643: ' + esc(s.name) + '</h2>' + (fee ? '<p class="muted" style="margin:0 0 .6rem">\u0627\u0644\u0645\u0633\u062a\u062d\u0642: ' + money(fee) + ' \u062c\u0646\u064a\u0647</p>' : '') + '<label>\u0627\u0644\u0645\u0628\u0644\u063a<input type="number" min="0" name="amount" value="' + (fee || '') + '" required></label><label>\u0639\u0646 \u0634\u0647\u0631<select name="month">' + mOpts + '</select></label><label>\u062a\u0627\u0631\u064a\u062e<input type="date" name="date" value="' + today() + '"></label><label>\u0645\u0644\u0627\u062d\u0638\u0629<input name="note"></label><div data-reason-wrap hidden><label>\u0633\u0628\u0628 \u0645\u0628\u0644\u063a \u0623\u0642\u0644<select name="reason"><option value="">\u2014 \u0627\u062e\u062a\u0631 \u2014</option><option value="\u0645\u062a\u0623\u062e\u0631">\u0645\u062a\u0623\u062e\u0631</option><option value="\u062d\u0627\u0644\u0629 \u062e\u0627\u0635\u0629">\u062d\u0627\u0644\u0629 \u062e\u0627\u0635\u0629</option></select></label></div><div class="row"><button type="button" class="btn primary" data-dosave>\u062d\u0641\u0638</button><button type="button" class="btn" data-close>\u0625\u0644\u063a\u0627\u0621</button></div></div>';
       document.body.appendChild(ov);
       ov.querySelector('[data-close]').onclick = function() { ov.remove(); };
       var ai = ov.querySelector('[name=amount]'), rw = ov.querySelector('[data-reason-wrap]');
       ai.addEventListener('input', function() { var need = fee && +ai.value > 0 && +ai.value < fee; rw.hidden = !need; });
       ov.querySelector('[data-dosave]').onclick = function() {
-        var amt = +ai.value; if (!(amt > 0)) { toast('اكتب مبلغاً'); return; }
-        if (fee && amt < fee && !ov.querySelector('[name=reason]').value) { toast('اختر السبب'); return; }
+        var amt = +ai.value; if (!(amt > 0)) { toast('\u0627\u0643\u062a\u0628 \u0645\u0628\u0644\u063a\u0627\u064b'); return; }
+        if (fee && amt < fee && !ov.querySelector('[name=reason]').value) { toast('\u0627\u062e\u062a\u0631 \u0627\u0644\u0633\u0628\u0628'); return; }
         var parts = ov.querySelector('[name=month]').value.split('-'), sy = +parts[0], sm = +parts[1];
         var reason = ov.querySelector('[name=reason]').value;
-        var note = [(ov.querySelector('[name=note]').value || '').trim(), reason].filter(Boolean).join(' — ');
+        var note = [(ov.querySelector('[name=note]').value || '').trim(), reason].filter(Boolean).join(' \u2014 ');
         var f = { id: uid(), studentId: sid, y: sy, m: sm, amount: amt, date: ov.querySelector('[name=date]').value || today(), by: (typeof me === 'function' && me()) ? me().name : '', byMember: session ? session.id : '', note: note };
         if (!Array.isArray(db.fees)) db.fees = [];
         db.fees.push(f);
         ov.remove();
-        toast('تم تسجيل ' + money(amt) + ' جنيه لـ«' + s.name + '»');
+        toast('\u062a\u0645 \u062a\u0633\u062c\u064a\u0644 ' + money(amt) + ' \u062c\u0646\u064a\u0647 \u0644\u0640\u00ab' + s.name + '\u00bb');
         save(); render();
       };
     } catch(e) { console.error('pay2 error:', e); }
   }, true);
 
-  /* ملف الطالب */
   var _origCard = typeof studentCard === 'function' ? studentCard : null;
   if (_origCard) {
     window.studentCard = function(st) {
@@ -176,15 +181,14 @@ try {
           var fees = (Array.isArray(db.fees) ? db.fees : []).filter(function(f) { return f.studentId === st.id; }).sort(function(a, b) { return (b.y * 100 + b.m) - (a.y * 100 + a.m); });
           var total = fees.reduce(function(a, f) { return a + (+f.amount || 0); }, 0);
           var due = window.QLFeeDue ? window.QLFeeDue(st) : null;
-          var I = st.info || {};
-          var catHtml = '<h3 class="sc-h">الاشتراك</h3><div class="tbl"><table><tr><th>المستحق</th><td>' + (due != null ? money(due) + ' جنيه' : 'غير محدد') + '</td></tr></table></div>';
-          if (can('fees.amount')) catHtml += '<div class="row noprint" style="margin:.4rem 0"><button class="btn sm" data-fee-assign="' + esc(st.id) + '">تعديل الفئة</button></div>';
-          var logHtml = '<h3 class="sc-h">سجل الاشتراكات</h3>';
+          var catHtml = '<h3 class="sc-h">\u0627\u0644\u0627\u0634\u062a\u0631\u0627\u0643</h3><div class="tbl"><table><tr><th>\u0627\u0644\u0645\u0633\u062a\u062d\u0642</th><td>' + (due != null ? money(due) + ' \u062c\u0646\u064a\u0647' : '\u063a\u064a\u0631 \u0645\u062d\u062f\u062f') + '</td></tr></table></div>';
+          if (can('fees.amount')) catHtml += '<div class="row noprint" style="margin:.4rem 0"><button class="btn sm" data-fee-assign="' + esc(st.id) + '">\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u0641\u0626\u0629</button></div>';
+          var logHtml = '<h3 class="sc-h">\u0633\u062c\u0644 \u0627\u0644\u0627\u0634\u062a\u0631\u0627\u0643\u0627\u062a</h3>';
           if (fees.length) {
-            logHtml += '<div class="tbl"><table><tr><th>الشهر</th><th>المبلغ</th><th>التاريخ</th></tr>';
+            logHtml += '<div class="tbl"><table><tr><th>\u0627\u0644\u0634\u0647\u0631</th><th>\u0627\u0644\u0645\u0628\u0644\u063a</th><th>\u0627\u0644\u062a\u0627\u0631\u064a\u062e</th></tr>';
             fees.slice(0, 20).forEach(function(f) { logHtml += '<tr><td>' + MONTH_NAMES[(f.m||1)-1] + ' ' + f.y + '</td><td>' + money(f.amount) + '</td><td dir="ltr" style="text-align:right">' + esc(f.date||'') + '</td></tr>'; });
-            logHtml += '<tr class="sum"><td>الإجمالي</td><td>' + money(total) + '</td><td></td></tr></table></div>';
-          } else logHtml += empty('لا توجد دفعات.');
+            logHtml += '<tr class="sum"><td>\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a</td><td>' + money(total) + '</td><td></td></tr></table></div>';
+          } else logHtml += empty('\u0644\u0627 \u062a\u0648\u062c\u062f \u062f\u0641\u0639\u0627\u062a.');
           var btns = modal.querySelector('.row.noprint:last-child');
           if (btns) btns.insertAdjacentHTML('beforebegin', catHtml + logHtml);
           else modal.insertAdjacentHTML('beforeend', catHtml + logHtml);
@@ -194,22 +198,21 @@ try {
     studentCard = window.studentCard;
   }
 
-  /* جدول الطلاب */
   adminViews.students = function() {
     try {
       var list = db.students.filter(function(st) { return (!ui.fh || st.halaqaId === ui.fh) && (!ui.fcat || (st.cat || 'child') === ui.fcat); });
       var F = window.QLFeesEmbed, hasFees = !!F;
-      var feeH = hasFees ? '<th>المستحق</th>' : '';
+      var feeH = hasFees ? '<th>\u0627\u0644\u0645\u0633\u062a\u062d\u0642</th>' : '';
       var toolbar = hasFees && (can('fees.collect') || can('fees.amount'))
-        ? (can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>إعدادات الاشتراك</button>' : '') + (can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : '') : '';
+        ? (can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u0627\u0634\u062a\u0631\u0627\u0643</button>' : '') + (can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>\u062a\u0639\u064a\u064a\u0646 \u0644\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0628\u062d\u062b</button>' : '') : '';
       var rows = list.map(function(st) {
         var off = stOff(st);
-        return '<tr' + (off ? ' class="tr-off"' : '') + '><td><span class="who">' + avatar(st) + '<span>' + esc(st.name) + '</span></span></td><td>' + (ageOf(st) === '' ? '\u2014' : ageOf(st)) + '</td><td>' + esc(cleanHName(st.halaqaId)) + '</td><td>' + esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014') + '</td><td>' + esc(lastHifz(st.id)) + '</td><td><button type="button" class="btn sm' + (off ? ' danger' : '') + '" data-stat="' + st.id + '">' + (off ? 'منقطع' : 'منتظم') + '</button></td><td>' + absMonthCell(st) + '</td>' + (hasFees ? F.cells(st) : '') + '<td><button class="btn sm primary" data-act="studentCard" data-id="' + st.id + '">الملف</button><button class="btn sm" data-act="hist" data-id="' + st.id + '">السجل</button><button class="btn sm" data-act="editStudent" data-id="' + st.id + '">تعديل</button>' + (db.fields.students.length ? '<button class="btn sm" data-act="editExtra" data-k="students" data-id="' + st.id + '">إضافية</button>' : '') + (hasFees ? F.actions(st) : '') + '</td></tr>';
+        return '<tr' + (off ? ' class="tr-off"' : '') + '><td><span class="who">' + avatar(st) + '<span>' + esc(st.name) + '</span></span></td><td>' + (ageOf(st) === '' ? '\u2014' : ageOf(st)) + '</td><td>' + cleanHName(st.halaqaId) + '</td><td>' + esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014') + '</td><td>' + esc(lastHifz(st.id)) + '</td><td><button type="button" class="btn sm' + (off ? ' danger' : '') + '" data-stat="' + st.id + '">' + (off ? '\u0645\u0646\u0642\u0637\u0639' : '\u0645\u0646\u062a\u0638\u0645') + '</button></td><td>' + absMonthCell(st) + '</td>' + (hasFees ? F.cells(st) : '') + '<td><button class="btn sm primary" data-act="studentCard" data-id="' + st.id + '">\u0627\u0644\u0645\u0644\u0641</button><button class="btn sm" data-act="hist" data-id="' + st.id + '">\u0627\u0644\u0633\u062c\u0644</button><button class="btn sm" data-act="editStudent" data-id="' + st.id + '">\u062a\u0639\u062f\u064a\u0644</button>' + (db.fields.students.length ? '<button class="btn sm" data-act="editExtra" data-k="students" data-id="' + st.id + '">\u0625\u0636\u0627\u0641\u064a\u0629</button>' : '') + (hasFees ? F.actions(st) : '') + '</td></tr>';
       }).join('');
-      return buildSummary(list) + '<div class="card"><div class="bar"><h2 class="grow" style="margin:0">الطلاب</h2>' + toolbar + '<select data-change="fcat"><option value="">الصغار والكبار</option>' + Object.keys(CATS).map(function(k) { return '<option value="' + k + '"' + (ui.fcat === k ? ' selected' : '') + '>' + (k === 'child' ? 'الصغار' : 'الكبار') + '</option>'; }).join('') + '</select><select data-change="fh"><option value="">كل الحلقات</option>' + db.halaqat.map(function(h) { return '<option value="' + esc(h.id) + '"' + (h.id === ui.fh ? ' selected' : '') + '>' + esc(halaqaLabel(h)) + '</option>'; }).join('') + '</select><button class="btn primary" data-act="addStudent">+ استمارة طالب</button></div>' + (list.length ? '<div class="tbl"><table><tr><th>الاسم</th><th>السن</th><th>الحلقة</th><th>المكان</th><th>آخر حفظ</th><th>الحالة</th><th>غياب الشهر</th>' + feeH + '<th></th></tr>' + rows + '</table></div>' : empty('لا يوجد طلاب.')) + '</div>';
+      return buildSummary(list) + '<div class="card"><div class="bar"><h2 class="grow" style="margin:0">\u0627\u0644\u0637\u0644\u0627\u0628</h2>' + toolbar + '<select data-change="fcat"><option value="">\u0627\u0644\u0635\u063a\u0627\u0631 \u0648\u0627\u0644\u0643\u0628\u0627\u0631</option>' + Object.keys(CATS).map(function(k) { return '<option value="' + k + '"' + (ui.fcat === k ? ' selected' : '') + '>' + (k === 'child' ? '\u0627\u0644\u0635\u063a\u0627\u0631' : '\u0627\u0644\u0643\u0628\u0627\u0631') + '</option>'; }).join('') + '</select><select data-change="fh"><option value="">\u0643\u0644 \u0627\u0644\u062d\u0644\u0642\u0627\u062a</option>' + db.halaqat.map(function(h) { return '<option value="' + esc(h.id) + '"' + (h.id === ui.fh ? ' selected' : '') + '>' + esc(halaqaLabel(h)) + '</option>'; }).join('') + '</select><button class="btn primary" data-act="addStudent">+ \u0627\u0633\u062a\u0645\u0627\u0631\u0629 \u0637\u0627\u0644\u0628</button></div>' + (list.length ? '<div class="tbl"><table><tr><th>\u0627\u0644\u0627\u0633\u0645</th><th>\u0627\u0644\u0633\u0646</th><th>\u0627\u0644\u062d\u0644\u0642\u0629</th><th>\u0627\u0644\u0645\u0643\u0627\u0646</th><th>\u0622\u062e\u0631 \u062d\u0641\u0638</th><th>\u0627\u0644\u062d\u0627\u0644\u0629</th><th>\u063a\u064a\u0627\u0628 \u0627\u0644\u0634\u0647\u0631</th>' + feeH + '<th></th></tr>' + rows + '</table></div>' : empty('\u0644\u0627 \u064a\u0648\u062c\u062f \u0637\u0644\u0627\u0628.')) + '</div>';
     } catch(e) {
       console.error('adminViews.students error:', e);
-      return '<div class="card"><p style="color:red">خطأ في عرض الطلاب: ' + String(e.message || e) + '</p></div>';
+      return '<div class="card"><p style="color:red">\u062e\u0637\u0623: ' + String(e.message || e) + '</p></div>';
     }
   };
 
