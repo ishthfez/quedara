@@ -41,14 +41,14 @@
     F.summary(list);
     const fy = window.QLFees?.y || new Date().getFullYear(), fm = window.QLFees?.m || (new Date().getMonth() + 1);
     const feeOf = window.QLFeeDue;
-    let expected = 0, got = 0, paidN = 0, partN = 0, noneN = 0, freeN = 0, remaining = 0;
+    let expected = 0, got = 0, paidN = 0, noneN = 0, freeN = 0, remaining = 0;
     const unpaid = [];
     list.forEach(s => {
       const fee = feeOf(s), paid = getPaid(s.id, fy, fm); got += paid;
       if (!stOff(s) && fee !== 0 && (fee ? paid < fee : !paid)) unpaid.push(s.id);
       if (stOff(s)) {}
       else if (fee === 0) freeN++;
-      else if (fee) { expected += fee; if (paid >= fee) paidN++; else { remaining += fee - paid; if (paid > 0) partN++; else noneN++; } }
+      else if (fee) { expected += fee; if (paid >= fee) paidN++; else { remaining += fee - paid; noneN++; } }
       else if (paid > 0) paidN++;
     });
     window.QLFees = { unpaid, y: fy, m: fm };
@@ -65,7 +65,7 @@
         <select data-fmonth style="width:auto">${mOpts.join('')}</select>
       </div>
       <div class="feecards" style="margin:0">
-        <div>${feeRow('fr-ok', paidN, 'مسدَّد بالكامل')}${feeRow('fr-no', noneN, 'لم يسدّد')}${partN ? feeRow('', partN, 'سدّد جزئياً') : ''}${feeRow('fr-info', freeN, 'معفى')}</div>
+        <div>${feeRow('fr-ok', paidN, 'مسدَّد بالكامل')}${feeRow('fr-no', noneN, 'لم يسدّد')}${feeRow('fr-info', freeN, 'معفى')}</div>
         <div>${feeRow('fr-plain', money(expected), 'المتوقع')}${feeRow('fr-ok', money(got), 'المحصّل')}${feeRow('fr-no', money(remaining), 'الباقي')}
           <div class="feebar"><span style="width:${Math.min(pct, 100)}%"></span></div>
           <div class="feebar-label"><span>${pct}%</span><span>نسبة التحصيل</span></div></div>
@@ -74,7 +74,7 @@
     ${unpaid.length && can('fees.collect') ? `<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">${unpaid.length} طالب لم يسدّد اشتراك ${MONTH_NAMES[fm - 1]}.</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (${unpaid.length})</button></div>` : ''}`;
   }
 
-  /* ---- عمود المستحق المدمج (مبلغ + كبسولة حالة) ---- */
+  /* ---- عمود المستحق المدمج: مسدّد (أخضر) أو مستحق (أسود+كبسولة) ---- */
   if (window.QLFeesEmbed) {
     window.QLFeesEmbed.cells = function(s) {
       if (!can('fees.collect') && !can('fees.amount')) return '';
@@ -85,7 +85,6 @@
       if (fee === 0) return '<td><span class="tag tag-ok">معفى</span></td>';
       if (fee == null) return '<td><span class="muted">\u2014</span></td>';
       if (paid >= fee) return `<td><b style="color:var(--leaf,#4e7d45)">${money(fee)}</b><br><span class="tag tag-ok">مسدّد</span></td>`;
-      if (paid > 0) return `<td>${money(fee)}<br><span class="tag">جزئي: دفع ${money(paid)}</span></td>`;
       return `<td>${money(fee)}<br><span class="tag tag-no">مستحق</span></td>`;
     };
     window.QLFeesEmbed.actions = function(s) {
@@ -128,7 +127,6 @@
       <div class="row"><button type="button" class="btn primary" data-dosave>حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
     document.body.appendChild(ov);
     ov.querySelector('[data-close]').onclick = () => ov.remove();
-    /* إظهار/إخفاء سبب القلة */
     const amtInput = ov.querySelector('[name=amount]');
     const reasonWrap = ov.querySelector('[data-reason-wrap]');
     const checkReason = () => {
