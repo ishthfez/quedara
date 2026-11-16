@@ -451,7 +451,8 @@ th.selc,td.selc{width:2.2rem;text-align:center}
 }
 
 /* ===== تثبيت رأس الجدول وأعمدة المسلسل والاسم ===== */
-main .tbl{max-height:calc(100vh - 170px);overflow:auto}
+/* 8 صفوف بيانات + صف الرأس ≈ 9 صفوف، الارتفاع يتناسب مع حجم التكبير/التصغير */
+main .tbl{max-height:calc(3.4rem * var(--tz,1) * 9);overflow:auto}
 table.frz{border-collapse:separate;border-spacing:0}
 table.frz th,table.frz td{border-width:0 0 1px 1px}
 table.frz tr:first-child th{border-bottom-width:1px;border-top-width:0}
