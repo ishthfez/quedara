@@ -631,7 +631,7 @@
        - «الحضور»: نظام الطالب (6) أيام أو (3) أيام، وهو الحقل نفسه (info.feeSys) الذي يحدد في «الاشتراكات» مبلغه
          بحسب مكان حلقته؛ يُحفظ بمعالج «الاشتراكات» نفسه (data-fsys) فيتغير المستحق فورًا.
        - «الحالة»: منتظم/منقطع، وزر واحد (بدل القائمة) يبدّل بينهما بالتأكيد الأصلي نفسه (toggleStatus في accountant.js)،
-         أحمر حين يكون منقطعًا (.qoff).
+         يحمل نص الحالة الحالية (منقطع/منتظم) وأحمر حين يكون منقطعًا (.qoff).
        - «نسبة الحضور»: بعد «الحالة» (انتقلت من «الطلاب ← الحضور»، وهي ملخص تراكمي لا يناسب شاشة التسجيل اليومي). */
     function stuTable(html) {
       const t = document.createElement('template'); t.innerHTML = html; const C = t.content;
@@ -680,9 +680,9 @@
         if (h) hal.textContent = halaqaLabel(h).replace(/^\s*حلقة\s+/, '').split(' — ')[0].trim();
         hal.insertAdjacentHTML('afterend', `<td>${esc((h && placeName(h)) || '—')}</td>`);
         /* الزر الأصلي في عمود الإجراءات (من stuBase()) يُزال أولًا، ويحل محله زر العمود المخصّص «الحالة»
-           (نفس data-stat الذي يتعامل معه toggleStatus في accountant.js بتأكيده الأصلي) */
+           (نفس data-stat الذي يتعامل معه toggleStatus في accountant.js بتأكيده الأصلي)؛ نصّه الحالة الحالية نفسها */
         r.querySelectorAll('[data-stat]').forEach(b => b.remove());
-        hal.nextElementSibling.insertAdjacentHTML('afterend', `<td><button type="button" class="btn sm ${off ? 'qoff' : ''}" data-stat="${esc(s.id)}" aria-label="حالة ${esc(s.name)}">${off ? 'منتظم' : 'منقطع'}</button></td>`);
+        hal.nextElementSibling.insertAdjacentHTML('afterend', `<td><button type="button" class="btn sm ${off ? 'qoff' : ''}" data-stat="${esc(s.id)}" aria-label="حالة ${esc(s.name)}">${off ? 'منقطع' : 'منتظم'}</button></td>`);
         hal.nextElementSibling.nextElementSibling.insertAdjacentHTML('afterend', `<td>${attRate(s.id)}</td>`);
         cat.remove();
         r.cells[1]?.querySelectorAll('.tag-no').forEach(x => x.remove());
