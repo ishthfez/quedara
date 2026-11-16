@@ -9,7 +9,8 @@
   const st = { y: +t0.slice(0, 4), m: +t0.slice(5, 7), qs: '', qh: '', qp: '', open: new Set() };
   const MAX_ROWS = 300;
 
-  TABS.admin.splice(TABS.admin.findIndex(t => t[0] === 'payroll') + 1, 0, ['fees', 'الاشتراكات']);
+  /* [merged] تبويب الاشتراكات أُدمج في الطلاب — لم يعد تبويبًا مستقلاً */
+  /* adminViews.fees يبقى للمحاسب وcollect.js */
   TAB_ICONS.fees = svg('<rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.6"/><path d="M6 9.5v6M18 9.5v6"/>');
   /* بطاقتا ملخص «الاشتراكات»: صف واحد لكل بيان، والقيمة والبيان في السطر نفسه */
   const feecss = document.createElement('style');
@@ -104,6 +105,28 @@
   const hasThree = C => C.general3 != null || Object.values(C.places).some(p => p.general3 != null);
   const anyGeneral = C => C.general != null || C.general3 != null || Object.keys(C.places).length > 0;
   window.QLFeeDue = feeOf; // للإيصال: مستحق الطالب للشهر
+  /* دوال مكشوفة لـ nav.js (دمج أعمدة الاشتراكات في جدول الطلاب) */
+  window.QLFee = {
+    dueOf, feeOf, paidFor: () => paidFor, money,
+    st: () => st, can, isAdmin, monthOpts: () => monthOpts(st.y, st.m),
+    cloudMissing, MONTHS, anyGeneral: () => anyGeneral(cfg()),
+    refresh: () => { const r = document.querySelector('[data-fres]'); if (r) r.innerHTML = results(); }
+  };
+  /* أيام الغياب: عدد مرات الغياب (absent فقط) */
+  const absCount = sid => db.attendance.filter(a => a.studentId === sid && a.status === 'absent').length;
+  window.QLAbsCount = absCount;
+  /* نافذة تفصيل الغياب شهريًا */
+  function absModal(sid) {
+    const s = byId(db.students, sid); if (!s) return;
+    const recs = db.attendance.filter(a => a.studentId === sid && a.status === 'absent').sort((a, b) => b.date.localeCompare(a.date));
+    if (!recs.length) { toast('لا يوجد غياب مسجّل لهذا الطالب'); return; }
+    const byMonth = new Map();
+    recs.forEach(r => { const k = r.date.slice(0, 7); byMonth.set(k, (byMonth.get(k) || 0) + 1); });
+    const rows = [...byMonth.entries()].sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([ym, n]) => { const [y, m] = ym.split('-'); return '<tr><td>' + MONTHS[+m - 1] + ' ' + y + '</td><td>' + n + '</td></tr>'; }).join('');
+    openInfo('سجل الغياب: ' + s.name, '<div class="tbl"><table><tr><th>الشهر</th><th>أيام الغياب</th></tr>' + rows + '<tr class="sum"><td>الإجمالي</td><td>' + recs.length + '</td></tr></table></div>');
+  }
+  document.addEventListener('click', e => { const b = e.target.closest('[data-abs]'); if (b) absModal(b.dataset.abs); });
   const halOf = s => byId(db.halaqat, s.halaqaId);
   /* فهرس المدفوع (طالب|سنة|شهر) يُبنى مرة كلما تغيّرت قائمة الدفعات: آلاف الدفعات × آلاف الطلاب تبقى سريعة */
   let pIdx = new Map(), pAny = new Set(), pRef = null, pLen = -1;

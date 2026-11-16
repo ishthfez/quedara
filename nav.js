@@ -585,7 +585,40 @@
       /* تنبيه بالطلاب بلا حلقة (وكانوا تبويبًا مستقلًا) */
       const n = noHalN();
       if (n) html = `<div class="note" style="margin:0 0 .8rem">${n} طالب بلا حلقة. <button type="button" class="btn sm" data-fhnone>عرضهم وتعيين حلقاتهم</button></div>` + html;
-      return html;
+      /* [merged] بطاقتا ملخص الاشتراكات + شريط أدواتها */
+      let feeTop = '';
+      if (window.QLFee) {
+        const F = window.QLFee, _st = F.st(), _pf = F.paidFor();
+        const scope = db.students.filter(s => (!ui.fh || s.halaqaId === ui.fh) && (!ui.fp || byId(db.halaqat, s.halaqaId)?.placeId === ui.fp));
+        let exp = 0, got = 0, pN = 0, ptN = 0, noN = 0, frN = 0, rem = 0;
+        const unpaid = [];
+        scope.forEach(s => {
+          const fee = F.feeOf(s), paid = _pf(s.id, _st.y, _st.m);
+          if (stOff(s)) return;
+          if (fee === 0) frN++;
+          else if (fee) { exp += fee; got += paid; if (paid >= fee) pN++; else { rem += fee - paid; if (paid > 0) ptN++; else noN++; } }
+          else if (paid > 0) { pN++; got += paid; }
+          if (fee !== 0 && (fee ? paid < fee : !paid) && !stOff(s)) unpaid.push(s.id);
+        });
+        window.QLFees = { unpaid, y: _st.y, m: _st.m };
+        const pct = exp > 0 ? Math.round(got / exp * 100) : 0;
+        const fr = (cls, v, l) => '<div class="feerow ' + cls + '"><span>' + esc(l) + '</span><b>' + v + '</b></div>';
+        feeTop = '<div class="feecards">'
+          + '<div class="card feecard"><h3>الطلاب</h3>' + fr('fr-ok', pN, 'مسددون') + fr('fr-no', ptN + noN, 'غير مسددين') + fr('fr-info', frN, 'معفيون') + '</div>'
+          + '<div class="card feecard"><h3>الإيرادات — ' + F.MONTHS[_st.m - 1] + ' ' + _st.y + '</h3>' + fr('fr-plain', F.money(exp), 'المتوقعة') + fr('fr-ok', F.money(got), 'الفعلية') + fr('fr-no', F.money(rem), 'باقي المستحق')
+          + '<div class="feebar"><span style="width:' + Math.min(pct, 100) + '%"></span></div>'
+          + '<div class="feebar-label"><span>' + pct + '%</span><span>نسبة التحصيل</span></div></div></div>';
+        /* شريط أدوات الاشتراكات: الشهر + الأزرار */
+        const opts = F.monthOpts().map(o => '<option value="' + o.v + '"' + (o.sel ? ' selected' : '') + '>' + o.l + '</option>').join('');
+        feeTop += '<div class="bar" style="margin:0 0 .6rem">'
+          + '<label style="margin:0">الشهر <select data-fmonth style="width:auto">' + opts + '</select></label>'
+          + (F.can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>إعدادات الاشتراك</button>' : '')
+          + (F.can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : '')
+          + (unpaid.length && F.can('fees.collect') ? '<button type="button" class="btn" data-remind-all="fees">تذكير غير المسددين (' + unpaid.length + ')</button>' : '')
+          + (F.isAdmin() && window.QLFeeImport ? '<button type="button" class="btn" data-fee-import>استيراد دفعات</button>' : '')
+          + '</div>';
+      }
+      return feeTop + html;
     };
     /* ===== حاضر/غائب في زر واحد (أخضر لحاضر، أحمر لغائب)، و«متأخر» زر مستقل، وبلا «معتذر» =====
        الأصل الغياب: ما لم يُسجَّل بعد (أو كان «متأخر») يظهر الزر أحمر بنص «غائب»، والضغط يسجّله حاضرًا.
@@ -666,6 +699,9 @@
           hal.insertAdjacentHTML('afterend', '<th>الحالة</th>');
           hal.insertAdjacentHTML('afterend', '<th>المكان</th>');
           hal.nextElementSibling.nextElementSibling.insertAdjacentHTML('afterend', '<th>نسبة الحضور</th>');
+          /* [merged] أعمدة الاشتراكات والغياب */
+          const lastTH = [...r.cells].filter(c => c.tagName === 'TH' && !c.classList.contains('noprint')).pop();
+          if (lastTH) lastTH.insertAdjacentHTML('beforebegin', '<th>الغياب</th><th>المستحق</th><th>السداد</th>');
           cat.remove();
           r.insertAdjacentHTML('afterbegin', '<th class="selc"><input type="checkbox" data-sselall aria-label="تحديد كل الظاهرين"></th>');
           return;
@@ -685,6 +721,27 @@
         r.querySelectorAll('[data-stat]').forEach(b => b.remove());
         hal.nextElementSibling.insertAdjacentHTML('afterend', `<td><button type="button" class="btn sm ${off ? 'qoff' : ''}" data-stat="${esc(s.id)}" aria-label="حالة ${esc(s.name)}">${off ? 'منقطع' : 'منتظم'}</button></td>`);
         hal.nextElementSibling.nextElementSibling.insertAdjacentHTML('afterend', `<td>${attRate(s.id)}</td>`);
+        /* [merged] خلايا الغياب والاشتراك */
+        if (window.QLFee && window.QLAbsCount) {
+          const F = window.QLFee, _st = F.st(), _pf = F.paidFor();
+          const D = F.dueOf(s), _fee = D?.due ?? null, _paid = _pf(s.id, _st.y, _st.m);
+          const absN = window.QLAbsCount(s.id);
+          const absCell = absN > 0 ? `<button type="button" class="lnk" data-abs="${esc(s.id)}" style="font-weight:700;color:var(--red)">${absN}</button>` : '—';
+          const dueCell = D ? (D.off ? `<span title="${F.money(D.base)} − ${F.money(D.off)}">${F.money(D.due)}</span>` : F.money(D.due)) : '—';
+          const payState = off ? '—' : _fee === 0 ? '<span class="tag tag-ok">معفى</span>'
+            : _fee ? (_paid >= _fee ? '<span class="tag tag-ok">مسدَّد ✓</span>' : _paid > 0 ? `<span class="tag">جزئي: باقٍ ${F.money(_fee - _paid)}</span>` : '<span class="tag tag-no">لم يُسدَّد</span>')
+            : (_paid > 0 ? '<span class="tag tag-ok">مدفوع</span>' : '—');
+          const canCollect = F.can('fees.collect') && !off && _fee !== 0 && !F.cloudMissing();
+          const coinIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.4"/></svg>';
+          /* نضيفها قبل عمود الإجراءات (الأخير noprint) */
+          const lastData = [...r.cells].filter(c => !c.classList.contains('noprint')).pop();
+          if (lastData) lastData.insertAdjacentHTML('beforebegin', `<td>${absCell}</td><td>${dueCell}</td><td>${payState}</td>`);
+          /* زر تحصيل (أيقونة) قبل زر الملف */
+          if (canCollect) {
+            const profile = r.querySelector('[data-act="studentCard"]');
+            if (profile) profile.insertAdjacentHTML('beforebegin', `<button type="button" class="btn sm icon-only" data-fee-pay="${esc(s.id)}" title="تحصيل اشتراك" aria-label="تحصيل">${coinIcon}</button>`);
+          }
+        }
         cat.remove();
         r.cells[1]?.querySelectorAll('.tag-no').forEach(x => x.remove());
       });
@@ -722,10 +779,10 @@
     document.addEventListener('click', e => { if (e.target.closest('main [data-sdel]') && sSel.size && typeof delMembersDialog === 'function') delMembersDialog('students', [...sSel]); });
     adminViews.students = () => {
       /* الحضور يفتح على الحلقة نفسها المختارة في «الطلاب» (ui.hid مشترك بينهما) */
-      const T = [['list', 'الطلاب'], ['att', 'الحضور'], ['fees', 'الاشتراكات'], ['tcollect', 'تحصيل المعلمين']];   // «الحسابات» صارت في «الطلاب» (أدوات الصف) وفي ملف الطالب
+      const T = [['list', 'الطلاب'], ['att', 'الحضور'], ['tcollect', 'تحصيل المعلمين']];   /* [merged] الاشتراكات أُدمجت في الطلاب */   // «الحسابات» صارت في «الطلاب» (أدوات الصف) وفي ملف الطالب
       const cur = T.some(([k]) => k === ui.svw) ? ui.svw : 'list';
       const bar = `<div class="card subnav"><div class="bar" style="margin:0">${T.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-svw="${k}">${l}${k === 'tcollect' && tcollectN() ? ` <span class="count">${tcollectN()}</span>` : ''}</button>`).join('')}</div></div>`;
-      const fn = cur === 'att' ? attWork : cur === 'fees' ? stuFees : cur === 'tcollect' ? stuTcol : listView;
+      const fn = cur === 'att' ? attWork : cur === 'tcollect' ? stuTcol : listView;
       return bar + (fn ? fn() : empty('هذا القسم غير محمّل.'));
     };
     document.addEventListener('click', e => { if (e.target.closest('[data-fhnone]')) { ui.svw = 'list'; ui.fh = '__none'; render(); window.scrollTo(0, 0); } });
