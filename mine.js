@@ -127,7 +127,8 @@
   });
   /* ===== نقل الطالب وتغيير حالته من كل جدول طلاب، للمدير (ولمن له الصلاحية) =====
      جدول «الطلاب» عند المدير وجدول «الاشتراكات» فيهما «تعديل» أو «الفئة» بلا «نقل»: يُضاف بجانبهما زرّا «نقل» و«منقطع/منتظم»
-     (يعملان بنافذة النقل نفسها التي يستعملها المحاسب، والخادم يتحقق من الصلاحية). */
+     (يعملان بنافذة النقل نفسها التي يستعملها المحاسب، والخادم يتحقق من الصلاحية). «منقطع/منتظم» لا يُضاف إن كان في الصف
+     زر حالة آخر مسبقًا (كعمود «الحالة» المخصّص في «الطلاب»)، فلا يتكرر. */
   let qRaf = 0;
   const addMoveButtons = () => {
     qRaf = 0;
@@ -137,7 +138,7 @@
       const td = b.closest('td'), id = b.dataset.feeAssign || b.dataset.id; if (!td || !id || td.querySelector('[data-move]')) return;
       const s = byId(db.students, id); if (!s) return;
       let h = `<button type="button" class="btn sm" data-move="${esc(id)}">نقل</button>`;
-      if (canP('students.status') && !td.querySelector('[data-stat]')) h += `<button type="button" class="btn sm" data-stat="${esc(id)}">${stOff(s) ? 'منتظم' : 'منقطع'}</button>`;
+      if (canP('students.status') && !b.closest('tr')?.querySelector('[data-stat]')) h += `<button type="button" class="btn sm" data-stat="${esc(id)}">${stOff(s) ? 'منتظم' : 'منقطع'}</button>`;
       b.insertAdjacentHTML('afterend', h);
     });
   };
