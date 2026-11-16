@@ -122,7 +122,7 @@
   }
   function results() {
     const list = filtered();
-    let expected = 0, got = 0, paidN = 0, partN = 0, noneN = 0, freeN = 0, offN = 0;
+    let expected = 0, got = 0, paidN = 0, partN = 0, noneN = 0, freeN = 0, offN = 0, remaining = 0;
     const grouped = !!(st.qh.trim() || st.qp.trim());
     const row = (s, i) => {
       const D = dueOf(s), fee = D?.due ?? null, paid = paidFor(s.id, st.y, st.m), h = halOf(s), off = stOff(s);
@@ -152,13 +152,14 @@
       if (!stOff(s) && fee !== 0 && (fee ? paid < fee : !paid)) unpaid.push(s.id);
       if (stOff(s)) offN++;
       else if (fee === 0) freeN++;
-      else if (fee) { expected += fee; if (paid >= fee) paidN++; else if (paid > 0) partN++; else noneN++; } else if (paid > 0) paidN++;
+      else if (fee) { expected += fee; if (paid >= fee) paidN++; else { remaining += fee - paid; if (paid > 0) partN++; else noneN++; } } else if (paid > 0) paidN++;
     });
     /* من لم يسدّد (كليًا أو جزئيًا) في كل نتائج البحث، لا في الصفوف الظاهرة فقط: لزر «تذكير غير المسددين» */
     window.QLFees = { unpaid, y: st.y, m: st.m };
     const stat = (v, l) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
-    /* أربعة عدادات فقط: إيراد الشهر الفعلي، والمتوقع منه، وعدد من سدّد، وعدد من لم يسدّد كامل الاشتراك (جزئي أو لا شيء) */
-    return `<div class="grid">${stat(money(got), 'إيراد الشهر')}${stat(money(expected), 'الإيراد المتوقع')}${stat(paidN, 'سدد الاشتراك')}${stat(partN + noneN, 'لم يسدد')}</div>
+    /* خمسة عدادات: إيراد الشهر الفعلي، والمتوقع منه، وباقي المستحق (الفرق بين مسدَّد ومستحق فعلي للمدفوعين جزئيًا أو لا شيء)،
+       وعدد من سدّد، وعدد من لم يسدّد كامل الاشتراك (جزئي أو لا شيء) */
+    return `<div class="grid">${stat(money(got), 'إيراد الشهر')}${stat(money(expected), 'الإيراد المتوقع')}${stat(money(remaining), 'باقي المستحق')}${stat(paidN, 'سدد الاشتراك')}${stat(partN + noneN, 'لم يسدد')}</div>
       ${unpaid.length && can('fees.collect') ? `<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">${unpaid.length} طالب لم يسدّد اشتراك ${MONTHS[st.m - 1]} (في نتائج البحث).</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (${unpaid.length})</button></div>` : ''}
       ${grouped ? groupedView(list, table) : list.length ? table(list, true) : empty(st.qs || st.qh || st.qp ? 'لا توجد نتائج مطابقة.' : 'لا يوجد طلاب بعد.')}`;
   }
