@@ -11,6 +11,8 @@
     .qsettools{display:none!important}
     .qsettools + p.muted{display:none!important}
     .card:has(.qsettools){display:none!important}
+    /* إصلاح: القائمة الجانبية لا تظهر فوق النوافذ المنبثقة */
+    .overlay{z-index:9999!important}
   `;
   document.head.appendChild(css);
 
