@@ -6,7 +6,6 @@
   const css = document.createElement('style');
   css.textContent = `
     tr.tr-off td{color:var(--red,#b3372f)!important;opacity:.75} tr.tr-off .tag,tr.tr-off .btn{opacity:.85}
-    /* أرقام إنجليزية في كل التطبيق */
     body,table,input,select,textarea,.card,.stat,.feerow,.feebar-label,.tbl,.tag,.btn,.modal{font-feature-settings:"tnum";-webkit-locale:"en"}
     .feerow b,.feebar-label span,.tag,.stat b,.stat .num{unicode-bidi:plaintext;direction:ltr}
   `;
@@ -18,17 +17,37 @@
     return teacher ? teacher.name : (h.name || '\u2014');
   };
 
-  /* ---- غياب الشهر: تمييز «غير مفعل» عن «صفر حقيقي» ---- */
-  function absMonthCell(st) {
+  /* ---- غياب الشهر: فهرس محسوب مرة واحدة لكل render ---- */
+  let _absCache = { key: '', absMap: new Map(), activeHalaqat: new Set() };
+  function buildAbsIndex() {
     const fy = window.QLFees?.y || new Date().getFullYear(), fm = window.QLFees?.m || (new Date().getMonth() + 1);
+    const key = `${fy}-${fm}`;
+    if (_absCache.key === key) return _absCache;
     const prefix = `${fy}-${pad(fm)}`;
-    const myAbs = db.attendance.filter(a => a.studentId === st.id && a.date?.startsWith(prefix) && (a.status === 'absent' || a.status === 'excused')).length;
+    const absMap = new Map();
+    const activeHalaqat = new Set();
+    const att = db.attendance || [];
+    /* فهرس: أي حلقة فيها تسجيل هذا الشهر + عدد غياب كل طالب */
+    const stuHalaqa = new Map();
+    db.students.forEach(s => stuHalaqa.set(s.id, s.halaqaId));
+    att.forEach(a => {
+      if (!a.date || !a.date.startsWith(prefix)) return;
+      const hid = stuHalaqa.get(a.studentId);
+      if (hid) activeHalaqat.add(hid);
+      if (a.status === 'absent' || a.status === 'excused') {
+        absMap.set(a.studentId, (absMap.get(a.studentId) || 0) + 1);
+      }
+    });
+    _absCache = { key, absMap, activeHalaqat };
+    return _absCache;
+  }
+
+  function absMonthCell(st) {
+    const idx = buildAbsIndex();
+    const myAbs = idx.absMap.get(st.id) || 0;
     if (myAbs > 0) return `<button type="button" class="lnk" data-abs-log="${st.id}">${myAbs}</button>`;
-    /* صفر — هل الحلقة فيها تسجيل حضور هذا الشهر أصلاً؟ */
-    const peers = db.students.filter(s => s.halaqaId === st.halaqaId).map(s => s.id);
-    const halaqaHasAtt = db.attendance.some(a => peers.includes(a.studentId) && a.date?.startsWith(prefix));
-    if (halaqaHasAtt) return `<button type="button" class="lnk" data-abs-log="${st.id}">0</button>`;
-    return `<span class="muted" style="font-size:.8rem">غير مفعل</span>`;
+    if (idx.activeHalaqat.has(st.halaqaId)) return `<button type="button" class="lnk" data-abs-log="${st.id}">0</button>`;
+    return '<span class="muted" style="font-size:.8rem">غير مفعل</span>';
   }
 
   function absLog(sid) {
@@ -60,6 +79,7 @@
     if (!can('fees.collect') && !can('fees.amount')) return '';
     const F = window.QLFeesEmbed; if (!F) return '';
     F.summary(list);
+    _absCache.key = ''; /* إعادة بناء الفهرس عند تغيير الشهر */
     const fy = window.QLFees?.y || new Date().getFullYear(), fm = window.QLFees?.m || (new Date().getMonth() + 1);
     const feeOf = window.QLFeeDue;
     let expected = 0, got = 0, paidN = 0, noneN = 0, freeN = 0, activeN = 0;
