@@ -34,7 +34,13 @@
     const F = window.QLFeesEmbed;
     const hasFees = !!F;
     const feeH = hasFees ? '<th>المستحق</th><th>المدفوع</th><th>الحالة</th>' : '';
-    return `${hasFees ? F.summary(list) : ''}
+    /* بطاقات الملخص مع إضافة اسم الشهر لبطاقة الإيرادات */
+    let summaryHtml = hasFees ? F.summary(list) : '';
+    if (summaryHtml) {
+      const mn = MONTH_NAMES[(window.QLFees?.m || 1) - 1] + ' ' + (window.QLFees?.y || '');
+      summaryHtml = summaryHtml.replace('<h3>الإيرادات</h3>', `<h3>الإيرادات \u2014 ${mn}</h3>`);
+    }
+    return `${summaryHtml}
     <div class="card"><div class="bar"><h2 class="grow" style="margin:0">الطلاب <span class="muted" style="font-size:.9rem">(${list.length})</span></h2>
     ${hasFees ? F.toolbar() : ''}
     <select data-change="fcat"><option value="">الصغار والكبار</option>${Object.entries(CATS).map(([k, l]) => `<option value="${k}" ${ui.fcat === k ? 'selected' : ''}>${k === 'child' ? 'الصغار' : 'الكبار'}</option>`).join('')}</select>
