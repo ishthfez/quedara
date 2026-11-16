@@ -277,10 +277,15 @@
   });
   applyZoom();
 
-  /* ===== حفظ الجدول ملف Excel (‎.xlsx‎ حقيقي يُبنى على الجهاز) أو PDF (عبر «حفظ بتنسيق PDF» في نافذة الطباعة) ===== */
+  /* ===== حفظ الجدول ملف Excel (‎.xlsx‎ حقيقي يُبنى على الجهاز) أو PDF =====
+     - Excel: ملف .xlsx حقيقي يُبنى على الجهاز ويُنزَّل مباشرة.
+     - PDF: لا توجد طريقة قياسية في المتصفح لإنشاء ملف PDF وتنزيله مباشرة دون مكتبة خارجية (قد تُخرج النصوص
+       العربية مشوَّهة بلا معالجة خاصة)، فتُستعمل نافذة الطباعة نفسها، لكن «PDF» هنا يتجاوز نافذة اختيار
+       الأعمدة والصفوف ويذهب مباشرة إلى الطباعة بكل البيانات (اختر «حفظ بتنسيق PDF» في نافذة الطباعة).
+       أما أيقونة «طباعة» المستقلة فتبقى بنافذة الاختيار الكاملة، للطباعة الورقية مع التحكم بالأعمدة والصفوف. */
   const DOC = '<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4"/>';
   const expBtn = (k, label, color, title) => `<button type="button" class="btn texp" data-${k} title="${title}" aria-label="${title}" style="color:${color}">${svg(DOC + '<path d="M9 13h6M9 16.5h4"/>')}<b>${label}</b></button>`;
-  const expBtns = () => expBtn('xls', 'Excel', '#1d6f42', 'حفظ الجدول ملف Excel') + expBtn('pdf', 'PDF', '#b3372f', 'حفظ الجدول ملف PDF');
+  const expBtns = () => expBtn('xls', 'Excel', '#1d6f42', 'حفظ الجدول ملف Excel') + expBtn('pdf', 'PDF', '#b3372f', 'حفظ الجدول PDF مباشرة');
   /* بيانات الجدول كما تُعرض: صف العناوين ثم الصفوف، دون أعمدة الأزرار ومربعات التحديد */
   function tableData(tbl) {
     const G = tableGrid(tbl);
@@ -339,14 +344,33 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     toast(`حُفظ «${a.download}» — ${D.rows.length} صفًا`);
   }
-  /* PDF: نافذة الطباعة نفسها (باختيار الأعمدة والصفوف)، مع إرشاد لاختيار «حفظ بتنسيق PDF» */
+  /* PDF مباشر: بلا نافذة اختيار أعمدة أو صفوف — كل الجدول كما هو، مباشرة إلى نافذة الطباعة.
+     (الزر المستقل «طباعة» يستعمل printTable() الكاملة بنافذة الاختيار؛ هذا يتجاوزها عمدًا) */
   function savePdf(tbl) {
-    printTable(tbl);
-    const dlg = [...document.querySelectorAll('.prdlg')].pop(); if (!dlg) return;
-    dlg.querySelector('h2').textContent = 'حفظ الجدول PDF';
-    dlg.querySelector('[data-go]').textContent = 'متابعة إلى الحفظ';
-    const n = [...dlg.querySelectorAll('p.muted')].pop();
-    if (n) { n.innerHTML = 'بعد الضغط على «متابعة إلى الحفظ» تفتح نافذة الطباعة: اختر في «الوجهة» <b>«حفظ بتنسيق PDF»</b> (Save as PDF) ثم «حفظ».'; n.style.cssText = 'font-size:.88rem;margin:.6rem 0 0;padding:.5rem .7rem;border-radius:8px;background:var(--gold-l);color:var(--text)'; }
+    if (!tbl) return;
+    const G = tableGrid(tbl);
+    const rows = G.rows.slice(G.H).map((tr, k) => ({ i: G.H + k, sum: tr.classList.contains('sum'), texts: Array.from({ length: G.ncol }, (_, j) => { const g = G.grid[G.H + k][j]; return g && g.first ? cellText(g.td) : ''; }) }));
+    const cols = Array.from({ length: G.ncol }, (_, j) => j).filter(j => rows.some(r => r.texts[j]) && !G.grid[0]?.[j]?.td.classList.contains('noprint'));
+    if (!cols.length || !rows.length) { toast('الجدول فارغ'); return; }
+    const title = tableTitle(tbl), wide = G.ncol > 7;
+    const body = rows.map(r => {
+      let html = '';
+      cols.forEach(j => {
+        const g = G.grid[r.i][j]; if (!g) { html += '<td></td>'; return; }
+        const span = cols.filter(c => c >= g.c0 && c < g.c0 + g.cs);
+        if (span[0] !== j) return;
+        html += `<td${span.length > 1 ? ` colspan="${span.length}"` : ''}>${esc(cellText(g.td))}</td>`;
+      });
+      return `<tr${r.sum ? ' class="sum"' : ''}>${html}</tr>`;
+    }).join('');
+    let z = document.getElementById('printzone'); if (!z) { z = document.createElement('div'); z.id = 'printzone'; document.body.appendChild(z); }
+    z.innerHTML = `<style>@page{size:A4 ${wide ? 'landscape' : 'portrait'};margin:10mm}</style><div class="pz-head"><img src="${logoSrc()}" alt=""><div><b>${esc(db.settings.org || '')}</b>${title ? `<h1>${esc(title)}</h1>` : ''}</div><small>${today()}</small></div>
+      <table><thead><tr>${cols.map(j => `<th>${esc(G.labels[j] || '')}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>`;
+    document.body.classList.add('printing');
+    const done = () => { document.body.classList.remove('printing'); window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    toast('اختر «حفظ بتنسيق PDF» في نافذة الطباعة');
+    setTimeout(() => { window.print(); setTimeout(done, 1500); }, 150);
   }
   document.addEventListener('click', e => {
     const x = e.target.closest('[data-xls],[data-pdf]'); if (!x) return;
