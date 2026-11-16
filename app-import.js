@@ -15,7 +15,6 @@
     .maint-screen img{width:120px;height:120px;border-radius:24px;opacity:.9}
     .maint-screen h1{font-size:1.3rem;font-weight:700;margin:0;line-height:1.6}
     .maint-screen p{font-size:1rem;opacity:.7;margin:0}
-    /* شريط عدم الاتصال */
     .offline-bar{position:fixed;top:0;right:0;left:0;z-index:99998;background:#b3372f;color:#fff;text-align:center;padding:.5rem 1rem;font-size:.9rem;font-weight:600;display:none}
     .offline-bar.show{display:block}
     body.is-offline .shell .content{padding-top:calc(2.2rem + var(--top-h,0px))!important}
@@ -26,7 +25,7 @@
   const offBar = document.createElement('div');
   offBar.className = 'offline-bar';
   offBar.textContent = 'الخدمة تعمل بدون اتصال بالإنترنت، قد تعرض لك بيانات غير محدثة';
-  document.body.prepend(offBar);
+  document.body.appendChild(offBar);
 
   function updateOnline() {
     const offline = !navigator.onLine;
@@ -37,14 +36,19 @@
   window.addEventListener('offline', updateOnline);
   updateOnline();
 
-  /* ---- وضع الصيانة ---- */
+  /* ---- وضع الصيانة: setInterval فقط (بدون MutationObserver) ---- */
   let maintEl = null;
+  let lastMaintState = null;
   function checkMaint() {
     try {
       if (!db || !db.settings || !session) return;
       const on = !!db.settings.maintenance;
       const isAdmin = session.role === 'admin';
-      if (on && !isAdmin) {
+      const shouldBlock = on && !isAdmin;
+      /* لا نعدّل DOM إلا لو تغيرت الحالة */
+      if (shouldBlock === lastMaintState) return;
+      lastMaintState = shouldBlock;
+      if (shouldBlock) {
         if (!maintEl) {
           maintEl = document.createElement('div');
           maintEl.className = 'maint-screen';
@@ -60,8 +64,6 @@
       }
     } catch(e) {}
   }
-  const maintObs = new MutationObserver(checkMaint);
-  maintObs.observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
   setInterval(checkMaint, 2000);
 
   document.addEventListener('click', e => {
@@ -71,7 +73,9 @@
     const msg = cur ? 'إعادة تشغيل الموقع للجميع؟' : 'إيقاف الموقع؟ سيرى الجميع (عدا المديرين) رسالة «الخدمة متوقفة».';
     ask(msg, () => {
       db.settings.maintenance = !cur;
+      lastMaintState = null; /* إعادة الفحص فوراً */
       save(); render();
+      checkMaint();
       toast(cur ? 'تم تشغيل الموقع' : 'تم إيقاف الموقع — المديرون فقط يرونه');
     });
   });
