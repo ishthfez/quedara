@@ -242,13 +242,18 @@ th,td{border-bottom-color:rgba(255,255,255,.55);border-bottom-color:color-mix(in
 .content main{max-width:1150px;width:100%;margin:0 auto;padding:1.4rem}
 .menu{display:none}
 .menu:hover{transform:none}
-.scrim{display:none}
+/* الـ scrim: دائم الوجود لكن شفاف وغير قابل للتفاعل — يتلاشى بـ opacity لا بـ display */
+.scrim{display:none;position:fixed;inset:0;z-index:35;opacity:0;pointer-events:none;
+  background:rgba(10,18,35,.35);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
+  transition:opacity .28s ease}
 
 /* الجوال: الشريط الجانبي يصبح درجًا ينزلق من اليمين */
 @media (max-width:860px){
   .side{position:fixed;top:0;bottom:0;right:0;height:auto;width:min(82vw,290px);transform:translateX(105%);transition:transform .28s ease}
   .shell.open .side{transform:none}
-  .shell.open .scrim{display:block;position:fixed;inset:0;background:rgba(10,18,35,.35);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);z-index:35}
+  /* الـ scrim يظهر بـ opacity لا بـ display حتى تعمل أنيميشن التلاشي */
+  .scrim{display:block}
+  .shell.open .scrim{opacity:1;pointer-events:auto}
   .menu{display:inline-flex}
   .content .top{padding:.6rem .9rem}
   .content main{padding:.8rem}
@@ -481,12 +486,6 @@ main .tbl{contain:paint}
 
 /* التبويبات الداخلية (subnav): fade أسرع قليلاً */
 .subnav ~ *{animation:ql-in .15s ease both}
-
-/* الـ scrim على الجوال: ظهور وإخفاء تدريجي */
-@media (max-width:860px){
-  .scrim{opacity:0;transition:opacity .28s ease}
-  .shell.open .scrim{opacity:1}
-}
 
 /* لمن يفضل تقليل الحركة */
 @media (prefers-reduced-motion:reduce){
