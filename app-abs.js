@@ -41,18 +41,20 @@
     F.summary(list);
     const fy = window.QLFees?.y || new Date().getFullYear(), fm = window.QLFees?.m || (new Date().getMonth() + 1);
     const feeOf = window.QLFeeDue;
-    let expected = 0, got = 0, paidN = 0, noneN = 0, freeN = 0, remaining = 0;
+    let expected = 0, got = 0, paidN = 0, noneN = 0, freeN = 0;
     const unpaid = [];
     list.forEach(s => {
       const fee = feeOf(s), paid = getPaid(s.id, fy, fm); got += paid;
-      if (!stOff(s) && fee !== 0 && (fee ? paid < fee : !paid)) unpaid.push(s.id);
-      if (stOff(s)) {}
-      else if (fee === 0) freeN++;
-      else if (fee) { expected += fee; if (paid >= fee) paidN++; else { remaining += fee - paid; noneN++; } }
-      else if (paid > 0) paidN++;
+      if (stOff(s)) return;
+      if (fee === 0) { freeN++; return; }
+      if (fee) expected += fee;
+      /* من دفع = مسدّد، من لم يدفع = لم يسدّد */
+      if (paid > 0) { paidN++; }
+      else if (fee) { noneN++; unpaid.push(s.id); }
     });
     window.QLFees = { unpaid, y: fy, m: fm };
     window._QLFeesVisibleList = list;
+    const remaining = Math.max(0, expected - got);
     const pct = expected > 0 ? Math.round(got / expected * 100) : 0;
     const mOpts = [];
     for (let k = -12; k <= 2; k++) {
@@ -65,7 +67,7 @@
         <select data-fmonth style="width:auto">${mOpts.join('')}</select>
       </div>
       <div class="feecards" style="margin:0">
-        <div>${feeRow('fr-ok', paidN, 'مسدَّد بالكامل')}${feeRow('fr-no', noneN, 'لم يسدّد')}${feeRow('fr-info', freeN, 'معفى')}</div>
+        <div>${feeRow('fr-ok', paidN, 'مسدَّد')}${feeRow('fr-no', noneN, 'لم يسدّد')}${feeRow('fr-info', freeN, 'معفى')}</div>
         <div>${feeRow('fr-plain', money(expected), 'المتوقع')}${feeRow('fr-ok', money(got), 'المحصّل')}${feeRow('fr-no', money(remaining), 'الباقي')}
           <div class="feebar"><span style="width:${Math.min(pct, 100)}%"></span></div>
           <div class="feebar-label"><span>${pct}%</span><span>نسبة التحصيل</span></div></div>
@@ -74,7 +76,7 @@
     ${unpaid.length && can('fees.collect') ? `<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">${unpaid.length} طالب لم يسدّد اشتراك ${MONTH_NAMES[fm - 1]}.</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (${unpaid.length})</button></div>` : ''}`;
   }
 
-  /* ---- عمود المستحق المدمج: مسدّد (أخضر) أو مستحق (أسود+كبسولة) ---- */
+  /* ---- عمود المستحق: دفع = مسدّد (أخضر)، لم يدفع = مستحق ---- */
   if (window.QLFeesEmbed) {
     window.QLFeesEmbed.cells = function(s) {
       if (!can('fees.collect') && !can('fees.amount')) return '';
@@ -84,7 +86,7 @@
       if (off) return '<td><span class="muted">\u2014</span></td>';
       if (fee === 0) return '<td><span class="tag tag-ok">معفى</span></td>';
       if (fee == null) return '<td><span class="muted">\u2014</span></td>';
-      if (paid >= fee) return `<td><b style="color:var(--leaf,#4e7d45)">${money(fee)}</b><br><span class="tag tag-ok">مسدّد</span></td>`;
+      if (paid > 0) return `<td><b style="color:var(--leaf,#4e7d45)">${money(fee)}</b><br><span class="tag tag-ok">مسدّد</span></td>`;
       return `<td>${money(fee)}<br><span class="tag tag-no">مستحق</span></td>`;
     };
     window.QLFeesEmbed.actions = function(s) {
@@ -93,12 +95,12 @@
       const cloudMissing = typeof CLOUD !== 'undefined' && CLOUD && window.Cloud?.feesReady === false;
       const fy = window.QLFees?.y, fm = window.QLFees?.m;
       const paid = getPaid(s.id, fy, fm);
-      const needRemind = can('fees.collect') && !off && fee !== 0 && fee && paid < fee;
+      const needRemind = can('fees.collect') && !off && fee !== 0 && fee && paid <= 0;
       return `${can('fees.collect') ? `<button type="button" class="btn sm primary" data-fee-pay2="${esc(s.id)}" ${cloudMissing || fee === 0 ? 'disabled' : ''}>تحصيل</button>` : ''}${needRemind ? `<button type="button" class="btn sm" data-remind="${esc(s.id)}" title="تذكير">تذكير</button>` : ''}`;
     };
   }
 
-  /* ---- نافذة تحصيل مخصصة: تطلب سبب لو المبلغ أقل من المستحق ---- */
+  /* ---- نافذة تحصيل: تطلب سبب لو المبلغ أقل من المستحق ---- */
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-fee-pay2]'); if (!b || !can('fees.collect')) return;
     e.stopPropagation();
@@ -107,8 +109,6 @@
     const feeOf = window.QLFeeDue;
     const fee = feeOf ? feeOf(s) : null;
     const fy = window.QLFees?.y || new Date().getFullYear(), fm = window.QLFees?.m || (new Date().getMonth() + 1);
-    const alreadyPaid = getPaid(sid, fy, fm);
-    const rest = fee ? Math.max(0, fee - alreadyPaid) : '';
     const monthOpts = [];
     for (let k = -12; k <= 2; k++) {
       const d = new Date(fy, fm - 1 + k, 1), yy = d.getFullYear(), mm = d.getMonth() + 1;
@@ -116,13 +116,13 @@
     }
     const ov = document.createElement('div'); ov.className = 'overlay';
     ov.innerHTML = `<div class="modal"><h2>تحصيل اشتراك: ${esc(s.name)}</h2>
-      ${fee ? `<p class="muted" style="margin:0 0 .6rem">المستحق: ${money(fee)} جنيه${alreadyPaid ? ` — مدفوع سابقاً: ${money(alreadyPaid)} — الباقي: ${money(rest)}` : ''}</p>` : ''}
-      <label>المبلغ (جنيه)<input type="number" min="0" name="amount" value="${rest || fee || ''}" required></label>
+      ${fee ? `<p class="muted" style="margin:0 0 .6rem">المستحق: ${money(fee)} جنيه</p>` : ''}
+      <label>المبلغ (جنيه)<input type="number" min="0" name="amount" value="${fee || ''}" required></label>
       <label>عن شهر<select name="month">${monthOpts.join('')}</select></label>
       <label>تاريخ التحصيل<input type="date" name="date" value="${today()}"></label>
       <label>ملاحظة (اختياري)<input name="note"></label>
       <div data-reason-wrap hidden style="margin:.5rem 0">
-        <label>سبب دفع مبلغ أقل<select name="reason" required><option value="">— اختر السبب —</option><option value="متأخر">متأخر (سيدفع الباقي لاحقاً)</option><option value="حالة خاصة">حالة خاصة</option></select></label>
+        <label>سبب دفع مبلغ أقل<select name="reason" required><option value="">— اختر السبب —</option><option value="متأخر">متأخر</option><option value="حالة خاصة">حالة خاصة</option></select></label>
       </div>
       <div class="row"><button type="button" class="btn primary" data-dosave>حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
     document.body.appendChild(ov);
@@ -131,26 +131,18 @@
     const reasonWrap = ov.querySelector('[data-reason-wrap]');
     const checkReason = () => {
       const amt = +amtInput.value || 0;
-      const [sy, sm] = (ov.querySelector('[name=month]').value || '').split('-').map(Number);
-      const monthFee = feeOf ? feeOf(s) : fee;
-      const monthPaid = getPaid(sid, sy || fy, sm || fm);
-      const monthRest = monthFee ? Math.max(0, monthFee - monthPaid) : 0;
-      const needReason = monthFee && amt > 0 && amt < monthRest;
+      const needReason = fee && amt > 0 && amt < fee;
       reasonWrap.hidden = !needReason;
       if (!needReason) ov.querySelector('[name=reason]').value = '';
     };
     amtInput.addEventListener('input', checkReason);
-    ov.querySelector('[name=month]').addEventListener('change', checkReason);
     ov.querySelector('[data-dosave]').onclick = () => {
       const amt = +amtInput.value;
       if (!(amt > 0)) { toast('اكتب مبلغاً صحيحاً'); return; }
-      const [sy, sm] = ov.querySelector('[name=month]').value.split('-').map(Number);
-      const monthFee = feeOf ? feeOf(s) : fee;
-      const monthPaid = getPaid(sid, sy, sm);
-      const monthRest = monthFee ? Math.max(0, monthFee - monthPaid) : 0;
-      if (monthFee && amt < monthRest && !ov.querySelector('[name=reason]').value) {
+      if (fee && amt < fee && !ov.querySelector('[name=reason]').value) {
         toast('اختر سبب دفع مبلغ أقل من المستحق'); return;
       }
+      const [sy, sm] = ov.querySelector('[name=month]').value.split('-').map(Number);
       const reason = ov.querySelector('[name=reason]').value;
       const note = [(ov.querySelector('[name=note]').value || '').trim(), reason].filter(Boolean).join(' — ');
       const f = { id: uid(), studentId: sid, y: sy, m: sm, amount: amt, date: ov.querySelector('[name=date]').value || today(), by: me()?.name || '', byMember: session?.id || '', note };
