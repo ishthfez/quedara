@@ -480,8 +480,7 @@ main .tbl{contain:paint}
 
 /* ===== انتقالات سلسة: الأقسام والتبويبات والنوافذ المنبثقة ===== */
 @keyframes ql-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-@keyframes ql-overlay{from{opacity:0}to{opacity:1}}
-@keyframes ql-modal{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes ql-modal{from{transform:translateY(10px) scale(.98)}to{transform:none}}
 
 /* محتوى القسم الرئيسي: fade خفيف عند كل انتقال */
 .content main{animation:ql-in .18s ease both}
@@ -489,12 +488,14 @@ main .tbl{contain:paint}
 /* التبويبات الداخلية (subnav): fade أسرع قليلاً */
 .subnav ~ *{animation:ql-in .15s ease both}
 
-/* النوافذ المنبثقة: الخلفية تتلاشى والنافذة تنبثق للأعلى */
-.overlay{animation:ql-overlay .18s ease both}
-.modal{animation:ql-modal .2s cubic-bezier(.2,.8,.2,1) both}
+/* النافذة المنبثقة: حركة بسيطة بلا تغيير شفافية.
+   .overlay و.modal فيهما backdrop-filter (ضبابية خلفية)، وتحريك opacity على عنصر فيه ضبابية
+   فوق محتوى مموَّه آخر (كالقائمة الجانبية) يسبب تشوّهًا بصريًا أثناء الانتقال في Chrome،
+   فنكتفي بحركة الموضع والحجم على .modal وحده دون أي تغيير في الشفافية. */
+.modal{animation:ql-modal .18s cubic-bezier(.2,.8,.2,1) both}
 
 /* لمن يفضل تقليل الحركة */
 @media (prefers-reduced-motion:reduce){
-  .content main,.subnav ~ *,.overlay,.modal{animation:none}
+  .content main,.subnav ~ *,.modal{animation:none}
   .scrim{transition:none}
 }
