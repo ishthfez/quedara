@@ -11,7 +11,6 @@
     .qsettools + p.muted{display:none!important}
     .card:has(.qsettools){display:none!important}
     .overlay{z-index:9999!important}
-    /* وضع الصيانة */
     .maint-screen{position:fixed;inset:0;z-index:99999;background:var(--navy-d,#13294b);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;color:#fff;text-align:center;padding:2rem}
     .maint-screen img{width:120px;height:120px;border-radius:24px;opacity:.9}
     .maint-screen h1{font-size:1.3rem;font-weight:700;margin:0;line-height:1.6}
@@ -19,38 +18,34 @@
   `;
   document.head.appendChild(css);
 
-  /* ---- وضع الصيانة ---- */
-  const _origRender = typeof render === 'function' ? render : null;
+  /* ---- وضع الصيانة: فحص دوري بدون تعديل render ---- */
   let maintEl = null;
-
   function checkMaint() {
-    const on = db?.settings?.maintenance;
-    const isAdmin = session?.role === 'admin';
-    if (on && !isAdmin) {
-      if (!maintEl) {
-        maintEl = document.createElement('div');
-        maintEl.className = 'maint-screen';
-        maintEl.innerHTML = `<img src="logo.png" alt=""><h1>الخدمة متوقفة في الوقت الحالي</h1><p>زوروُنا في وقت آخر</p>`;
-        document.body.appendChild(maintEl);
+    try {
+      if (!db || !db.settings || !session) return;
+      const on = !!db.settings.maintenance;
+      const isAdmin = session.role === 'admin';
+      if (on && !isAdmin) {
+        if (!maintEl) {
+          maintEl = document.createElement('div');
+          maintEl.className = 'maint-screen';
+          maintEl.innerHTML = '<img src="logo.png" alt=""><h1>الخدمة متوقفة في الوقت الحالي</h1><p>زوروُنا في وقت آخر</p>';
+          document.body.appendChild(maintEl);
+        }
+        const app = document.getElementById('app'); if (app) app.style.display = 'none';
+        const side = document.querySelector('.side'); if (side) side.style.display = 'none';
+      } else {
+        if (maintEl) { maintEl.remove(); maintEl = null; }
+        const app = document.getElementById('app'); if (app) app.style.display = '';
+        const side = document.querySelector('.side'); if (side) side.style.display = '';
       }
-      document.getElementById('app').style.display = 'none';
-      const side = document.querySelector('.side'); if (side) side.style.display = 'none';
-    } else {
-      if (maintEl) { maintEl.remove(); maintEl = null; }
-      document.getElementById('app').style.display = '';
-      const side = document.querySelector('.side'); if (side) side.style.display = '';
-    }
+    } catch(e) { /* تجاهل الأخطاء أثناء التحميل */ }
   }
+  /* فحص بعد اكتمال التحميل وعند كل تغيير في DOM */
+  const maintObs = new MutationObserver(checkMaint);
+  maintObs.observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
+  setInterval(checkMaint, 2000);
 
-  if (_origRender) {
-    window.render = function() {
-      _origRender.apply(this, arguments);
-      checkMaint();
-    };
-    render = window.render;
-  }
-
-  /* تبديل وضع الصيانة */
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-maint-toggle]');
     if (!b || session?.role !== 'admin') return;
@@ -63,14 +58,14 @@
     });
   });
 
-  /* ---- قسم الاستيراد + زر الصيانة في الإعدادات ---- */
+  /* ---- قسم الاستيراد + زر الصيانة ---- */
   const prev = adminViews.settings;
   adminViews.settings = function() {
     const base = prev();
     const isAdm = session?.role === 'admin';
     const hasFeeImport = isAdm && window.QLFeeImport;
     const hasPayroll = !!window.Payroll;
-    const maintOn = !!db.settings.maintenance;
+    const maintOn = !!(db.settings && db.settings.maintenance);
 
     const sec = `<div class="card"><h2>استيراد</h2>
       <div class="row qimp" style="flex-wrap:wrap;gap:.5rem">
