@@ -627,7 +627,7 @@
        - بلا «الفئة» ولا قائمة «الصغار والكبار» (الفئة باقية في بيانات الطالب كما هي).
        - «الحضور»: نظام الطالب (6) أيام أو (3) أيام، وهو الحقل نفسه (info.feeSys) الذي يحدد في «الاشتراكات» مبلغه
          بحسب مكان حلقته؛ يُحفظ بمعالج «الاشتراكات» نفسه (data-fsys) فيتغير المستحق فورًا.
-       - «الحالة»: منتظم/منقطع (المنقطع بالأحمر) بدل الزر وكبسولة «منقطع»، وتغييرها بالتأكيد نفسه كما كان. */
+       - «الحالة»: منتظم/منقطع، وزر واحد (بدل القائمة) يبدّل بينهما بالتأكيد الأصلي نفسه (toggleStatus في accountant.js). */
     function stuTable(html) {
       const t = document.createElement('template'); t.innerHTML = html; const C = t.content;
       C.querySelector('select[data-change="fcat"]')?.remove();
@@ -666,9 +666,11 @@
         const h = byId(db.halaqat, s.halaqaId);
         if (h) hal.textContent = halaqaLabel(h).replace(/^\s*حلقة\s+/, '').split(' — ')[0].trim();
         hal.insertAdjacentHTML('afterend', `<td>${esc((h && placeName(h)) || '—')}</td>`);
-        hal.nextElementSibling.insertAdjacentHTML('afterend', `<td><select class="mini ${off ? 'qoff' : ''}" data-sstat="${esc(s.id)}" aria-label="حالة ${esc(s.name)}"><option value="on" ${off ? '' : 'selected'}>منتظم</option><option value="off" ${off ? 'selected' : ''}>منقطع</option></select></td>`);
-        cat.remove();
+        /* الزر الأصلي في عمود الإجراءات (من stuBase()) يُزال أولًا، ويحل محله زر العمود المخصّص «الحالة»
+           (نفس data-stat الذي يتعامل معه toggleStatus في accountant.js بتأكيده الأصلي) */
         r.querySelectorAll('[data-stat]').forEach(b => b.remove());
+        hal.nextElementSibling.insertAdjacentHTML('afterend', `<td><button type="button" class="btn sm ${off ? 'qoff' : ''}" data-stat="${esc(s.id)}" aria-label="حالة ${esc(s.name)}">${off ? 'منتظم' : 'منقطع'}</button></td>`);
+        cat.remove();
         r.cells[1]?.querySelectorAll('.tag-no').forEach(x => x.remove());
       });
       return t.innerHTML;
@@ -703,14 +705,6 @@
       else if (all) { document.querySelectorAll('main [data-ssel]').forEach(x => { if (!x.offsetParent) return; x.checked = all.checked; all.checked ? sSel.add(x.dataset.ssel) : sSel.delete(x.dataset.ssel); }); sSelPaint(); }
     });
     document.addEventListener('click', e => { if (e.target.closest('main [data-sdel]') && sSel.size && typeof delMembersDialog === 'function') delMembersDialog('students', [...sSel]); });
-    /* تغيير الحالة: القائمة تعود لقيمتها، ويُستدعى التأكيد نفسه («تسجيل … منقطعًا؟»)؛ بعد التأكيد تُرسم بالقيمة الجديدة */
-    document.addEventListener('change', e => {
-      const sel = e.target.closest?.('select[data-sstat]'); if (!sel) return;
-      const s = byId(db.students, sel.dataset.sstat); if (!s) return;
-      sel.value = stOff(s) ? 'off' : 'on';
-      const b = document.createElement('button'); b.type = 'button'; b.dataset.stat = s.id; b.hidden = true;
-      document.querySelector('main')?.appendChild(b); b.click(); b.remove();
-    });
     adminViews.students = () => {
       /* الحضور يفتح على الحلقة نفسها المختارة في «الطلاب» (ui.hid مشترك بينهما) */
       const T = [['list', 'الطلاب'], ['att', 'الحضور'], ['fees', 'الاشتراكات'], ['tcollect', 'تحصيل المعلمين']];   // «الحسابات» صارت في «الطلاب» (أدوات الصف) وفي ملف الطالب
