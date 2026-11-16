@@ -5,6 +5,7 @@
        (شريط البطاقة هو الذي ينتقل لا العكس: أزرار الجدول تجد جدولها بأنه العنصر الذي يلي صفها مباشرة)
      - الأزرار المعروفة تصير أيقونات، واسمها يظهر عند الوقوف عليها (وعند الضغط المطوّل على الجوال)، والعدد في رقم صغير.
      - Excel وPDF في أيقونة واحدة «حفظ الجدول» (سهم إلى الأسفل): الضغط عليها يُظهر الخيارين (جدول أخضر Excel، ومستند أحمر PDF).
+     - في «الطلاب»: «إنشاء الحسابات الناقصة» و«إرسال بيانات الدخول» في أيقونة واحدة «حسابات الدخول» بالطريقة نفسها.
      - ملاحظة الإرشاد تحت الشريط تُخفى، ما عدا التنبيهات المهمة (شريط «إصلاح» وما فيه أزرار).
      - زر «إضافة» آخر الصف (على اليسار)، والأزرار متجاورة بعد التصفية والبحث.
      - صف الطالب المنقطع والعامل المتوقف كله بالأحمر في كل الجداول (يُعرف من علامة «منقطع/متوقف» في صفه أو خانة حالته).
@@ -51,12 +52,16 @@
   const PDF = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 2.5h8.5L19 7v13a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20V4a1.5 1.5 0 0 1 1-1.5z" fill="#b3372f"/><path d="M14.5 2.5V7H19" fill="#e07d74"/><text x="12" y="17.2" text-anchor="middle" font-family="Arial,sans-serif" font-size="6.2" font-weight="700" fill="#fff">PDF</text></svg>';
 
   const SAVE = S('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/>');
-  /* قائمة «حفظ»: تُفتح وتُغلق بالضغط، وتُغلق بالضغط خارجها أو Esc؛ والخيار يضغط الزر الأصلي المخفي (Excel أو PDF) */
+  /* قائمة «حفظ»: تُفتح وتُغلق بالضغط، وتُغلق بالضغط خارجها أو Esc؛ والخيار يضغط الزر الأصلي المخفي (Excel أو PDF).
+     القائمة نفسها عامة: تُستعمل أيضًا لزر «حسابات الدخول» في الطلاب (data-qacc / data-qav). */
   const closeSave = () => document.querySelectorAll('.qsmenu:not([hidden])').forEach(m => { m.hidden = true; m.previousElementSibling?.setAttribute('aria-expanded', 'false'); });
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-qsave]'), it = e.target.closest('[data-qsv]');
+    const b2 = e.target.closest('[data-qacc]'), it2 = e.target.closest('[data-qav]');
     if (it) { const tp = it.closest('.tblprint'); closeSave(); tp?.querySelector(`.btn.texp[data-${it.dataset.qsv}]`)?.click(); return; }
+    if (it2) { closeSave(); document.querySelector('main ' + (it2.dataset.qav === 'mk' ? '[data-act="cloudPwAll"][data-k="students"]' : '[data-act="credsOpen"][data-k="students"]'))?.click(); return; }
     if (b) { const m = b.nextElementSibling, open = m.hidden; closeSave(); m.hidden = !open; b.setAttribute('aria-expanded', open); if (open) m.querySelector('button')?.focus({ preventScroll: true }); return; }
+    if (b2) { const m = b2.nextElementSibling, open = m.hidden; closeSave(); m.hidden = !open; b2.setAttribute('aria-expanded', open); if (open) m.querySelector('button')?.focus({ preventScroll: true }); return; }
     if (!e.target.closest('.qsmenu')) closeSave();
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSave(); });
@@ -106,8 +111,8 @@
     @media (max-width:600px){main .tbl th,main .tbl td,.overlay .tbl th,.overlay .tbl td{font-size:calc(.9rem * var(--tz,1))}}
     main .tbl select.mini{font-size:.9em}
     .tblprint .btn.texp{display:none!important}
-    .qsave{position:relative;display:inline-flex}
-    .qsave > .btn{width:38px!important;min-width:38px;height:36px;padding:0!important;justify-content:center}
+    .qsave,.qacc{position:relative;display:inline-flex}
+    .qsave > .btn,.qacc > .btn{width:38px!important;min-width:38px;height:36px;padding:0!important;justify-content:center}
     .qsmenu{position:absolute;top:calc(100% + .3rem);inset-inline-end:0;z-index:60;min-width:11rem;background:var(--card,#fff);border:1px solid var(--line,#e5e7eb);border-radius:12px;box-shadow:0 10px 26px rgba(15,25,50,.2);padding:.3rem;display:flex;flex-direction:column;gap:.15rem}
     .qsmenu[hidden]{display:none}
     .qsmenu button{display:flex;align-items:center;gap:.55rem;width:100%;padding:.5rem .6rem;border:0;border-radius:8px;background:none;font:inherit;font-weight:700;color:var(--text);cursor:pointer;text-align:start}
@@ -221,6 +226,17 @@
       bar.insertAdjacentHTML('afterend', '<span class="qsp"></span>');
       notes.forEach(n => n.classList.add('qnote-hidden'));   // الإرشاد لا حاجة له في الصف
       iconize(tp);
+    });
+    /* ===== الطلاب: «إنشاء الحسابات الناقصة» و«إرسال بيانات الدخول» في زر واحد «حسابات الدخول» =====
+       الزران الأصليان يبقيان في مكانهما مخفيين (يُضغطان من القائمة)، بالطريقة نفسها المتبعة في زر «حفظ». */
+    document.querySelectorAll('main .bar, main .tblprint').forEach(host => {
+      const mk = host.querySelector('[data-act="cloudPwAll"][data-k="students"]');
+      const cr = host.querySelector('[data-act="credsOpen"][data-k="students"]');
+      if (!mk || !cr || host.querySelector('.qacc')) return;
+      const n = (mk.textContent.match(/\((\d+)\)/) || [])[1];
+      mk.hidden = true; cr.hidden = true;
+      mk.insertAdjacentHTML('beforebegin', `<span class="qacc noprint"><button type="button" class="btn icon-only" data-qacc title="حسابات الدخول" aria-label="حسابات الدخول" aria-haspopup="menu" aria-expanded="false">${ICONS.cloudPwAll}${n ? `<span class="cnt">${n}</span>` : ''}</button>
+        <span class="qsmenu" role="menu" hidden><button type="button" role="menuitem" data-qav="mk">${ICONS.cloudPwAll}إنشاء الحسابات الناقصة${n ? ` (${n})` : ''}</button><button type="button" role="menuitem" data-qav="cr">${ICONS.credsOpen}إرسال بيانات الدخول</button></span></span>`);
     });
     /* المحاذاة في كل شريط آخر (غير المدموج): العناوين والقوائم يمينًا والأزرار يسارًا. شرائط التبويبات تبقى كما هي */
     document.querySelectorAll('main .bar:not(.qbar)').forEach(bar => {
