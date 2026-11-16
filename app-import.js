@@ -1,5 +1,5 @@
 'use strict';
-/* ============ تجميع كل أزرار الاستيراد في قسم واحد بالإعدادات ============ */
+/* ============ تجميع أزرار الاستيراد + وضع الصيانة ============ */
 (() => {
   const css = document.createElement('style');
   css.textContent = `
@@ -7,22 +7,70 @@
     main .bar label:has([data-pay="importXlsx"]):not(.qimp *){display:none!important}
     main .bar label:has([data-pay="import"]):not(.qimp *){display:none!important}
     main .bar + .bar:has(label:has([data-pay="importXlsx"])):not(.qimp){display:none!important}
-    /* إخفاء قسم الاستيراد القديم من nav.js بالكامل */
     .qsettools{display:none!important}
     .qsettools + p.muted{display:none!important}
     .card:has(.qsettools){display:none!important}
-    /* إصلاح: القائمة الجانبية لا تظهر فوق النوافذ المنبثقة */
     .overlay{z-index:9999!important}
+    /* وضع الصيانة */
+    .maint-screen{position:fixed;inset:0;z-index:99999;background:var(--navy-d,#13294b);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;color:#fff;text-align:center;padding:2rem}
+    .maint-screen img{width:120px;height:120px;border-radius:24px;opacity:.9}
+    .maint-screen h1{font-size:1.3rem;font-weight:700;margin:0;line-height:1.6}
+    .maint-screen p{font-size:1rem;opacity:.7;margin:0}
   `;
   document.head.appendChild(css);
 
+  /* ---- وضع الصيانة ---- */
+  const _origRender = typeof render === 'function' ? render : null;
+  let maintEl = null;
+
+  function checkMaint() {
+    const on = db?.settings?.maintenance;
+    const isAdmin = session?.role === 'admin';
+    if (on && !isAdmin) {
+      if (!maintEl) {
+        maintEl = document.createElement('div');
+        maintEl.className = 'maint-screen';
+        maintEl.innerHTML = `<img src="logo.png" alt=""><h1>الخدمة متوقفة في الوقت الحالي</h1><p>زوروُنا في وقت آخر</p>`;
+        document.body.appendChild(maintEl);
+      }
+      document.getElementById('app').style.display = 'none';
+      const side = document.querySelector('.side'); if (side) side.style.display = 'none';
+    } else {
+      if (maintEl) { maintEl.remove(); maintEl = null; }
+      document.getElementById('app').style.display = '';
+      const side = document.querySelector('.side'); if (side) side.style.display = '';
+    }
+  }
+
+  if (_origRender) {
+    window.render = function() {
+      _origRender.apply(this, arguments);
+      checkMaint();
+    };
+    render = window.render;
+  }
+
+  /* تبديل وضع الصيانة */
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-maint-toggle]');
+    if (!b || session?.role !== 'admin') return;
+    const cur = !!db.settings.maintenance;
+    const msg = cur ? 'إعادة تشغيل الموقع للجميع؟' : 'إيقاف الموقع؟ سيرى الجميع (عدا المديرين) رسالة «الخدمة متوقفة».';
+    ask(msg, () => {
+      db.settings.maintenance = !cur;
+      save(); render();
+      toast(cur ? 'تم تشغيل الموقع' : 'تم إيقاف الموقع — المديرون فقط يرونه');
+    });
+  });
+
+  /* ---- قسم الاستيراد + زر الصيانة في الإعدادات ---- */
   const prev = adminViews.settings;
   adminViews.settings = function() {
     const base = prev();
-
     const isAdm = session?.role === 'admin';
     const hasFeeImport = isAdm && window.QLFeeImport;
     const hasPayroll = !!window.Payroll;
+    const maintOn = !!db.settings.maintenance;
 
     const sec = `<div class="card"><h2>استيراد</h2>
       <div class="row qimp" style="flex-wrap:wrap;gap:.5rem">
@@ -39,6 +87,11 @@
       <p class="muted" style="margin:.5rem 0 0;font-size:.85rem">كل أدوات الاستيراد مجموعة هنا. عند استيراد ملف Excel أو Sheets، الأعمدة المعروفة تُستورد مباشرة وغيرها تظهر في «بيانات معلّقة».</p>
     </div>`;
 
-    return sec + base;
+    const maintSec = isAdm ? `<div class="card"><h2>حالة الموقع</h2>
+      <p style="margin:0 0 .7rem">${maintOn ? '<span class="tag tag-no">الموقع متوقف حالياً</span> — المديرون فقط يرون التطبيق.' : '<span class="tag tag-ok">الموقع يعمل</span> — الجميع يستطيع الدخول.'}</p>
+      <button type="button" class="btn ${maintOn ? 'primary' : 'danger'}" data-maint-toggle>${maintOn ? 'تشغيل الموقع' : 'إيقاف الموقع'}</button>
+    </div>` : '';
+
+    return sec + maintSec + base;
   };
 })();
