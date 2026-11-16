@@ -8,7 +8,8 @@
      - في «الطلاب»: «إنشاء الحسابات الناقصة» و«إرسال بيانات الدخول» في أيقونة واحدة «حسابات الدخول» بالطريقة نفسها.
      - ملاحظة الإرشاد تحت الشريط تُخفى، ما عدا التنبيهات المهمة (شريط «إصلاح» وما فيه أزرار).
      - زر «إضافة» آخر الصف (على اليسار)، والأزرار متجاورة بعد التصفية والبحث.
-     - صف الطالب المنقطع والعامل المتوقف كله بالأحمر في كل الجداول (يُعرف من علامة «منقطع/متوقف» في صفه أو خانة حالته).
+     - صف الطالب المنقطع والعامل المتوقف كله بالأحمر في كل الجداول (يُعرف من علامة «منقطع/متوقف» في صفه أو خانة حالته،
+       سواء كانت خانة الحالة قائمة منسدلة (.qoff) أو زرًا (.qoff) — نفس الصنف في الحالتين).
      - المحاذاة في كل الأقسام: العنوان والقوائم المنسدلة والبحث على اليمين في سطر واحد، والأزرار وحدها على اليسار
        (في الصف المدموج وفي كل شريط آخر، عدا شرائط التبويبات).
      - التكبير والتصغير زر واحد يفتح شريطًا رأسيًا يُسحب بالإصبع أو الفأرة (يسري على كل الجداول كما كان).
@@ -249,7 +250,7 @@
       if (!btns.length || btns.length === kids.length && !bar.querySelector('select,input,h2,h3')) return;   // أزرار فقط: تبقى كما هي
       bar.classList.add('qbar'); bar.insertAdjacentHTML('beforeend', '<span class="qsp"></span>');
     });
-    /* اسم المنقطع والمتوقف بالأحمر: الصف فيه علامة «منقطع» أو «متوقف»، أو خانة حالة على «متوقف»، أو هو تبويب «المنقطعون» */
+    /* اسم المنقطع والمتوقف بالأحمر: الصف فيه علامة «منقطع» أو «متوقف»، أو خانة حالة على «متوقف» (قائمة أو زر .qoff)، أو هو تبويب «المنقطعون» */
     document.querySelectorAll('main .tbl table').forEach(tbl => {
       const head = [...tbl.rows].find(r => r.querySelector('th')); if (!head || [...head.cells].some(c => c.colSpan > 1)) return;
       const ni = [...head.cells].findIndex(c => ['الاسم', 'الطالب', 'العامل', 'الموظف'].includes(c.textContent.trim()));
@@ -257,7 +258,7 @@
       const offTab = !!tbl.closest('.card')?.querySelector('[data-mtab="off"].on');
       [...tbl.rows].forEach(r => {
         if (r === head || !r.cells[ni]) return;
-        const off = offTab || !!r.querySelector('select.qoff') || [...r.querySelectorAll('.tag')].some(t => /^(منقطع|متوقف)$/.test(t.textContent.trim()));
+        const off = offTab || !!r.querySelector('.qoff') || [...r.querySelectorAll('.tag')].some(t => /^(منقطع|متوقف)$/.test(t.textContent.trim()));
         r.classList.toggle('qoffr', off);   // الصف كله بالأحمر
       });
     });
