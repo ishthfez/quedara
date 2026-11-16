@@ -361,6 +361,9 @@ function ask(msg, yes) {
   ov.className = 'overlay';
   ov.innerHTML = `<div class="modal"><h2>${esc(msg)}</h2><div class="row"><button type="button" class="btn danger" data-yes>تأكيد</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
   document.body.appendChild(ov);
+  /* التركيز يبقى على الزر الذي فتح النافذة إن لم يُنقل: ضغطة Enter بعدها تُعيد تفعيل ذلك الزر (لا زر النافذة)،
+     فتُفتح نافذة تأكيد أخرى فوق الأولى، وتتكرر مع كل ضغطة. نقل التركيز إلى «إلغاء» يجعل Enter يغلق النافذة بأمان. */
+  ov.querySelector('[data-close]').focus({ preventScroll: true });
   ov.querySelector('[data-close]').onclick = () => ov.remove();
   ov.querySelector('[data-yes]').onclick = e => {
     const r = yes();
