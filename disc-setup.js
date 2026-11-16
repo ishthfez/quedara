@@ -14,100 +14,107 @@
   ];
 
   const n0 = t => String(t||'').replace(/[\u064B-\u0652\u0640]/g,'').replace(/[\u0623\u0625\u0622]/g,'\u0627').replace(/\u0629/g,'\u0647').replace(/\u0649/g,'\u064a').replace(/\s+/g,' ').trim().toLowerCase();
-  const findStudent = name => db.students.find(s => n0(s.name) === n0(name));
+  const findStudent = name => { try { return db.students.find(s => n0(s.name) === n0(name)); } catch(e) { return null; } };
 
-  /* ---- تطبيق تلقائي عند أول تحميل ---- */
+  /* تطبيق تلقائي — ينتظر اكتمال التحميل الكامل */
   function autoApply() {
-    if (session?.role !== 'admin') return;
-    const cfg = db.settings.priv_fees || {};
-    /* تحقق: هل سبق التطبيق؟ */
-    if (cfg._discApplied) return;
-
-    let discs = Array.isArray(cfg.discs) ? cfg.discs : [];
-    Object.entries(DISC_VALUES).forEach(([id, val]) => {
-      const d = discs.find(x => x.id === id);
-      if (d) d.value = val;
-    });
-
-    let count = 0;
-    GROUPS.forEach(g => {
-      g.names.forEach(name => {
-        const s = findStudent(name);
-        if (!s) return;
-        if ((s.info || {}).feeDisc === g.id) return; /* معيّن بالفعل */
-        s.info = { ...(s.info || {}), feeDisc: g.id };
-        count++;
+    try {
+      if (!session || session.role !== 'admin') return;
+      if (!db || !db.students || !db.students.length) return;
+      if (!db.settings) return;
+      const cfg = db.settings.priv_fees || {};
+      if (cfg._discApplied) return;
+      let discs = Array.isArray(cfg.discs) ? cfg.discs : [];
+      Object.entries(DISC_VALUES).forEach(([id, val]) => {
+        const d = discs.find(x => x.id === id);
+        if (d) d.value = val;
       });
-    });
-
-    db.settings.priv_fees = { ...cfg, discs, _discApplied: true };
-    if (count > 0) {
-      save(); render();
-      toast(`تم ضبط الخصومات تلقائياً لـ ${count} طالب (6 أبناء محفظين + 28 أبناء عاملين + 53 يتيم/معفى)`);
-    }
+      let count = 0;
+      GROUPS.forEach(g => {
+        g.names.forEach(name => {
+          const s = findStudent(name);
+          if (!s) return;
+          if ((s.info || {}).feeDisc === g.id) return;
+          s.info = { ...(s.info || {}), feeDisc: g.id };
+          count++;
+        });
+      });
+      db.settings.priv_fees = { ...cfg, discs, _discApplied: true };
+      if (count > 0) {
+        save();
+        toast('تم ضبط الخصومات تلقائياً لـ ' + count + ' طالب');
+      }
+    } catch(e) { console.warn('disc autoApply error:', e); }
   }
 
-  /* ننتظر حتى يكتمل تحميل البيانات */
-  const tryAuto = () => { if (db?.students?.length) autoApply(); else setTimeout(tryAuto, 500); };
-  setTimeout(tryAuto, 1000);
+  /* ننتظر حتى يكتمل التحميل — نتحقق أن render اشتغل (القائمة ظاهرة) */
+  const tryAuto = () => {
+    try {
+      if (db?.students?.length && document.querySelector('.side')) autoApply();
+      else setTimeout(tryAuto, 1500);
+    } catch(e) { /* skip */ }
+  };
+  setTimeout(tryAuto, 3000);
 
-  /* ---- نافذة يدوية للتعديل لاحقاً ---- */
+  /* نافذة يدوية */
   function run() {
-    if (session?.role !== 'admin') { toast('للمدير فقط'); return; }
-    const groups = GROUPS;
-    let html = '<p class="note">يمكنك تعديل الخصومات — أزل ✔ لاستثناء طالب ثم اضغط «تطبيق». أو اضغط «إزالة كل الخصومات» للتراجع.</p>';
-    let totalMatched = 0;
-    groups.forEach(g => {
-      const matched = [], missing = [];
-      g.names.forEach(name => { const s = findStudent(name); if (s) matched.push(s); else missing.push(name); });
-      totalMatched += matched.length;
-      html += `<h3 style="margin:1rem 0 .3rem">${g.label} — ${matched.length} طالب</h3>`;
-      if (matched.length) {
-        html += '<div class="tbl"><table>';
-        matched.forEach(s => {
-          const cur = (s.info || {}).feeDisc;
-          html += `<tr><td><label style="margin:0;display:flex;align-items:center;gap:.4rem"><input type="checkbox" data-dset="${esc(s.id)}" data-did="${g.id}" ${cur === g.id ? 'checked disabled' : 'checked'}> ${esc(s.name)}</label></td><td class="muted">${esc(hName(s.halaqaId))}</td>${cur === g.id ? '<td><span class="tag tag-ok">معيّن</span></td>' : '<td></td>'}</tr>`;
-        });
-        html += '</table></div>';
-      }
-      if (missing.length) html += `<p class="muted" style="font-size:.85rem">لم يُطابَق: ${missing.map(n => esc(n)).join('، ')}</p>`;
-    });
-    const ov = document.createElement('div'); ov.className = 'overlay';
-    ov.innerHTML = `<div class="modal wide"><h2>تعديل الخصومات (${totalMatched} طالب)</h2>${html}
-      <div class="row" style="margin-top:1rem"><button type="button" class="btn primary" data-dapply>تطبيق</button><button type="button" class="btn danger" data-dclear>إزالة كل الخصومات</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
-    document.body.appendChild(ov);
-    ov.querySelector('[data-close]').onclick = () => ov.remove();
-    ov.querySelector('[data-dapply]').onclick = () => {
-      const cfg = db.settings.priv_fees || {};
-      let discs = Array.isArray(cfg.discs) ? cfg.discs : [];
-      Object.entries(DISC_VALUES).forEach(([id, val]) => { const d = discs.find(x => x.id === id); if (d) d.value = val; });
-      db.settings.priv_fees = { ...cfg, discs };
-      let count = 0;
-      ov.querySelectorAll('[data-dset]:checked:not(:disabled)').forEach(cb => {
-        const s = byId(db.students, cb.dataset.dset); if (!s) return;
-        s.info = { ...(s.info || {}), feeDisc: cb.dataset.did }; count++;
+    try {
+      if (session?.role !== 'admin') { toast('للمدير فقط'); return; }
+      let html = '<p class="note">يمكنك تعديل الخصومات — أزل ✔ لاستثناء طالب ثم اضغط «تطبيق».</p>';
+      let totalMatched = 0;
+      GROUPS.forEach(g => {
+        const matched = [], missing = [];
+        g.names.forEach(name => { const s = findStudent(name); if (s) matched.push(s); else missing.push(name); });
+        totalMatched += matched.length;
+        html += '<h3 style="margin:1rem 0 .3rem">' + g.label + ' — ' + matched.length + ' طالب</h3>';
+        if (matched.length) {
+          html += '<div class="tbl"><table>';
+          matched.forEach(s => {
+            const cur = (s.info || {}).feeDisc;
+            html += '<tr><td><label style="margin:0;display:flex;align-items:center;gap:.4rem"><input type="checkbox" data-dset="' + esc(s.id) + '" data-did="' + g.id + '" ' + (cur === g.id ? 'checked disabled' : 'checked') + '> ' + esc(s.name) + '</label></td><td class="muted">' + esc(hName(s.halaqaId)) + '</td>' + (cur === g.id ? '<td><span class="tag tag-ok">معيّن</span></td>' : '<td></td>') + '</tr>';
+          });
+          html += '</table></div>';
+        }
+        if (missing.length) html += '<p class="muted" style="font-size:.85rem">لم يُطابَق: ' + missing.map(n => esc(n)).join('، ') + '</p>';
       });
-      ov.remove(); save(); render();
-      toast(`تم: عُيّن الخصم لـ ${count} طالب`);
-    };
-    ov.querySelector('[data-dclear]').onclick = () => {
-      ask('إزالة كل الخصومات المعيّنة من كل الطلاب؟', () => {
-        let n = 0;
-        db.students.forEach(s => { if ((s.info || {}).feeDisc) { s.info.feeDisc = ''; s.info.feeDiscVal = ''; n++; } });
+      const ov = document.createElement('div'); ov.className = 'overlay';
+      ov.innerHTML = '<div class="modal wide"><h2>تعديل الخصومات (' + totalMatched + ' طالب)</h2>' + html + '<div class="row" style="margin-top:1rem"><button type="button" class="btn primary" data-dapply>تطبيق</button><button type="button" class="btn danger" data-dclear>إزالة كل الخصومات</button><button type="button" class="btn" data-close>إلغاء</button></div></div>';
+      document.body.appendChild(ov);
+      ov.querySelector('[data-close]').onclick = () => ov.remove();
+      ov.querySelector('[data-dapply]').onclick = () => {
         const cfg = db.settings.priv_fees || {};
-        db.settings.priv_fees = { ...cfg, _discApplied: false };
+        let discs = Array.isArray(cfg.discs) ? cfg.discs : [];
+        Object.entries(DISC_VALUES).forEach(([id, val]) => { const d = discs.find(x => x.id === id); if (d) d.value = val; });
+        db.settings.priv_fees = { ...cfg, discs };
+        let count = 0;
+        ov.querySelectorAll('[data-dset]:checked:not(:disabled)').forEach(cb => {
+          const s = byId(db.students, cb.dataset.dset); if (!s) return;
+          s.info = { ...(s.info || {}), feeDisc: cb.dataset.did }; count++;
+        });
         ov.remove(); save(); render();
-        toast(`تم: أُزيلت الخصومات من ${n} طالب`);
-      });
-    };
+        toast('تم: عُيّن الخصم لـ ' + count + ' طالب');
+      };
+      ov.querySelector('[data-dclear]').onclick = () => {
+        ask('إزالة كل الخصومات المعيّنة من كل الطلاب؟', () => {
+          let n = 0;
+          db.students.forEach(s => { if ((s.info || {}).feeDisc) { s.info.feeDisc = ''; s.info.feeDiscVal = ''; n++; } });
+          const cfg = db.settings.priv_fees || {};
+          db.settings.priv_fees = { ...cfg, _discApplied: false };
+          ov.remove(); save(); render();
+          toast('تم: أُزيلت الخصومات من ' + n + ' طالب');
+        });
+      };
+    } catch(e) { console.error('disc run error:', e); }
   }
 
   document.addEventListener('click', e => { if (e.target.closest('[data-disc-setup]')) run(); });
   const obs = new MutationObserver(() => {
-    const q = document.querySelector('.qimp');
-    if (q && !q.querySelector('[data-disc-setup]')) {
-      q.insertAdjacentHTML('beforeend', '<button type="button" class="btn" data-disc-setup>تعديل الخصومات</button>');
-    }
+    try {
+      const q = document.querySelector('.qimp');
+      if (q && !q.querySelector('[data-disc-setup]')) {
+        q.insertAdjacentHTML('beforeend', '<button type="button" class="btn" data-disc-setup>تعديل الخصومات</button>');
+      }
+    } catch(e) {}
   });
   obs.observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
 })();

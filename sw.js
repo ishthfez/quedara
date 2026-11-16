@@ -1,6 +1,5 @@
-/* عامل الخدمة: يحفظ ملفات التطبيق على الجهاز ليعمل بدون إنترنت.
-   الاستراتيجية: الشبكة أولًا (حتى تصل التحديثات فور الاتصال)، ثم النسخة المحفوظة عند انقطاعها. */
-const CACHE = 'halaqat-v4';
+/* Service Worker v5 */
+const CACHE = 'halaqat-v5';
 const CORE = ['./', './style.css', './app.js', './app-forms.js', './app-actions.js', './payroll.js', './fees.js', './app-abs.js', './app-import.js', './fee-setup.js', './disc-setup.js', './perms.js', './accountant.js', './collect.js', './tables.js', './backup.js', './session.js', './dups.js', './selects.js', './links.js', './distribute.js', './split.js', './cleanup.js', './unassigned.js', './cascade.js', './places.js', './notes.js', './roles.js', './mine.js', './staff.js', './preview.js', './nav.js', './people.js', './notify.js', './receipt.js', './importx.js', './feesimport.js', './actas.js', './feeedit.js', './demo.js', './fixpay.js', './dupsall.js', './pager.js', './toolbar.js', './uniqname.js', './cloud.js', './logo.png', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {
@@ -13,7 +12,6 @@ self.addEventListener('activate', e => {
     .then(() => self.clients.claim()));
 });
 
-/* إن تأخرت الشبكة أكثر من 4 ثوانٍ نعرض المحفوظ بدل الانتظار */
 const timeout = (p, ms) => new Promise((ok, no) => { const t = setTimeout(() => no(new Error('timeout')), ms); p.then(r => { clearTimeout(t); ok(r); }, err => { clearTimeout(t); no(err); }); });
 
 self.addEventListener('fetch', e => {
