@@ -33,7 +33,7 @@
   const getN = k => { try { return +localStorage.getItem(uidKey(k)) || 0; } catch (e) { return 0; } };
   const setN = (k, v) => { try { localStorage.setItem(uidKey(k), String(v)); } catch (e) { /* ignore */ } };
   const ACT = 'qact_', LOGIN = 'qlogin_';
-  let locked = false, lastWrite = 0;
+  let locked = false, lastWrite = 0, lockEmail = null;
 
   /* بداية الجلسة: وقت الدخول وآخر نشاط */
   const markLogin = () => { const n = Date.now(); setN(LOGIN, n); setN(ACT, n); };
@@ -58,6 +58,7 @@
   }
   function lock(why) {
     if (locked || document.getElementById('qlock')) return;
+    lockEmail = C()?.auth?.email || lockEmail || null;
     locked = true;
     document.querySelectorAll('.overlay').forEach(o => o.remove());
     const n = (() => { try { return C().pendingCount(db); } catch (e) { return 0; } })();
@@ -76,8 +77,19 @@
     const el = document.getElementById('qlock'), pw = el?.querySelector('[data-lockpw]')?.value || '';
     if (!pw) { toast('اكتب كلمة المرور'); return; }
     if (navigator.onLine === false) { toast('لا يوجد اتصال بالإنترنت: اتصل ثم أعد المحاولة'); return; }
-    try { await C().testSignIn(C().auth.email, pw); } catch (e) { toast(/fetch|network/i.test(e.message || '') ? 'تعذّر الاتصال بالخادم، أعد المحاولة' : 'كلمة المرور غير صحيحة'); return; }
-    markLogin(); locked = false; el.remove(); toast('مرحبًا بعودتك');
+    const email = C()?.auth?.email || lockEmail;
+    if (!email) { toast('انتهت الجلسة — سجّل الخروج وأعد الدخول'); return; }
+    try {
+      if (C()?.auth?.access_token) {
+        /* الجلسة قائمة: نتحقق فقط من كلمة المرور */
+        await C().testSignIn(email, pw);
+      } else {
+        /* الجلسة انتهت تمامًا: دخول كامل لاستعادتها */
+        await C().signIn(email, pw);
+        if (session) C().setMember(session);
+      }
+    } catch (e) { toast(/fetch|network/i.test(e.message || '') ? 'تعذّر الاتصال بالخادم، أعد المحاولة' : 'كلمة المرور غير صحيحة'); return; }
+    markLogin(); lockEmail = null; locked = false; el.remove(); toast('مرحبًا بعودتك');
     try { cloudRefresh(true); } catch (e) { /* ignore */ }
   }
   document.addEventListener('click', e => {
