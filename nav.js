@@ -151,6 +151,7 @@
   document.addEventListener('change', e => { const s = e.target.closest?.('select[data-tstat],select[data-pstat]'); if (s) s.classList.toggle('qoff', s.value === 'off'); });
   const wcss = document.createElement('style');
   wcss.textContent = `select.qoff{color:var(--red,#b3372f)!important;border-color:var(--red,#b3372f)!important;font-weight:700}
+    .btn.qoff{background:var(--red,#b3372f)!important;border-color:var(--red,#b3372f)!important;color:#fff!important}
     .lnk.wname{text-decoration:none;text-align:start}.lnk.wname:hover b{text-decoration:underline;text-decoration-color:var(--gold)}
     main .tbl tr:has(select[data-sstat]) [data-stat]{display:none!important}`;
   document.head.appendChild(wcss);
@@ -629,7 +630,8 @@
        - بلا «الفئة» ولا قائمة «الصغار والكبار» (الفئة باقية في بيانات الطالب كما هي).
        - «الحضور»: نظام الطالب (6) أيام أو (3) أيام، وهو الحقل نفسه (info.feeSys) الذي يحدد في «الاشتراكات» مبلغه
          بحسب مكان حلقته؛ يُحفظ بمعالج «الاشتراكات» نفسه (data-fsys) فيتغير المستحق فورًا.
-       - «الحالة»: منتظم/منقطع، وزر واحد (بدل القائمة) يبدّل بينهما بالتأكيد الأصلي نفسه (toggleStatus في accountant.js).
+       - «الحالة»: منتظم/منقطع، وزر واحد (بدل القائمة) يبدّل بينهما بالتأكيد الأصلي نفسه (toggleStatus في accountant.js)،
+         أحمر حين يكون منقطعًا (.qoff).
        - «نسبة الحضور»: بعد «الحالة» (انتقلت من «الطلاب ← الحضور»، وهي ملخص تراكمي لا يناسب شاشة التسجيل اليومي). */
     function stuTable(html) {
       const t = document.createElement('template'); t.innerHTML = html; const C = t.content;
