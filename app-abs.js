@@ -86,13 +86,11 @@
     ${unpaid.length && can('fees.collect') ? `<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">${unpaid.length} طالب لم يسدّد اشتراك ${MONTH_NAMES[fm - 1]}.</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (${unpaid.length})</button></div>` : ''}`;
   }
 
-  /* ---- إزالة «سجل الدفع» و«الفئة» من جدول الطلاب — نُقلا لملف الطالب ---- */
-  const _origActions = window.QLFeesEmbed?.actions;
-  if (window.QLFeesEmbed && _origActions) {
+  /* ---- أزرار الاشتراك: تحصيل + تذكير فقط (سجل الدفع والفئة في ملف الطالب) ---- */
+  if (window.QLFeesEmbed) {
     window.QLFeesEmbed.actions = function(s) {
       if (!can('fees.collect') && !can('fees.amount')) return '';
-      const F = window.QLFeesEmbed, D = window.QLFeeDue?.(s);
-      const fee = D ?? null, off = stOff(s);
+      const fee = window.QLFeeDue?.(s) ?? null, off = stOff(s);
       const cloudMissing = typeof CLOUD !== 'undefined' && CLOUD && window.Cloud?.feesReady === false;
       const remind = can('fees.collect') && !off && fee !== 0 && (fee ? (function(){ const fees = Array.isArray(db.fees) ? db.fees : []; const fy = window.QLFees?.y, fm = window.QLFees?.m; let p = 0; fees.forEach(f => { if (f.studentId === s.id && +f.y === fy && +f.m === fm) p += +f.amount || 0; }); return p < fee; })() : true)
         ? `<button type="button" class="btn sm" data-remind="${esc(s.id)}" title="تذكير بالسداد">تذكير</button>` : '';
@@ -100,25 +98,20 @@
     };
   }
 
-  /* ---- إضافة سجل الاشتراكات والفئة في ملف الطالب ---- */
+  /* ---- سجل الاشتراكات والفئة في ملف الطالب ---- */
   const _origCard = typeof studentCard === 'function' ? studentCard : null;
   if (_origCard) {
     window.studentCard = function(st) {
       if (!st) return _origCard(st);
-      /* نستدعي الأصلي الذي يفتح openInfo — ثم نضيف أقسامنا بعد فتحه */
       _origCard(st);
-      /* ننتظر لحظة ليُنشأ الـ modal ثم نضيف المحتوى */
       setTimeout(() => {
         const modal = document.querySelector('.overlay:last-child .scard');
         if (!modal) return;
         const fees = (Array.isArray(db.fees) ? db.fees : []).filter(f => f.studentId === st.id).sort((a, b) => (b.y * 100 + b.m) - (a.y * 100 + a.m) || String(b.date).localeCompare(String(a.date)));
         const total = fees.reduce((a, f) => a + (+f.amount || 0), 0);
-        const isAdm = session?.role === 'admin';
         const feeOf = window.QLFeeDue;
         const due = feeOf ? feeOf(st) : null;
         const I = st.info || {};
-
-        /* قسم الفئة والاشتراك */
         let catHtml = '<h3 class="sc-h">الاشتراك</h3><div class="tbl"><table>';
         catHtml += `<tr><th>المستحق الشهري</th><td>${due != null ? money(due) + ' جنيه' : 'غير محدد'}</td></tr>`;
         if (I.fee) catHtml += `<tr><th>مبلغ خاص</th><td>${money(I.fee)} جنيه</td></tr>`;
@@ -130,11 +123,9 @@
         }
         catHtml += '</table></div>';
         if (can('fees.amount')) catHtml += `<div class="row noprint" style="margin:.4rem 0"><button class="btn sm" data-fee-assign="${esc(st.id)}">تعديل الفئة والخصم</button></div>`;
-
-        /* قسم سجل الدفعات */
         let logHtml = '<h3 class="sc-h">سجل الاشتراكات</h3>';
         if (fees.length) {
-          logHtml += `<div class="tbl"><table><tr><th>الشهر</th><th>المبلغ</th><th>التاريخ</th><th>حصّلها</th></tr>`;
+          logHtml += '<div class="tbl"><table><tr><th>الشهر</th><th>المبلغ</th><th>التاريخ</th><th>حصّلها</th></tr>';
           fees.slice(0, 24).forEach(f => {
             logHtml += `<tr><td>${MONTH_NAMES[(f.m || 1) - 1]} ${f.y}</td><td>${money(f.amount)}</td><td dir="ltr" style="text-align:right">${esc(f.date || '')}</td><td>${esc(f.by || '')}</td></tr>`;
           });
@@ -143,23 +134,20 @@
         } else {
           logHtml += empty('لا توجد دفعات مسجّلة.');
         }
-
-        /* إدراج قبل أزرار التعديل والطباعة */
         const btns = modal.querySelector('.row.noprint:last-child');
         if (btns) btns.insertAdjacentHTML('beforebegin', catHtml + logHtml);
         else modal.insertAdjacentHTML('beforeend', catHtml + logHtml);
       }, 50);
     };
-    /* ربط الاسم القديم ليعمل مع data-act="studentCard" */
     studentCard = window.studentCard;
   }
 
-  /* ---- استبدال دالة عرض الطلاب ---- */
+  /* ---- جدول الطلاب: بدون الفئة، الحالة بعد آخر حفظ كزر منقطع/منتظم ---- */
   adminViews.students = function() {
     const list = db.students.filter(st => (!ui.fh || st.halaqaId === ui.fh) && (!ui.fcat || (st.cat || 'child') === ui.fcat));
     const F = window.QLFeesEmbed;
     const hasFees = !!F;
-    const feeH = hasFees ? '<th>المستحق</th><th>المدفوع</th><th>الحالة</th>' : '';
+    const feeH = hasFees ? '<th>المستحق</th><th>المدفوع</th><th>حالة السداد</th>' : '';
     const toolbar = hasFees && (can('fees.collect') || can('fees.amount'))
       ? `${can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>إعدادات الاشتراك</button>' : ''}${can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : ''}`
       : '';
@@ -169,6 +157,9 @@
     <select data-change="fcat"><option value="">الصغار والكبار</option>${Object.entries(CATS).map(([k, l]) => `<option value="${k}" ${ui.fcat === k ? 'selected' : ''}>${k === 'child' ? 'الصغار' : 'الكبار'}</option>`).join('')}</select>
     <select data-change="fh"><option value="">كل الحلقات</option>${db.halaqat.map(h => `<option value="${esc(h.id)}" ${h.id === ui.fh ? 'selected' : ''}>${esc(halaqaLabel(h))}</option>`).join('')}</select>
     <button class="btn primary" data-act="addStudent">+ استمارة طالب</button></div>
-    ${list.length ? `<div class="tbl"><table><tr><th>الاسم</th><th>الفئة</th><th>السن</th><th>الحلقة</th><th>المكان</th><th>آخر حفظ</th><th>غياب الشهر</th>${feeH}<th></th></tr>${list.map(st => `<tr><td><span class="who">${avatar(st)}<span>${esc(st.name)}${stOff(st) ? ' <span class="tag tag-no">منقطع</span>' : ''}</span></span></td><td><span class="tag ${st.cat === 'adult' ? 'tag-a' : ''}">${CATS[st.cat || 'child']}</span></td><td>${ageOf(st) === '' ? '\u2014' : ageOf(st)}</td><td>${esc(hName(st.halaqaId))}</td><td>${esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014')}</td><td>${esc(lastHifz(st.id))}</td><td><button type="button" class="lnk" data-abs-log="${st.id}">${absMonth(st.id) || '\u0660'}</button></td>${hasFees ? F.cells(st) : ''}<td><button class="btn sm primary" data-act="studentCard" data-id="${st.id}">الملف</button><button class="btn sm" data-act="hist" data-id="${st.id}">السجل</button><button class="btn sm" data-act="editStudent" data-id="${st.id}">تعديل</button><button class="btn sm" data-stat="${st.id}">${stOff(st) ? 'منتظم' : 'منقطع'}</button>${db.fields.students.length ? `<button class="btn sm" data-act="editExtra" data-k="students" data-id="${st.id}">إضافية</button>` : ''}${hasFees ? F.actions(st) : ''}</td></tr>`).join('')}</table></div>` : empty('لا يوجد طلاب.')}</div>`;
+    ${list.length ? `<div class="tbl"><table><tr><th>الاسم</th><th>السن</th><th>الحلقة</th><th>المكان</th><th>آخر حفظ</th><th>الحالة</th><th>غياب الشهر</th>${feeH}<th></th></tr>${list.map(st => {
+      const off = stOff(st);
+      return `<tr><td><span class="who">${avatar(st)}<span>${esc(st.name)}</span></span></td><td>${ageOf(st) === '' ? '\u2014' : ageOf(st)}</td><td>${esc(hName(st.halaqaId))}</td><td>${esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014')}</td><td>${esc(lastHifz(st.id))}</td><td><button type="button" class="btn sm${off ? ' danger' : ''}" data-stat="${st.id}">${off ? 'منقطع' : 'منتظم'}</button></td><td><button type="button" class="lnk" data-abs-log="${st.id}">${absMonth(st.id) || '\u0660'}</button></td>${hasFees ? F.cells(st) : ''}<td><button class="btn sm primary" data-act="studentCard" data-id="${st.id}">الملف</button><button class="btn sm" data-act="hist" data-id="${st.id}">السجل</button><button class="btn sm" data-act="editStudent" data-id="${st.id}">تعديل</button>${db.fields.students.length ? `<button class="btn sm" data-act="editExtra" data-k="students" data-id="${st.id}">إضافية</button>` : ''}${hasFees ? F.actions(st) : ''}</td></tr>`;
+    }).join('')}</table></div>` : empty('لا يوجد طلاب.')}</div>`;
   };
 })();
