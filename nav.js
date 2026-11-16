@@ -588,12 +588,13 @@
       return html;
     };
     /* ===== حاضر/غائب في زر واحد (أخضر لحاضر، أحمر لغائب)، و«متأخر» زر مستقل، وبلا «معتذر» =====
-       الأصل الغياب: ما لم يُسجَّل بعد (أو كان «متأخر») يظهر الزر أحمر بنص «غائب»، والضغط يسجّله حاضرًا. */
+       الأصل الغياب: ما لم يُسجَّل بعد (أو كان «متأخر») يظهر الزر أحمر بنص «غائب»، والضغط يسجّله حاضرًا.
+       «متأخر» يبدّل: الضغط يسجّله متأخرًا، والضغط عليه مرة أخرى يلغي التأخير (يعود للأصل: غائب). */
     const attBtns = (cur, sid) => {
       const present = cur === 'present';
       const next = present ? 'absent' : 'present';
       return `<button type="button" class="btn sm on ${present ? 'present' : 'absent'}" data-act="att" data-sid="${esc(sid)}" data-st="${next}">${present ? 'حاضر' : 'غائب'}</button>
-        <button type="button" class="btn sm ${cur === 'late' ? 'on late' : ''}" data-act="att" data-sid="${esc(sid)}" data-st="late">متأخر</button>`;
+        <button type="button" class="btn sm ${cur === 'late' ? 'on late' : ''}" data-act="att" data-sid="${esc(sid)}" data-st="${cur === 'late' ? '' : 'late'}">متأخر</button>`;
     };
     /* ===== «الطلاب ← الحضور»: مساحة عمل الحلقة =====
        أدوات الحلقة (المنتظمون/المنقطعون، البحث، التسميع، السجل، الإشعار، النقل) ومعها تسجيل الحضور في عمود «حضور اليوم»
