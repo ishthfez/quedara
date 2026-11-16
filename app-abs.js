@@ -4,7 +4,12 @@
   const MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
   const css = document.createElement('style');
-  css.textContent = `tr.tr-off td{color:var(--red,#b3372f)!important;opacity:.75} tr.tr-off .tag,tr.tr-off .btn{opacity:.85}`;
+  css.textContent = `
+    tr.tr-off td{color:var(--red,#b3372f)!important;opacity:.75} tr.tr-off .tag,tr.tr-off .btn{opacity:.85}
+    /* أرقام إنجليزية في كل التطبيق */
+    body,table,input,select,textarea,.card,.stat,.feerow,.feebar-label,.tbl,.tag,.btn,.modal{font-feature-settings:"tnum";-webkit-locale:"en"}
+    .feerow b,.feebar-label span,.tag,.stat b,.stat .num{unicode-bidi:plaintext;direction:ltr}
+  `;
   document.head.appendChild(css);
 
   const cleanHName = (hid) => {
@@ -13,10 +18,19 @@
     return teacher ? teacher.name : (h.name || '\u2014');
   };
 
-  function absMonth(sid) {
+  /* ---- غياب الشهر: تمييز «غير مفعل» عن «صفر حقيقي» ---- */
+  function absMonthCell(st) {
     const fy = window.QLFees?.y || new Date().getFullYear(), fm = window.QLFees?.m || (new Date().getMonth() + 1);
-    return db.attendance.filter(a => a.studentId === sid && a.date?.startsWith(`${fy}-${pad(fm)}`) && (a.status === 'absent' || a.status === 'excused')).length;
+    const prefix = `${fy}-${pad(fm)}`;
+    const myAbs = db.attendance.filter(a => a.studentId === st.id && a.date?.startsWith(prefix) && (a.status === 'absent' || a.status === 'excused')).length;
+    if (myAbs > 0) return `<button type="button" class="lnk" data-abs-log="${st.id}">${myAbs}</button>`;
+    /* صفر — هل الحلقة فيها تسجيل حضور هذا الشهر أصلاً؟ */
+    const peers = db.students.filter(s => s.halaqaId === st.halaqaId).map(s => s.id);
+    const halaqaHasAtt = db.attendance.some(a => peers.includes(a.studentId) && a.date?.startsWith(prefix));
+    if (halaqaHasAtt) return `<button type="button" class="lnk" data-abs-log="${st.id}">0</button>`;
+    return `<span class="muted" style="font-size:.8rem">غير مفعل</span>`;
   }
+
   function absLog(sid) {
     const s = byId(db.students, sid); if (!s) return;
     const all = db.attendance.filter(a => a.studentId === sid).sort((a, b) => b.date.localeCompare(a.date));
@@ -146,7 +160,7 @@
       (Array.isArray(db.fees) ? db.fees : (db.fees = [])).push(f);
       ov.remove();
       if (window.QLReceipt) setTimeout(() => window.QLReceipt.offer(f), 60);
-      else toast(`سُجّل ${money(amt)} جنيه لـ«${s.name}» عن ${MONTH_NAMES[sm - 1]} ${sy}`);
+      else toast(`تم تسجيل ${money(amt)} جنيه لـ«${s.name}» عن ${MONTH_NAMES[sm - 1]} ${sy}`);
       save(); render();
     };
   }, true);
@@ -178,7 +192,7 @@
           logHtml += '<div class="tbl"><table><tr><th>الشهر</th><th>المبلغ</th><th>التاريخ</th><th>حصّلها</th><th>ملاحظة</th></tr>';
           fees.slice(0, 24).forEach(f => { logHtml += `<tr><td>${MONTH_NAMES[(f.m||1)-1]} ${f.y}</td><td>${money(f.amount)}</td><td dir="ltr" style="text-align:right">${esc(f.date||'')}</td><td>${esc(f.by||'')}</td><td>${esc(f.note||'')}</td></tr>`; });
           logHtml += `<tr class="sum"><td>الإجمالي</td><td>${money(total)}</td><td colspan="3"></td></tr></table></div>`;
-          if (fees.length > 24) logHtml += `<p class="muted">يظهر آخر 24 دفعة من ${fees.length}.</p>`;
+          if (fees.length > 24) logHtml += `<p class="muted">آخر 24 دفعة من ${fees.length}.</p>`;
         } else logHtml += empty('لا توجد دفعات مسجّلة.');
         const btns = modal.querySelector('.row.noprint:last-child');
         if (btns) btns.insertAdjacentHTML('beforebegin', catHtml + logHtml);
@@ -203,7 +217,7 @@
     <button class="btn primary" data-act="addStudent">+ استمارة طالب</button></div>
     ${list.length ? `<div class="tbl"><table><tr><th>الاسم</th><th>السن</th><th>الحلقة</th><th>المكان</th><th>آخر حفظ</th><th>الحالة</th><th>غياب الشهر</th>${feeH}<th></th></tr>${list.map(st => {
       const off = stOff(st);
-      return `<tr${off ? ' class="tr-off"' : ''}><td><span class="who">${avatar(st)}<span>${esc(st.name)}</span></span></td><td>${ageOf(st) === '' ? '\u2014' : ageOf(st)}</td><td>${esc(cleanHName(st.halaqaId))}</td><td>${esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014')}</td><td>${esc(lastHifz(st.id))}</td><td><button type="button" class="btn sm${off ? ' danger' : ''}" data-stat="${st.id}">${off ? 'منقطع' : 'منتظم'}</button></td><td><button type="button" class="lnk" data-abs-log="${st.id}">${absMonth(st.id) || '\u0660'}</button></td>${hasFees ? F.cells(st) : ''}<td><button class="btn sm primary" data-act="studentCard" data-id="${st.id}">الملف</button><button class="btn sm" data-act="hist" data-id="${st.id}">السجل</button><button class="btn sm" data-act="editStudent" data-id="${st.id}">تعديل</button>${db.fields.students.length ? `<button class="btn sm" data-act="editExtra" data-k="students" data-id="${st.id}">إضافية</button>` : ''}${hasFees ? F.actions(st) : ''}</td></tr>`;
+      return `<tr${off ? ' class="tr-off"' : ''}><td><span class="who">${avatar(st)}<span>${esc(st.name)}</span></span></td><td>${ageOf(st) === '' ? '\u2014' : ageOf(st)}</td><td>${esc(cleanHName(st.halaqaId))}</td><td>${esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014')}</td><td>${esc(lastHifz(st.id))}</td><td><button type="button" class="btn sm${off ? ' danger' : ''}" data-stat="${st.id}">${off ? 'منقطع' : 'منتظم'}</button></td><td>${absMonthCell(st)}</td>${hasFees ? F.cells(st) : ''}<td><button class="btn sm primary" data-act="studentCard" data-id="${st.id}">الملف</button><button class="btn sm" data-act="hist" data-id="${st.id}">السجل</button><button class="btn sm" data-act="editStudent" data-id="${st.id}">تعديل</button>${db.fields.students.length ? `<button class="btn sm" data-act="editExtra" data-k="students" data-id="${st.id}">إضافية</button>` : ''}${hasFees ? F.actions(st) : ''}</td></tr>`;
     }).join('')}</table></div>` : empty('لا يوجد طلاب.')}</div>`;
   };
 })();
