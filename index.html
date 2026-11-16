@@ -12,7 +12,6 @@
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="style.css">
   <style>
-    /* أداء الهاتف: الزجاج الضبابي والتأثيرات المتكررة ثقيلة على المعالج، فتُستبدل بخلفيات شبه معتمة */
     @media (max-width:860px),(hover:none) and (pointer:coarse){
       .card,.stat,.modal,.overlay,.side,.content .top,.toast,.shell .scrim{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
       .card,.stat{background:rgba(255,255,255,.94)!important;box-shadow:0 1px 4px rgba(15,25,50,.08)!important}
@@ -31,10 +30,8 @@
   <div id="app"></div>
   <div id="toast" class="toast" hidden></div>
   <script>
-    /* الأرقام إنجليزية دائمًا: كروم يعرض أرقام خانات الأرقام والتاريخ بلغة الصفحة (العربية)، فنجعل لغة هذه الخانات إنجليزية */
     new MutationObserver(() => document.querySelectorAll('input[type=number]:not([lang]),input[type=date]:not([lang]),input[type=tel]:not([lang])')
       .forEach(i => { i.lang = i.type === 'date' ? 'en-GB' : 'en'; })).observe(document.documentElement, { childList: true, subtree: true });
-    /* كلمات المرور: حروف إنجليزية وأرقام ورموز فقط؛ الحرف العربي يُحذف فورًا ويظهر تحت الخانة سطر أحمر «اكتب بالإنجليزية» */
     document.addEventListener('input', e => {
       const t = e.target;
       if (!t || t.tagName !== 'INPUT' || !(t.type === 'password' || t.dataset.eye)) return;
@@ -84,6 +81,7 @@
   <script src="preview.js"></script>
   <script src="nav.js"></script>
   <script src="app-import.js"></script>
+  <script src="fee-setup.js"></script>
   <script src="people.js"></script>
   <script src="notify.js"></script>
   <script src="receipt.js"></script>
@@ -98,7 +96,6 @@
   <script src="uniqname.js"></script>
   <script src="app-actions.js"></script>
   <script>
-    /* الشاشة الافتتاحية: تختفي بعد لحظة بدل 3 ثوانٍ */
     setTimeout(() => { const s = document.getElementById('splash'); if (s) { s.classList.add('hide'); setTimeout(() => s.remove(), 650); } }, 1100);
   </script>
 </body>
