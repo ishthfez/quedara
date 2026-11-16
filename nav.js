@@ -587,11 +587,11 @@
       return html;
     };
     /* ===== حاضر/غائب في زر واحد (أخضر لحاضر، أحمر لغائب)، و«متأخر» زر مستقل، وبلا «معتذر» =====
-       الضغط يبدّل بين حاضر وغائب: الحالة الافتراضية أو «متأخر» تُعرض محايدة بنص «حاضر» (الضغط يسجّله حاضرًا). */
+       الأصل الغياب: ما لم يُسجَّل بعد (أو كان «متأخر») يظهر الزر أحمر بنص «غائب»، والضغط يسجّله حاضرًا. */
     const attBtns = (cur, sid) => {
-      const abs = cur === 'absent', pa = cur === 'present' || abs;
-      const next = cur === 'present' ? 'absent' : 'present';
-      return `<button type="button" class="btn sm ${pa ? 'on ' + cur : ''}" data-act="att" data-sid="${esc(sid)}" data-st="${next}">${abs ? 'غائب' : 'حاضر'}</button>
+      const present = cur === 'present';
+      const next = present ? 'absent' : 'present';
+      return `<button type="button" class="btn sm on ${present ? 'present' : 'absent'}" data-act="att" data-sid="${esc(sid)}" data-st="${next}">${present ? 'حاضر' : 'غائب'}</button>
         <button type="button" class="btn sm ${cur === 'late' ? 'on late' : ''}" data-act="att" data-sid="${esc(sid)}" data-st="late">متأخر</button>`;
     };
     /* ===== «الطلاب ← الحضور»: مساحة عمل الحلقة =====
@@ -612,7 +612,9 @@
       const head = tbl?.rows[0];
       /* عمود «حضور اليوم» للمنتظمين فقط (المنقطع لا يُسجَّل حضوره) */
       if (head && [...head.cells].some(c => c.textContent.trim() === 'آخر حفظ')) {
-        [...head.cells].forEach(c => { if (c.textContent.trim() === 'الحضور') c.textContent = 'نسبة الحضور'; });
+        /* نسبة الحضور لا حاجة لها هنا (تسجيل يومي لا ملخص تراكمي)؛ انتقلت إلى «الطلاب» بعد «الحالة» */
+        const rateIdx = [...head.cells].findIndex(c => c.textContent.trim() === 'الحضور');
+        if (rateIdx > -1) [...tbl.rows].forEach(r => r.cells[rateIdx]?.remove());
         head.cells[1].insertAdjacentHTML('afterend', `<th>${ui.date === today() ? 'حضور اليوم' : 'حضور ' + esc(ui.date)}</th>`);
         [...tbl.rows].slice(1).forEach(r => {
           const sid = r.querySelector('[data-act="hist"]')?.dataset.id; if (!sid || !r.cells[1]) return;
@@ -623,11 +625,12 @@
       return top + t.innerHTML;
     }
     document.addEventListener('change', e => { const s = e.target.closest?.('select[data-atth]'); if (s) { ui.hid = s.value; render(); } });
-    /* ===== جدول الطلاب: الاسم · السن · الحضور · الحلقة · الحالة · … =====
+    /* ===== جدول الطلاب: الاسم · السن · الحضور · الحلقة · الحالة · نسبة الحضور · … =====
        - بلا «الفئة» ولا قائمة «الصغار والكبار» (الفئة باقية في بيانات الطالب كما هي).
        - «الحضور»: نظام الطالب (6) أيام أو (3) أيام، وهو الحقل نفسه (info.feeSys) الذي يحدد في «الاشتراكات» مبلغه
          بحسب مكان حلقته؛ يُحفظ بمعالج «الاشتراكات» نفسه (data-fsys) فيتغير المستحق فورًا.
-       - «الحالة»: منتظم/منقطع، وزر واحد (بدل القائمة) يبدّل بينهما بالتأكيد الأصلي نفسه (toggleStatus في accountant.js). */
+       - «الحالة»: منتظم/منقطع، وزر واحد (بدل القائمة) يبدّل بينهما بالتأكيد الأصلي نفسه (toggleStatus في accountant.js).
+       - «نسبة الحضور»: بعد «الحالة» (انتقلت من «الطلاب ← الحضور»، وهي ملخص تراكمي لا يناسب شاشة التسجيل اليومي). */
     function stuTable(html) {
       const t = document.createElement('template'); t.innerHTML = html; const C = t.content;
       C.querySelector('select[data-change="fcat"]')?.remove();
@@ -655,7 +658,15 @@
       [...tbl.rows].forEach((r, ri) => {
         const c = [...r.cells], cat = c[iCat], age = c[iAge], hal = c[iHal], att = c[iAtt];
         if (!cat || !age || !hal || !att) return;
-        if (ri === 0) { att.textContent = 'الحضور'; age.after(att); hal.insertAdjacentHTML('afterend', '<th>الحالة</th>'); hal.insertAdjacentHTML('afterend', '<th>المكان</th>'); cat.remove(); r.insertAdjacentHTML('afterbegin', '<th class="selc"><input type="checkbox" data-sselall aria-label="تحديد كل الظاهرين"></th>'); return; }
+        if (ri === 0) {
+          att.textContent = 'الحضور'; age.after(att);
+          hal.insertAdjacentHTML('afterend', '<th>الحالة</th>');
+          hal.insertAdjacentHTML('afterend', '<th>المكان</th>');
+          hal.nextElementSibling.nextElementSibling.insertAdjacentHTML('afterend', '<th>نسبة الحضور</th>');
+          cat.remove();
+          r.insertAdjacentHTML('afterbegin', '<th class="selc"><input type="checkbox" data-sselall aria-label="تحديد كل الظاهرين"></th>');
+          return;
+        }
         const id = r.querySelector('[data-act="studentCard"]')?.dataset.id, s = id && byId(db.students, id);
         if (!s) { r.insertAdjacentHTML('afterbegin', '<td class="selc"></td>'); return; }
         r.insertAdjacentHTML('afterbegin', `<td class="selc"><input type="checkbox" data-ssel="${esc(s.id)}" ${sSel.has(s.id) ? 'checked' : ''} aria-label="تحديد ${esc(s.name)}"></td>`);
@@ -670,6 +681,7 @@
            (نفس data-stat الذي يتعامل معه toggleStatus في accountant.js بتأكيده الأصلي) */
         r.querySelectorAll('[data-stat]').forEach(b => b.remove());
         hal.nextElementSibling.insertAdjacentHTML('afterend', `<td><button type="button" class="btn sm ${off ? 'qoff' : ''}" data-stat="${esc(s.id)}" aria-label="حالة ${esc(s.name)}">${off ? 'منتظم' : 'منقطع'}</button></td>`);
+        hal.nextElementSibling.nextElementSibling.insertAdjacentHTML('afterend', `<td>${attRate(s.id)}</td>`);
         cat.remove();
         r.cells[1]?.querySelectorAll('.tag-no').forEach(x => x.remove());
       });
