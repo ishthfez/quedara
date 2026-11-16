@@ -16,7 +16,7 @@
      - «استيراد» و«الأسماء المتشابهة» في «الإعدادات» وحدها.
      - «استمارة طالب» صارت التبويب الأخير في نافذة «إضافة طالب» (بعد «طالب واحد» و«عدة طلاب»)، فلا زر مستقل لها.
      - اسم الطالب في أي جدول يفتح ملفه (بدل زر «الملف»).
-     - أزرار صف الطالب (السجل، تعديل، نقل) أيقونات صغيرة، واسمها يظهر عند الوقوف عليها.
+     - أزرار صف الطالب (السجل، تعديل، نقل، تسجيل تسميع، إشعار) أيقونات صغيرة، واسمها يظهر عند الوقوف عليها.
      - أسفل جدول الطلاب سطر واحد لعرض المزيد بالعدد الحقيقي (كان سطرين: حد الطلاب في staff.js وحد الخمسين في pager.js).
    عرض فقط: لا يغيّر أي وظيفة ولا بيانات. */
 (() => {
@@ -43,7 +43,11 @@
   const ROW_ICONS = {
     hist: [S('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'), 'السجل (الحضور والتسميع)'],
     editStudent: [S('<path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M13.5 6.5l3 3"/>'), 'تعديل البيانات'],
-    move: [S('<path d="M4 8h13l-3-3M20 16H7l3 3"/>'), 'نقل إلى حلقة أخرى']
+    move: [S('<path d="M4 8h13l-3-3M20 16H7l3 3"/>'), 'نقل إلى حلقة أخرى'],
+    /* كتاب مفتوح: تسجيل تسميع */
+    rec: [S('<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v16H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H12v16h5.5a2.5 2.5 0 0 1 2.5 2.5z"/>'), 'تسجيل تسميع'],
+    /* فقاعة رسالة: إشعار لهذا الطالب */
+    mnote: [S('<path d="M21 11.5a8.5 8.5 0 0 1-12.3 7.6L3 20.5l1.5-5A8.5 8.5 0 1 1 21 11.5z"/>'), 'إشعار لهذا الطالب']
   };
   /* مفتاح الأيقونة: data-act، أو إحدى السمات المعروفة */
   const keyOf = b => b.dataset.act || ['wmk', 'feeCfg', 'feeBulk', 'feeImport', 'remindAll', 'sdel'].find(k => k in b.dataset) || '';
@@ -273,9 +277,10 @@
         fb.remove(); r.dataset.snm = '1';
       });
     });
-    /* أزرار الصفوف المعروفة أيقونات */
-    document.querySelectorAll('main .tbl td .btn:is([data-act],[data-move]):not(.qri)').forEach(b => {
-      const ic = ROW_ICONS[b.dataset.act || ('move' in b.dataset ? 'move' : '')]; if (!ic) return;
+    /* أزرار الصفوف المعروفة أيقونات (السجل، تعديل البيانات، نقل، تسجيل تسميع، إشعار؛ لا «إشعار للطلاب» الجماعي data-mnote="*") */
+    document.querySelectorAll('main .tbl td .btn:is([data-act],[data-move],[data-mnote]):not(.qri)').forEach(b => {
+      const key = b.dataset.act || ('move' in b.dataset ? 'move' : (('mnote' in b.dataset) && b.dataset.mnote !== '*' ? 'mnote' : ''));
+      const ic = ROW_ICONS[key]; if (!ic) return;
       b.classList.add('qri'); b.title = ic[1]; b.setAttribute('aria-label', ic[1]); b.innerHTML = ic[0];
     });
     /* زر «حفظ» واحد بدل Excel وPDF: يبقى الزران الأصليان في مكانهما مخفيين (يجدان جدولهما منه) ويُضغطان من القائمة */
