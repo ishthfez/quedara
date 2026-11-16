@@ -3,20 +3,16 @@
 (() => {
   const MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
-  /* ---- CSS: صف المنقطع أحمر ---- */
   const css = document.createElement('style');
   css.textContent = `tr.tr-off td{color:var(--red,#b3372f)!important;opacity:.75} tr.tr-off .tag,tr.tr-off .btn{opacity:.85}`;
   document.head.appendChild(css);
 
-  /* ---- اسم الحلقة بدون كبسولة «حلقة» وبدون اسم المكان ---- */
   const cleanHName = (hid) => {
     const h = byId(db.halaqat, hid); if (!h) return '\u2014';
-    /* hName() يرجع "حلقة فلان" مع كبسولة، نريد اسم المحفظ فقط */
     const teacher = byId(db.members, h.teacherId);
     return teacher ? teacher.name : (h.name || '\u2014');
   };
 
-  /* ---- غياب الشهر ---- */
   function absMonth(sid) {
     const fy = window.QLFees?.y || new Date().getFullYear(), fm = window.QLFees?.m || (new Date().getMonth() + 1);
     return db.attendance.filter(a => a.studentId === sid && a.date?.startsWith(`${fy}-${pad(fm)}`) && (a.status === 'absent' || a.status === 'excused')).length;
@@ -41,24 +37,23 @@
   }
   document.addEventListener('click', e => { const b = e.target.closest('[data-abs-log]'); if (b) absLog(b.dataset.absLog); });
 
-  /* ---- أدوات مشتركة ---- */
   const can = p => (window.Perms ? Perms.can(p) : session?.role === 'admin');
   const money = n => (Math.round((+n || 0) * 100) / 100).toLocaleString('en-US');
   const feeRow = (cls, v, l) => `<div class="feerow ${cls}"><span>${esc(l)}</span><b>${v}</b></div>`;
   const getPaid = (sid, y, m) => { const fees = Array.isArray(db.fees) ? db.fees : []; let p = 0; fees.forEach(f => { if (f.studentId === sid && +f.y === y && +f.m === m) p += +f.amount || 0; }); return p; };
 
-  /* ---- بطاقة اشتراكات موحّدة ---- */
   function buildSummary(list) {
     if (!can('fees.collect') && !can('fees.amount')) return '';
     const F = window.QLFeesEmbed; if (!F) return '';
     F.summary(list);
     const fy = window.QLFees?.y || new Date().getFullYear(), fm = window.QLFees?.m || (new Date().getMonth() + 1);
     const feeOf = window.QLFeeDue;
-    let expected = 0, got = 0, paidN = 0, noneN = 0, freeN = 0;
+    let expected = 0, got = 0, paidN = 0, noneN = 0, freeN = 0, activeN = 0;
     const unpaid = [];
     list.forEach(s => {
       const fee = feeOf(s), paid = getPaid(s.id, fy, fm); got += paid;
       if (stOff(s)) return;
+      activeN++;
       if (fee === 0) { freeN++; return; }
       if (fee) expected += fee;
       if (paid > 0) { paidN++; }
@@ -79,7 +74,7 @@
         <select data-fmonth style="width:auto">${mOpts.join('')}</select>
       </div>
       <div class="feecards" style="margin:0">
-        <div>${feeRow('fr-ok', paidN, 'مسدَّد')}${feeRow('fr-no', noneN, 'لم يسدّد')}${feeRow('fr-info', freeN, 'معفى')}</div>
+        <div>${feeRow('fr-plain', activeN, 'عدد الطلاب')}${feeRow('fr-ok', paidN, 'مسدَّد')}${feeRow('fr-no', noneN, 'لم يسدّد')}${feeRow('fr-info', freeN, 'معفى')}</div>
         <div>${feeRow('fr-plain', money(expected), 'المتوقع')}${feeRow('fr-ok', money(got), 'المحصّل')}${feeRow('fr-no', money(remaining), 'الباقي')}
           <div class="feebar"><span style="width:${Math.min(pct, 100)}%"></span></div>
           <div class="feebar-label"><span>${pct}%</span><span>نسبة التحصيل</span></div></div>
@@ -88,7 +83,6 @@
     ${unpaid.length && can('fees.collect') ? `<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">${unpaid.length} طالب لم يسدّد اشتراك ${MONTH_NAMES[fm - 1]}.</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (${unpaid.length})</button></div>` : ''}`;
   }
 
-  /* ---- عمود المستحق ---- */
   if (window.QLFeesEmbed) {
     window.QLFeesEmbed.cells = function(s) {
       if (!can('fees.collect') && !can('fees.amount')) return '';
@@ -111,7 +105,6 @@
     };
   }
 
-  /* ---- نافذة تحصيل ---- */
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-fee-pay2]'); if (!b || !can('fees.collect')) return;
     e.stopPropagation();
@@ -158,7 +151,6 @@
     };
   }, true);
 
-  /* ---- ملف الطالب: اشتراك + سجل ---- */
   const _origCard = typeof studentCard === 'function' ? studentCard : null;
   if (_origCard) {
     window.studentCard = function(st) {
@@ -196,7 +188,6 @@
     studentCard = window.studentCard;
   }
 
-  /* ---- جدول الطلاب ---- */
   adminViews.students = function() {
     const list = db.students.filter(st => (!ui.fh || st.halaqaId === ui.fh) && (!ui.fcat || (st.cat || 'child') === ui.fcat));
     const F = window.QLFeesEmbed;
@@ -205,7 +196,7 @@
     const toolbar = hasFees && (can('fees.collect') || can('fees.amount'))
       ? `${can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>إعدادات الاشتراك</button>' : ''}${can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : ''}` : '';
     return `${buildSummary(list)}
-    <div class="card"><div class="bar"><h2 class="grow" style="margin:0">الطلاب <span class="muted" style="font-size:.9rem">(${list.length})</span></h2>
+    <div class="card"><div class="bar"><h2 class="grow" style="margin:0">الطلاب</h2>
     ${toolbar}
     <select data-change="fcat"><option value="">الصغار والكبار</option>${Object.entries(CATS).map(([k, l]) => `<option value="${k}" ${ui.fcat === k ? 'selected' : ''}>${k === 'child' ? 'الصغار' : 'الكبار'}</option>`).join('')}</select>
     <select data-change="fh"><option value="">كل الحلقات</option>${db.halaqat.map(h => `<option value="${esc(h.id)}" ${h.id === ui.fh ? 'selected' : ''}>${esc(halaqaLabel(h))}</option>`).join('')}</select>
