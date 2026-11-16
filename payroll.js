@@ -1,6 +1,5 @@
 /* ============ نظام المرتبات ============
-   كل الشهور وكل السنوات في جدول حركة واحد (db.payroll.rows)، والكشوف تُعرض باختيار السنة والشهر.
-   عناصر الراتب تُحفظ بقيمتها في صف كل شهر، فتعديل بطاقة الموظف لا يغيّر الشهور السابقة. */
+   كل الشهور وكل السنوات في جدول حركة واحد (db.payroll.rows)، والكشوف تُعرض باختيار السنة والشهر. */
 (() => {
 'use strict';
 const DEF = { perm: 20, noperm: 30, mperm: 50, mnoperm: 70, round: 5, lv3: 10, lv6: 21, hours: 26, pin: '' };
@@ -115,18 +114,6 @@ const V = {
       ${ys.length ? `<div class="tbl"><table><tr><th>السنة</th>${Array.from({ length: 12 }, (_, i) => `<th>شهر ${i + 1}</th>`).join('')}<th>الإجمالي</th><th>أشهر</th></tr>
       ${ys.map(y => { const yr = rs.filter(r => r.y === y); return `<tr><td><button class="lnk" data-act="payOpenYear" data-y="${y}"><b>${y}</b></button></td>${Array.from({ length: 12 }, (_, i) => `<td>${cell(y, i + 1)}</td>`).join('')}<td class="net">${fmt(yr.reduce((a, r) => a + calc(r).net, 0))}</td><td>${new Set(yr.map(r => r.m)).size}</td></tr>`; }).join('')}</table></div>` : empty('لا توجد سنوات مؤرشفة بعد.')}</div>`;
   },
-  abs() {
-    const { esc, empty } = Q(), p = P(), s = p.settings;
-    const list = p.absences.filter(a => a.y === st.y && (!st.am || a.m === st.am)).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    const yr = p.absences.filter(a => a.y === st.y);
-    const ids = new Set([...p.employees.filter(e => e.status !== 'متوقف').map(e => e.id), ...yr.map(a => a.eid)]);
-    const bal = [...ids].map(id => { const e = emp(id) || {}; const mine = yr.filter(a => a.eid === id); const b = e.sys === '(6) أيام' ? s.lv6 : e.sys === '(3) أيام' ? s.lv3 : null; const used = mine.filter(a => a.proof === 'رصيد').length; return { e, b, used, rest: b == null ? null : b - used, proven: mine.filter(a => a.proof === 'مثبت').length, n: mine.length }; }).filter(x => x.e.name).sort((a, b) => b.n - a.n);
-    return `<div class="card"><div class="bar">${ySel()}${mSel(true)}<span class="grow"></span><button class="btn primary" data-act="tab" data-v="absence">+ تسجيل غياب</button></div>
-      ${list.length ? `<div class="tbl" style="max-height:420px;overflow-y:auto"><table><tr><th>التاريخ</th><th>شهر المرتب</th><th>الاسم</th><th>المكان</th><th>الإذن</th><th>السبب</th><th>الإثبات</th><th></th></tr>
-      ${list.map(a => `<tr><td>${esc(a.date || '—')}</td><td>${a.m}</td><td>${esc(emp(a.eid)?.name || a.name || '')}</td><td>${esc(a.place || '')}</td><td>${esc(a.perm || '')}</td><td>${esc(a.reason || '')}</td><td>${esc(a.proof || '')}</td><td><button class="btn sm danger" data-act="payDelAbs" data-id="${esc(a.id)}">×</button></td></tr>`).join('')}</table></div>` : empty('لا يوجد غياب مسجل في هذه الفترة.')}</div>
-      <div class="card"><h2>رصيد الإجازات — ${st.y}</h2><div class="tbl"><table><tr><th>الاسم</th><th>نظام العمل</th><th>الرصيد</th><th>المخصوم</th><th>المتبقي</th><th>مثبت</th><th>إجمالي الغياب</th></tr>
-      ${bal.map(x => `<tr><td class="nm">${esc(x.e.name)}</td><td>${esc(x.e.sys || '—')}</td><td>${x.b ?? '—'}</td><td>${x.used}</td><td class="net">${x.rest ?? '—'}</td><td>${x.proven}</td><td>${x.n}</td></tr>`).join('')}</table></div></div>`;
-  },
   set() {
     const s = P().settings, p = P();
     const rows = [['perm', 'خصم ساعة الغياب بإذن'], ['noperm', 'خصم ساعة الغياب بدون إذن'], ['mperm', 'خصم غياب الاجتماع بإذن (للمرة)'], ['mnoperm', 'خصم غياب الاجتماع بغير إذن (للمرة)'], ['round', 'تقريب الراتب لأقرب'], ['lv3', 'رصيد إجازات نظام (3) أيام'], ['lv6', 'رصيد إجازات نظام (6) أيام'], ['hours', 'الساعات الأساسية الافتراضية']];
@@ -146,7 +133,9 @@ function view() {
     return `<div class="card" style="max-width:380px;margin:2rem auto"><h2>قسم المرتبات</h2><p class="muted">هذا القسم محمي برمز خاص.</p><label>الرمز<input type="password" id="paypin" inputmode="numeric" autocomplete="off"></label><button class="btn primary" style="width:100%" data-act="payUnlock">فتح</button></div>`;
   }
   defaults();
-  const subs = [['month', 'كشف الشهر'], ['emps', 'الموظفون'], ['year', 'ملخص السنة'], ['archive', 'الأرشيف'], ['abs', 'الغياب والإجازات'], ['set', 'إعدادات المرتبات']];
+  /* «الغياب والإجازات» أُزيل من هنا: كان جدولًا مكررًا لسجل الغياب نفسه الموجود في «العاملون ← الغياب»،
+     وجدول «رصيد الإجازات» الوحيد الذي كان فيها انتقل إلى هناك (أسفل سجل الغياب). */
+  const subs = [['month', 'كشف الشهر'], ['emps', 'الموظفون'], ['year', 'ملخص السنة'], ['archive', 'الأرشيف'], ['set', 'إعدادات المرتبات']];
   return `<div class="card noprint" style="padding:.6rem 1rem"><div class="bar" style="margin:0">${subs.map(([k, l]) => `<button class="btn ${k === st.sub ? 'on' : ''}" data-act="paySub" data-v="${k}">${l}</button>`).join('')}</div></div>${(V[st.sub] || V.month)()}`;
 }
 
@@ -165,6 +154,16 @@ function payMonthFor(date) {
 const cloudOn = () => !!(window.Cloud && window.Cloud.enabled);
 const proofRole = () => { const r = Q().session?.role; return r === 'admin' || (r === 'supervisor' && (!cloudOn() || !!P().leaveOK)); };
 const khasmOK = () => !cloudOn() || !!P().leaveOK;
+/* ===== رصيد الإجازات السنوي لكل موظف (كان جدولًا في «المرتبات ← الغياب والإجازات»، صار هنا أسفل سجل الغياب) ===== */
+function leaveBalances(year) {
+  const { esc } = Q(), p = P(), s = p.settings;
+  const yr = p.absences.filter(a => a.y === year);
+  const ids = new Set([...p.employees.filter(e => e.status !== 'متوقف').map(e => e.id), ...yr.map(a => a.eid)]);
+  const bal = [...ids].map(id => { const e = emp(id) || {}; const mine = yr.filter(a => a.eid === id); const b = e.sys === '(6) أيام' ? s.lv6 : e.sys === '(3) أيام' ? s.lv3 : null; const used = mine.filter(a => a.proof === 'رصيد').length; return { e, b, used, rest: b == null ? null : b - used, proven: mine.filter(a => a.proof === 'مثبت').length, n: mine.length }; }).filter(x => x.e.name).sort((a, b) => b.n - a.n);
+  if (!bal.length) return '';
+  return `<div class="card"><h2>رصيد الإجازات — ${year}</h2><div class="tbl"><table><tr><th>الاسم</th><th>نظام العمل</th><th>الرصيد</th><th>المخصوم</th><th>المتبقي</th><th>مثبت</th><th>إجمالي الغياب</th></tr>
+    ${bal.map(x => `<tr><td class="nm">${esc(x.e.name)}</td><td>${esc(x.e.sys || '—')}</td><td>${x.b ?? '—'}</td><td>${x.used}</td><td class="net">${x.rest ?? '—'}</td><td>${x.proven}</td><td>${x.n}</td></tr>`).join('')}</table></div></div>`;
+}
 function absView() {
   const { esc, empty, today } = Q(), p = P(), role = Q().session?.role, isAdmin = role === 'admin', canProof = proofRole();
   const emps = p.employees.filter(e => e.status !== 'متوقف').slice().sort((a, b) => a.name.localeCompare(b.name, 'ar'));
@@ -206,7 +205,7 @@ function absView() {
     ${list.length ? `<div class="tbl" style="max-height:520px;overflow-y:auto"><table><tr><th>اليوم</th><th>المعلم</th><th>المكان</th><th>الإذن</th><th>السبب</th>${canProof ? '<th>الإثبات</th>' : ''}<th>ملاحظات</th><th></th></tr>
     ${list.map(a => `<tr><td><b>${esc(dayName(a.date))}</b><br><small class="muted" dir="ltr">${esc(a.date || '—')}</small></td><td>${esc(emp(a.eid)?.name || a.name || '')}</td><td>${esc(a.place || '—')}</td><td>${a.perm ? `<span class="tag ${a.perm === 'بإذن' ? 'tag-ok' : 'tag-no'}">${esc(a.perm)}</span>` : '—'}</td><td>${esc(a.reason || '—')}</td>${canProof ? `<td><select class="mini" data-pay="absProof" data-id="${esc(a.id)}"><option value="">—</option><option ${a.proof === 'رصيد' ? 'selected' : ''}>رصيد</option>${khasmOK() || a.proof === 'خصم' ? `<option ${a.proof === 'خصم' ? 'selected' : ''}>خصم</option>` : ''}<option ${a.proof === 'مثبت' ? 'selected' : ''}>مثبت</option></select></td>` : ''}<td>${esc(a.note || '')}${a.by ? `<br><small class="muted">سجّله: ${esc(a.by)}</small>` : ''}</td><td>${isAdmin || (a.byMember ? a.byMember === myId : a.by && a.by === myName) ? `<button class="btn sm danger" data-act="payDelAbs" data-id="${esc(a.id)}">×</button>` : ''}</td></tr>`).join('')}</table></div>` : empty('لا يوجد غياب مسجل في هذا الشهر.')}
     ${sum.length ? `<h3 class="sc-h">ملخص الشهر</h3><div class="tbl"><table><tr><th>المعلم</th><th>أيام الغياب</th><th>بإذن</th><th>بغير إذن</th></tr>${sum.map(o => `<tr><td>${esc(o.name)}</td><td class="net">${o.n}</td><td>${o.p}</td><td>${o.np}</td></tr>`).join('')}</table></div>` : ''}
-  </div></div>`;
+  </div></div>${leaveBalances(ab.y)}`;
 }
 /* قراءة حقول النموذج إلى المسودة حتى لا تضيع عند إعادة الرسم */
 function absRead() {
