@@ -28,7 +28,7 @@
   }
   document.addEventListener('click', e => { const b = e.target.closest('[data-abs-log]'); if (b) absLog(b.dataset.absLog); });
 
-  /* ---- بطاقة اشتراكات موحّدة (بدل بطاقتين) ---- */
+  /* ---- بطاقة اشتراكات موحّدة ---- */
   const can = p => (window.Perms ? Perms.can(p) : session?.role === 'admin');
   const money = n => (Math.round((+n || 0) * 100) / 100).toLocaleString('en-US');
   const feeRow = (cls, v, l) => `<div class="feerow ${cls}"><span>${esc(l)}</span><b>${v}</b></div>`;
@@ -37,11 +37,9 @@
     if (!can('fees.collect') && !can('fees.amount')) return '';
     const F = window.QLFeesEmbed;
     if (!F) return '';
-    /* نستدعي summary الأصلي لحساب البيانات وضبط QLFees — ثم نتجاهل HTML الخاص به */
     F.summary(list);
     const fy = window.QLFees?.y || new Date().getFullYear(), fm = window.QLFees?.m || (new Date().getMonth() + 1);
 
-    /* حساب القيم بأنفسنا */
     const fees = Array.isArray(db.fees) ? db.fees : [];
     const pIdx = new Map();
     fees.forEach(f => { const k = f.studentId + '|' + (+f.y) + '|' + (+f.m); pIdx.set(k, (pIdx.get(k) || 0) + (+f.amount || 0)); });
@@ -61,7 +59,6 @@
     window._QLFeesVisibleList = list;
     const pct = expected > 0 ? Math.round(got / expected * 100) : 0;
 
-    /* قائمة الأشهر */
     const mOpts = [];
     for (let k = -12; k <= 2; k++) {
       const d = new Date(fy, fm - 1 + k, 1), yy = d.getFullYear(), mm = d.getMonth() + 1;
@@ -75,14 +72,15 @@
       </div>
       <div class="feecards" style="margin:0">
         <div>
-          ${feeRow('fr-ok', paidN, 'عدد المسددين')}
-          ${feeRow('fr-no', partN + noneN, 'عدد غير المسددين')}
-          ${feeRow('fr-info', freeN, 'عدد المعفيين')}
+          ${feeRow('fr-ok', paidN, 'مسدَّد بالكامل')}
+          ${feeRow('fr-no', noneN, 'لم يسدّد')}
+          ${partN ? feeRow('', partN, 'سدّد جزئياً') : ''}
+          ${feeRow('fr-info', freeN, 'معفى')}
         </div>
         <div>
-          ${feeRow('fr-plain', money(expected), 'الإيرادات المتوقعة')}
-          ${feeRow('fr-ok', money(got), 'الإيرادات الفعلية')}
-          ${feeRow('fr-no', money(remaining), 'باقي المستحق')}
+          ${feeRow('fr-plain', money(expected), 'المتوقع')}
+          ${feeRow('fr-ok', money(got), 'المحصّل')}
+          ${feeRow('fr-no', money(remaining), 'الباقي')}
           <div class="feebar"><span style="width:${Math.min(pct, 100)}%"></span></div>
           <div class="feebar-label"><span>${pct}%</span><span>نسبة التحصيل</span></div>
         </div>
@@ -97,7 +95,6 @@
     const F = window.QLFeesEmbed;
     const hasFees = !!F;
     const feeH = hasFees ? '<th>المستحق</th><th>المدفوع</th><th>الحالة</th>' : '';
-    /* شريط الأدوات بدون قائمة الشهر (نُقلت للبطاقة) */
     const toolbar = hasFees && (can('fees.collect') || can('fees.amount'))
       ? `${can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>إعدادات الاشتراك</button>' : ''}${can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>تعيين لنتائج البحث</button>' : ''}`
       : '';
