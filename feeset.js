@@ -7,6 +7,9 @@
    والزرّان في «الطلاب» و«الاشتراكات» يُخفيان عن المدير (يبقيان للمحاسب الذي ليس له «الإعدادات»).
    شريط تبويبات «الإعدادات» يصنعه nav.js؛ هنا تُضاف إليه تبويبات إضافية (window.QLSetTabs: «الاشتراكات» هنا، وغيرها من ملفات أخرى
    مثل «صلاحيات صفحة الطلاب» في stuperm.js)، ويُعرض محتوى المختار منها.
+   بطاقتا «استيراد» و«حالة الموقع» (app-import.js) كانتا فوق شريط التبويبات في كل تبويب: صار «الاستيراد» تبويبًا بعد «الاشتراكات»،
+   و«حالة الموقع» داخل تبويب «الإعدادات» أول محتواه. وبطاقة «الاستيراد والمراجعة» القديمة في «الإعدادات» (nav.js) تُحذف:
+   أزرارها كلها في تبويب «الاستيراد».
    ملف الطالب (قسم «الاشتراك» الذي يضيفه app-abs.js): المستحق بعد الخصم وبجانبه قبله مشطوبًا، وصف «الخصم» بقائمة تعيّنه مباشرة
    (معالج data-fdisc في fees.js)، وزر «سجل الدفعات» (من حصّلها وملاحظتها والحذف، log في fees.js) بجانب «سجل الاشتراكات». */
 (() => {
@@ -48,6 +51,8 @@
   }
 
   TABX.push({ key: 'fees', label: 'الاشتراكات', after: 'الإعدادات', view });
+  let impHtml = '';
+  TABX.push({ key: 'imp', label: 'الاستيراد', after: 'الاشتراكات', view: () => impHtml || `<div class="card">${empty('لا توجد أدوات استيراد.')}</div>` });
   /* التبويبات الإضافية في شريط «الإعدادات»: كل منها بعد التبويب الذي يحدده */
   const base = adminViews.settings;
   adminViews.settings = function () {
@@ -57,6 +62,12 @@
     const end = html.indexOf('</div></div>', i); if (end < 0) return html;
     const T = TABX.find(t => t.key === cur);
     if (cur && !T) setCur('');
+    /* ما فوق الشريط (app-import.js): «استيراد» يصير تبويبًا، و«حالة الموقع» يدخل تبويب «الإعدادات» */
+    const P = document.createElement('template'); P.innerHTML = html.slice(0, i);
+    const cards = [...P.content.children], h2 = c => c.querySelector?.(':scope > h2')?.textContent.trim() || '';
+    const imp = cards.find(c => h2(c) === 'استيراد'), maint = cards.find(c => h2(c) === 'حالة الموقع');
+    impHtml = imp ? imp.outerHTML : '';
+    const pre = cards.filter(c => c !== imp && c !== maint).map(c => c.outerHTML).join('');
     const t = document.createElement('template'); t.innerHTML = html.slice(i, end) + '</div></div>';
     const bar = t.content.querySelector('.bar') || t.content.firstElementChild;
     if (T) bar.querySelectorAll('.btn.on').forEach(b => b.classList.remove('on'));
@@ -65,7 +76,10 @@
       const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (x.key === cur ? ' on' : ''); b.dataset.qset = x.key; b.textContent = x.label;
       if (after) after.after(b); else bar.appendChild(b);
     });
-    return html.slice(0, i) + t.innerHTML + (T ? T.view() : html.slice(end + 12));
+    const onSettings = !T && bar.querySelector('.btn.on[data-subtab="settings"]');
+    let rest = html.slice(end + 12);
+    if (onSettings) { const R = document.createElement('template'); R.innerHTML = rest; [...R.content.children].find(c => h2(c) === 'الاستيراد والمراجعة')?.remove(); rest = R.innerHTML; }
+    return pre + t.innerHTML + (T ? T.view() : (onSettings && maint ? maint.outerHTML : '') + rest);
   };
 
   document.addEventListener('click', e => {
