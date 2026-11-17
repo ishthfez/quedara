@@ -5,6 +5,7 @@
    - «العاملون»: قائمة بجانب الفئة: «العاملون» (الافتراضي) أو «الجميع»؛ المتوقف يُعرف من خانة حالته (.qoff).
      فئة «المتوقفون» و«غير مصنف» كما هما.
    - زر «إضافة طالب» بلون الموقع (الكحلي) بدل الإطار.
+   - صف أدوات جدول الطلاب: قائمة الحالة (المنتظمون/الجميع/المنقطعون) في سطر ثانٍ، والأزرار كلها (الطباعة والحفظ والبقية) في السطر الأول.
    - «المعاينة» بآخر إصدار دائمًا: المعاينة تُرسم بشيفرة التطبيق المفتوح نفسه، فإن نُشر تحديث يُعاد تحميل التطبيق فورًا
      (فحص التحديث في app-actions.js، كل 30 ثانية ما دامت المعاينة مفتوحة بدل كل 5 دقائق)، ويبقى الاختيار (النوع والشخص والجهاز).
      وبصمة التحديث صارت تشمل كل ملفات التطبيق (كل سكربت في index.html)، لا بعضها. */
@@ -13,7 +14,10 @@
   const css = document.createElement('style');
   css.textContent = `main [data-qadd],main [data-act="addStudent"]{background:var(--navy,#13294b)!important;color:var(--on-navy,#fff)!important;border-color:var(--navy,#13294b)!important}
     main [data-qadd]:hover,main [data-act="addStudent"]:hover{background:var(--navy-d,#0b1b33)!important}
-    main [data-qadd] svg,main [data-act="addStudent"] svg{stroke:currentColor}`;
+    main [data-qadd] svg,main [data-act="addStudent"] svg{stroke:currentColor}
+    main .tblprint.qtb:has(select[data-sstf])::after{content:'';flex:0 0 100%;height:0;order:10}
+    main .tblprint.qtb > .bar > select[data-sstf]{order:11!important}
+    main .tblprint.qtb:has(select[data-sstf]) > .bar > input[data-sq]{flex:1 1 10rem;max-width:16rem}`;
   document.head.appendChild(css);
   try { if (ui.sstf === undefined) ui.sstf = 'on'; if (ui.wstf === undefined) ui.wstf = 'on'; } catch (e) { /* ignore */ }
 
