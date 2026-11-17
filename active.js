@@ -15,6 +15,8 @@
      وأزرار جداول النوافذ (.ztools في nav.js) صارت AA بجانبه زرّا + و− فوق بعض، بلا زر النسبة.
    - كل الجداول: البيانات في وسط الخلايا عدا عمود الأسماء (يمينًا)، وعرض كل عمود بقدر أطول ما فيه (لا يتمدد الجدول ليملأ المساحة).
      عمود الأسماء يُعرف من عنوانه (الاسم، الطالب، العامل، الموظف...). جداول المرتبات وبطاقة الطالب كما هي.
+     وغلاف الجدول (.tbl) بعرض الجدول نفسه، فشريط تمريره بجانب الجدول لا في طرف الصفحة البعيد.
+   - زر «تذكير بالسداد» في سطر مستقل فوق الجدول (notify.js، مثل صفحة «التحصيل» عند المعلم) يُنقل إلى صف أدوات الجدول بجانب الحجم والطباعة.
    - السرعة: حركة ظهور الصفحة (ql-in في style.css) تعمل عند الانتقال إلى صفحة أخرى فقط، لا عند كل تحديث للصفحة نفسها
      (تسجيل حضور، تبويب حالة، تصفية...): كانت تعيد رسم الجدول كله في كل إطار طوال الحركة. */
 (() => {
@@ -38,6 +40,7 @@
     .tbl:not(.paytbl):not(.scard .tbl) th,.tbl:not(.paytbl):not(.scard .tbl) td{text-align:center!important;white-space:nowrap}
     .tbl:not(.paytbl):not(.scard .tbl) :is(th,td).qnm{text-align:right!important}
     .tbl:not(.paytbl):not(.scard .tbl) > table{width:max-content!important;min-width:0!important;max-width:none}
+    .tbl:not(.paytbl):not(.scard .tbl){width:max-content;max-width:100%}
     main .tblprint.qtb:has([data-sstfseg]){justify-content:flex-start!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > *{order:25!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > h2{order:1!important;flex:0 0 auto!important}
@@ -111,6 +114,16 @@
   }
   let nmRaf = 0;
   new MutationObserver(() => { if (!nmRaf) nmRaf = requestAnimationFrame(() => { nmRaf = 0; try { markNames(); } catch (e) { /* ignore */ } }); }).observe(document.body, { childList: true, subtree: true });
+
+  /* ===== «تذكير بالسداد» إلى صف أدوات الجدول ===== */
+  new MutationObserver(() => {
+    document.querySelectorAll('main .bar.noprint > [data-remind-all]').forEach(b => {
+      const bar = b.parentElement, tp = bar.nextElementSibling?.matches?.('.tblprint') ? bar.nextElementSibling : bar.parentElement.querySelector(':scope > .tblprint');
+      if (!tp || tp.contains(b)) return;
+      tp.appendChild(b);
+      if (!bar.querySelector('button, select, input')) bar.style.margin = '0 0 .4rem';
+    });
+  }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
 
   /* ===== العاملون: إخفاء المتوقفين ما لم يُختر «الجميع» ===== */
   const baseW = adminViews.teachers;
