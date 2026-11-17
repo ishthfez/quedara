@@ -85,11 +85,10 @@ try {
       var fy = (window.QLFees && window.QLFees.y) || new Date().getFullYear();
       var fm = (window.QLFees && window.QLFees.m) || (new Date().getMonth() + 1);
       var feeOf = window.QLFeeDue;
-      /* لكل طالب منتظم: معفى (مستحقه 0)، أو بلا اشتراك محدد، أو مسدّد كاملًا، أو جزئي، أو لم يدفع شيئًا.
-         المحصّل = ما دُفع في حدود المستحق، والباقي = مجموع ما بقي على كل طالب، فالمتوقع = المحصّل + الباقي دائمًا.
-         ما دُفع زيادة على المستحق، أو من منقطع أو معفى أو بلا اشتراك محدد، يُعرض وحده ولا يُخصم من باقي غيره.
-         والجزئي يبقى ضمن «لم يسدّد» وفي قائمة التذكير، كما في صفحة الاشتراكات (fees.js). */
-      var expected = 0, got = 0, extra = 0, remaining = 0, paidN = 0, partN = 0, noneN = 0, freeN = 0, noFeeN = 0, activeN = 0;
+      /* كل من دفع أي مبلغ عن الشهر فهو مسدّد (لا يوجد دفع جزئي؛ المبلغ الأقل يُقبل بسببه عند التحصيل).
+         المتوقع = مجموع مستحقات المنتظمين، والمحصّل = ما دفعوه، والباقي = مستحقات من لم يدفع شيئًا.
+         ما دفعه منقطع أو معفى أو بلا اشتراك محدد يُعرض وحده ولا يدخل في المحصّل ولا في النسبة. */
+      var expected = 0, got = 0, extra = 0, remaining = 0, paidN = 0, noneN = 0, freeN = 0, noFeeN = 0, activeN = 0;
       var unpaid = [];
       list.forEach(function(s) {
         var fee = feeOf(s), paid = getPaid(s.id, fy, fm);
@@ -98,30 +97,27 @@ try {
         if (fee === 0) { freeN++; extra += paid; return; }
         if (!fee) { noFeeN++; extra += paid; return; }
         expected += fee;
-        got += Math.min(paid, fee);
-        if (paid > fee) extra += paid - fee;
-        if (paid >= fee) { paidN++; return; }
-        remaining += fee - paid;
-        if (paid > 0) partN++; else noneN++;
+        if (paid > 0) { paidN++; got += paid; return; }
+        noneN++; remaining += fee;
         unpaid.push(s.id);
       });
       var r2 = function(n) { return Math.round(n * 100) / 100; };
       expected = r2(expected); got = r2(got); remaining = r2(remaining); extra = r2(extra);
       window.QLFees = { unpaid: unpaid, y: fy, m: fm };
       window._QLFeesVisibleList = list;
-      var pct = expected > 0 ? Math.floor(got / expected * 100) : 0;
+      var pct = expected > 0 ? Math.round(got / expected * 100) : 0;
       var mOpts = '';
       for (var k = -12; k <= 2; k++) {
         var d = new Date(fy, fm - 1 + k, 1), yy = d.getFullYear(), mm = d.getMonth() + 1;
         mOpts += '<option value="' + yy + '-' + mm + '"' + (yy === fy && mm === fm ? ' selected' : '') + '>' + MONTH_NAMES[mm - 1] + ' ' + yy + '</option>';
       }
       var left = feeRow('fr-plain', activeN, 'عدد الطلاب') + feeRow('fr-ok', paidN, 'مسدَّد')
-        + feeRow('fr-no', noneN + partN, 'لم يسدّد' + (partN ? ' (منهم ' + partN + ' جزئي)' : ''))
+        + feeRow('fr-no', noneN, 'لم يسدّد')
         + feeRow('fr-info', freeN, 'معفى') + (noFeeN ? feeRow('fr-plain', noFeeN, 'بلا اشتراك محدد') : '');
       var right = feeRow('fr-plain', money(expected), 'المتوقع') + feeRow('fr-ok', money(got), 'المحصّل') + feeRow('fr-no', money(remaining), 'الباقي')
         + '<div class="feebar"><span style="width:' + Math.min(pct, 100) + '%"></span></div><div class="feebar-label"><span>' + pct + '%</span><span>نسبة التحصيل</span></div>'
-        + (extra ? '<p class="muted" style="font-size:.8rem;margin:.4rem 0 0">وصل أيضًا ' + money(extra) + ' خارج المستحق (زيادة على المقرر، أو من منقطع أو معفى أو بلا اشتراك محدد).</p>' : '');
-      return '<div class="card feecard" style="margin:0 0 1rem"><div style="display:flex;align-items:center;gap:.7rem;margin:0 0 .8rem;flex-wrap:wrap"><h3 style="margin:0;flex:1">الاشتراكات</h3><select data-fmonth style="width:auto">' + mOpts + '</select></div><div class="feecards" style="margin:0"><div>' + left + '</div><div>' + right + '</div></div></div>' + (unpaid.length && can('fees.collect') ? '<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">' + unpaid.length + ' طالب لم يسدّد اشتراك ' + MONTH_NAMES[fm - 1] + (partN ? ' (منهم ' + partN + ' سدّد جزءًا)' : '') + '.</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (' + unpaid.length + ')</button></div>' : '');
+        + (extra ? '<p class="muted" style="font-size:.8rem;margin:.4rem 0 0">وصل أيضًا ' + money(extra) + ' من منقطعين أو معفيين أو بلا اشتراك محدد (خارج المحصّل والنسبة).</p>' : '');
+      return '<div class="card feecard" style="margin:0 0 1rem"><div style="display:flex;align-items:center;gap:.7rem;margin:0 0 .8rem;flex-wrap:wrap"><h3 style="margin:0;flex:1">الاشتراكات</h3><select data-fmonth style="width:auto">' + mOpts + '</select></div><div class="feecards" style="margin:0"><div>' + left + '</div><div>' + right + '</div></div></div>' + (unpaid.length && can('fees.collect') ? '<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">' + unpaid.length + ' طالب لم يسدّد اشتراك ' + MONTH_NAMES[fm - 1] + '.</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (' + unpaid.length + ')</button></div>' : '');
     } catch(e) { console.error('buildSummary error:', e); return ''; }
   }
 
@@ -136,8 +132,7 @@ try {
         if (stOff(s)) return '<td><span class="muted">\u2014</span></td>';
         if (fee === 0) return '<td><span class="tag tag-ok">\u0645\u0639\u0641\u0649</span></td>';
         if (fee == null) return '<td><span class="muted">\u2014</span></td>';
-        if (paid >= fee) return '<td><b style="color:var(--leaf,#4e7d45)">' + money(fee) + '</b><br><span class="tag tag-ok">\u0645\u0633\u062f\u0651\u062f</span></td>';
-        if (paid > 0) return '<td>' + money(fee) + '<br><span class="tag">جزئي: باقٍ ' + money(fee - paid) + '</span></td>';
+        if (paid > 0) return '<td><b style="color:var(--leaf,#4e7d45)">' + money(fee) + '</b><br><span class="tag tag-ok">\u0645\u0633\u062f\u0651\u062f</span></td>';
         return '<td>' + money(fee) + '<br><span class="tag tag-no">\u0645\u0633\u062a\u062d\u0642</span></td>';
       } catch(e) { return '<td>\u2014</td>'; }
     };
@@ -146,7 +141,7 @@ try {
         if (!can('fees.collect') && !can('fees.amount')) return '';
         var fee = window.QLFeeDue ? window.QLFeeDue(s) : null;
         var paid = getPaid(s.id, window.QLFees && window.QLFees.y, window.QLFees && window.QLFees.m);
-        var needRemind = can('fees.collect') && !stOff(s) && fee !== 0 && fee && paid < fee;
+        var needRemind = can('fees.collect') && !stOff(s) && fee !== 0 && fee && paid <= 0;
         return (can('fees.collect') ? '<button type="button" class="btn sm primary" data-fee-pay2="' + esc(s.id) + '"' + (fee === 0 ? ' disabled' : '') + '>\u062a\u062d\u0635\u064a\u0644</button>' : '') + (needRemind ? '<button type="button" class="btn sm" data-remind="' + esc(s.id) + '" title="\u062a\u0630\u0643\u064a\u0631">\u062a\u0630\u0643\u064a\u0631</button>' : '');
       } catch(e) { return ''; }
     };
