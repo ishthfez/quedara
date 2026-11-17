@@ -114,9 +114,8 @@ try {
       var left = feeRow('fr-plain', activeN, 'عدد الطلاب') + feeRow('fr-ok', paidN, 'مسدَّد')
         + feeRow('fr-no', noneN, 'لم يسدّد')
         + feeRow('fr-info', freeN, 'معفى') + (noFeeN ? feeRow('fr-plain', noFeeN, 'بلا اشتراك محدد') : '');
-      var right = feeRow('fr-plain', money(expected), 'المتوقع') + feeRow('fr-ok', money(got), 'المحصّل') + feeRow('fr-no', money(remaining), 'الباقي');
-      var bar = '<div class="feebar"><span style="width:' + Math.min(pct, 100) + '%"></span></div><div class="feebar-label"><span>' + pct + '%</span><span>نسبة التحصيل</span></div>'
-        + (extra ? '<p class="muted" style="font-size:.8rem;margin:.4rem 0 0">وصل أيضًا ' + money(extra) + ' من منقطعين أو معفيين أو بلا اشتراك محدد (خارج المحصّل والنسبة).</p>' : '');
+      var right = feeRow('fr-plain', money(expected), 'المتوقع') + feeRow('fr-ok', money(got), 'المحصّل') + feeRow('fr-no', money(remaining), 'الباقي') + feeRow('fr-info', pct + '%', 'نسبة التحصيل');
+      var bar = (extra ? '<p class="muted" style="font-size:.8rem;margin:.4rem 0 0">وصل أيضًا ' + money(extra) + ' من منقطعين أو معفيين أو بلا اشتراك محدد (خارج المحصّل والنسبة).</p>' : '');
       return '<div class="card feecard" style="margin:0 0 1rem"><div style="display:flex;align-items:center;gap:.7rem;margin:0 0 .8rem;flex-wrap:wrap"><h3 style="margin:0;flex:1">الاشتراكات</h3><select data-fmonth style="width:auto">' + mOpts + '</select></div><div class="qfrow qfstu">' + left + '</div><div class="qfrow qfmon">' + right + '</div>' + bar + '</div>';
     } catch(e) { console.error('buildSummary error:', e); return ''; }
   }
