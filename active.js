@@ -1,12 +1,12 @@
 'use strict';
 /* ============ العرض الافتراضي: المنتظمون والعاملون فقط ============
-   - «الطلاب»: التصفية تبدأ على «المنتظمون»، و«كل الحالات» صار اسمها «الجميع» (المنقطعون يظهرون باختيارها أو باختيار «المنقطعون»).
+   - «الطلاب»: التصفية تبدأ على «منتظم»، والمنقطعون يظهرون باختيار «الكل» أو «منقطع».
      (التصفية نفسها في nav.js بالمتغير ui.sstf؛ البحث بالاسم يبقى في كل الطلاب كما كان)
    - «العاملون»: قائمة بجانب الفئة: «العاملون» (الافتراضي) أو «الجميع»؛ المتوقف يُعرف من خانة حالته (.qoff).
      فئة «المتوقفون» و«غير مصنف» كما هما.
    - زر «إضافة طالب» بلون الموقع (الكحلي) بدل الإطار.
-   - صف أدوات جدول الطلاب في سطرين: الأول العنوان والبحث والمكان والحلقة، والثاني قائمة الحالة (المنتظمون/الجميع/المنقطعون) يمينًا
-     والأزرار كلها (الحجم والحفظ والطباعة والتذكير والإضافة) يسارًا.
+   - صف أدوات جدول الطلاب في سطرين: الأول العنوان والبحث والمكان والحلقة، والثاني تبويبات الحالة المتلاصقة (الكل / منتظم / منقطع) يمينًا
+     بدل القائمة المنسدلة، والأزرار يسارًا بالترتيب من اليمين: الحجم، الحفظ، الطباعة، التذكير، الإضافة.
    - «المعاينة» بآخر إصدار دائمًا: المعاينة تُرسم بشيفرة التطبيق المفتوح نفسه، فإن نُشر تحديث يُعاد تحميل التطبيق فورًا
      (فحص التحديث في app-actions.js، كل 30 ثانية ما دامت المعاينة مفتوحة بدل كل 5 دقائق)، ويبقى الاختيار (النوع والشخص والجهاز).
      وبصمة التحديث صارت تشمل كل ملفات التطبيق (كل سكربت في index.html)، لا بعضها. */
@@ -16,26 +16,45 @@
   css.textContent = `main [data-qadd],main [data-act="addStudent"]{background:var(--navy,#13294b)!important;color:var(--on-navy,#fff)!important;border-color:var(--navy,#13294b)!important}
     main [data-qadd]:hover,main [data-act="addStudent"]:hover{background:var(--navy-d,#0b1b33)!important}
     main [data-qadd] svg,main [data-act="addStudent"] svg{stroke:currentColor}
-    main .tblprint.qtb:has(select[data-sstf]){justify-content:flex-start!important}
-    main .tblprint.qtb:has(select[data-sstf]) > .bar > *{order:25!important}
-    main .tblprint.qtb:has(select[data-sstf]) > .bar > h2{order:1!important;flex:0 0 auto!important}
-    main .tblprint.qtb:has(select[data-sstf]) > .bar > :is(input[data-sq],.msearch){order:2!important;flex:0 1 18rem!important;max-width:18rem!important}
-    main .tblprint.qtb:has(select[data-sstf]) > .bar > :is(select,.qcombo):not([data-sstf]){order:3!important;flex:0 1 14rem!important;max-width:14rem!important}
-    main .tblprint.qtb:has(select[data-sstf])::after{content:'';flex:0 0 100%;height:0;order:20}
-    main .tblprint.qtb:has(select[data-sstf]) > .bar > select[data-sstf]{order:21!important;flex:0 0 auto!important}
-    main .tblprint.qtb:has(select[data-sstf]) > .qsp{order:22!important;flex:1 1 0!important;height:auto!important}
-    main .tblprint.qtb:has(select[data-sstf]) > .bar > :is(.btn,button,details){order:23!important}
-    main .tblprint.qtb:has(select[data-sstf]) > :not(.bar):not(.qsp){order:24!important}
-    main .tblprint.qtb:has(select[data-sstf]) .qadd{order:29!important}`;
+    main .tblprint.qtb:has([data-sstfseg]){justify-content:flex-start!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .bar > *{order:25!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .bar > h2{order:1!important;flex:0 0 auto!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .bar > :is(input[data-sq],.msearch){order:2!important;flex:0 1 18rem!important;max-width:18rem!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .bar > :is(select,.qcombo){order:3!important;flex:0 1 14rem!important;max-width:14rem!important}
+    main .tblprint.qtb:has([data-sstfseg])::after{content:'';flex:0 0 100%;height:0;order:20}
+    main .tblprint.qtb:has([data-sstfseg]) > .bar > [data-sstfseg]{order:21!important;flex:0 0 auto!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .qsp{order:22!important;flex:1 1 0!important;height:auto!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .bar > :is(.btn,button,details){order:35!important}
+    main .tblprint.qtb:has([data-sstfseg]) > :not(.bar):not(.qsp){order:35!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .qzoom{order:30!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .qsave{order:31!important}
+    main .tblprint.qtb:has([data-sstfseg]) > [data-print]{order:32!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .bar > [data-remind-all]{order:33!important}
+    main .tblprint.qtb:has([data-sstfseg]) .qadd{order:34!important}
+    .qseg{display:inline-flex;border:1px solid var(--line,#e6dfcf);border-radius:10px;overflow:hidden;background:var(--card,#fff)}
+    .qseg button{border:0;margin:0;background:transparent;padding:.45rem .9rem;font:inherit;font-weight:700;color:var(--navy,#13294b);cursor:pointer;white-space:nowrap}
+    .qseg button+button{border-inline-start:1px solid var(--line,#e6dfcf)}
+    .qseg button.on{background:var(--navy,#13294b);color:var(--on-navy,#fff)}
+    .qseg button small{font-weight:400;opacity:.75}
+    .qseg button:disabled{opacity:.5;cursor:not-allowed}
+    .qseg button:focus-visible{outline:2px solid var(--gold,#b8904f);outline-offset:-2px}`;
   document.head.appendChild(css);
   try { if (ui.sstf === undefined) ui.sstf = 'on'; if (ui.wstf === undefined) ui.wstf = 'on'; } catch (e) { /* ignore */ }
 
-  /* ===== الطلاب: «كل الحالات» ← «الجميع» ===== */
+  /* ===== الطلاب: قائمة الحالة ← ثلاث تبويبات متلاصقة (الكل / منتظم / منقطع) بأعدادها =====
+     القيمة نفسها (ui.sstf) التي تقرؤها التصفية في nav.js؛ وتُعطَّل أثناء البحث بالاسم كما كانت القائمة. */
+  const SEG = { '': 'الكل', on: 'منتظم', off: 'منقطع' };
   const baseStu = adminViews.students;
   adminViews.students = function () {
     const h = baseStu.apply(this, arguments);
-    return typeof h === 'string' ? h.replace(/(<select data-sstf[^>]*>[\s\S]*?<option value=""[^>]*>)كل الحالات/, '$1الجميع') : h;
+    if (typeof h !== 'string') return h;
+    return h.replace(/<select data-sstf([^>]*)>([\s\S]*?)<\/select>/, (m, attrs, opts) => {
+      const dis = /\sdisabled/.test(attrs), title = (attrs.match(/title="([^"]*)"/) || [])[1] || '', cur = ui.sstf || '';
+      const items = [...opts.matchAll(/<option value="([^"]*)"[^>]*>([^<]*)<\/option>/g)].map(([, v, t]) => [v, (t.match(/\((\d+)\)/) || [])[1]]);
+      return `<div class="qseg" data-sstfseg role="group" aria-label="حالة الطلاب"${title ? ` title="${title}"` : ''}>${items.map(([v, n]) => `<button type="button" class="${v === cur ? 'on' : ''}" data-sstfv="${v}" aria-pressed="${v === cur}"${dis ? ' disabled' : ''}>${SEG[v] || v}${n ? ` <small>(${n})</small>` : ''}</button>`).join('')}</div>`;
+    });
   };
+  document.addEventListener('click', e => { const b = e.target.closest?.('[data-sstfv]'); if (!b || b.disabled) return; ui.sstf = b.dataset.sstfv; render(); });
 
   /* ===== العاملون: إخفاء المتوقفين ما لم يُختر «الجميع» ===== */
   const baseW = adminViews.teachers;
