@@ -5,14 +5,17 @@
      - «تعيين لمجموعة طلاب»: يختار المكان أو الحلقة والحالة، ثم يفتح نافذة التعيين نفسها (data-fee-bulk في fees.js)
        على هؤلاء الطلاب (بدل «تعيين لنتائج البحث» في الطلاب).
    والزرّان في «الطلاب» و«الاشتراكات» يُخفيان عن المدير (يبقيان للمحاسب الذي ليس له «الإعدادات»).
-   شريط تبويبات «الإعدادات» يصنعه nav.js؛ هنا يُضاف إليه تبويب «الاشتراكات» ويُعرض محتواه حين يُختار.
+   شريط تبويبات «الإعدادات» يصنعه nav.js؛ هنا تُضاف إليه تبويبات إضافية (window.QLSetTabs: «الاشتراكات» هنا، وغيرها من ملفات أخرى
+   مثل «صلاحيات صفحة الطلاب» في stuperm.js)، ويُعرض محتوى المختار منها.
    ملف الطالب (قسم «الاشتراك» الذي يضيفه app-abs.js): المستحق بعد الخصم وبجانبه قبله مشطوبًا، وصف «الخصم» بقائمة تعيّنه مباشرة
    (معالج data-fdisc في fees.js)، وزر «سجل الدفعات» (من حصّلها وملاحظتها والحذف، log في fees.js) بجانب «سجل الاشتراكات». */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./feeset.js')) VFILES.push('./feeset.js'); } catch (e) { /* ignore */ } });
-  const KEY = 'qfeeset';
-  let on = false; try { on = sessionStorage.getItem(KEY) === '1'; } catch (e) { /* ignore */ }
-  const setOn = v => { on = v; try { sessionStorage.setItem(KEY, v ? '1' : '0'); } catch (e) { /* ignore */ } };
+  const KEY = 'qsettab';
+  let cur = ''; try { cur = sessionStorage.getItem(KEY) || ''; } catch (e) { /* ignore */ }
+  const setCur = v => { cur = v || ''; try { sessionStorage.setItem(KEY, cur); } catch (e) { /* ignore */ } };
+  /* تبويبات «الإعدادات» الإضافية: { key, label, after: نص التبويب الذي تأتي بعده، view } */
+  const TABX = window.QLSetTabs = window.QLSetTabs || [];
   const st = { p: '', h: '', s: 'on' };
   const isAdm = () => typeof session !== 'undefined' && session?.role === 'admin';
 
@@ -44,24 +47,31 @@
         <div class="row"><button type="button" class="btn qkeep" data-fee-bulk data-qfsbulk ${n ? '' : 'disabled'}>تعيين لـ${n} طالب</button></div></div>`;
   }
 
-  /* تبويب «الاشتراكات» في شريط «الإعدادات» (بعد «الإعدادات» مباشرة) */
+  TABX.push({ key: 'fees', label: 'الاشتراكات', after: 'الإعدادات', view });
+  /* التبويبات الإضافية في شريط «الإعدادات»: كل منها بعد التبويب الذي يحدده */
   const base = adminViews.settings;
   adminViews.settings = function () {
     const html = base.apply(this, arguments);
-    if (!isAdm()) return html;
+    if (!isAdm() || !TABX.length) return html;
     const i = html.indexOf('<div class="card subnav">'); if (i < 0) return html;
     const end = html.indexOf('</div></div>', i); if (end < 0) return html;
-    let bar = html.slice(i, end);
-    if (on) bar = bar.replace(/class="btn on"/g, 'class="btn"');
-    const btn = `<button type="button" class="btn ${on ? 'on' : ''}" data-qfeeset>الاشتراكات</button>`;
-    const fb = bar.indexOf('</button>');
-    bar = fb > -1 ? bar.slice(0, fb + 9) + btn + bar.slice(fb + 9) : bar + btn;
-    return html.slice(0, i) + bar + '</div></div>' + (on ? view() : html.slice(end + 12));
+    const T = TABX.find(t => t.key === cur);
+    if (cur && !T) setCur('');
+    const t = document.createElement('template'); t.innerHTML = html.slice(i, end) + '</div></div>';
+    const bar = t.content.querySelector('.bar') || t.content.firstElementChild;
+    if (T) bar.querySelectorAll('.btn.on').forEach(b => b.classList.remove('on'));
+    TABX.forEach(x => {
+      const btns = [...bar.querySelectorAll('button')], after = btns.find(b => b.textContent.trim() === x.after) || btns[0];
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (x.key === cur ? ' on' : ''); b.dataset.qset = x.key; b.textContent = x.label;
+      if (after) after.after(b); else bar.appendChild(b);
+    });
+    return html.slice(0, i) + t.innerHTML + (T ? T.view() : html.slice(end + 12));
   };
 
   document.addEventListener('click', e => {
-    if (e.target.closest('[data-qfeeset]')) { setOn(true); render(); window.scrollTo(0, 0); return; }
-    if (e.target.closest('[data-subtab][data-g="settings"]')) setOn(false);
+    const q = e.target.closest('[data-qset]');
+    if (q) { setCur(q.dataset.qset); render(); window.scrollTo(0, 0); return; }
+    if (e.target.closest('[data-subtab][data-g="settings"]')) setCur('');
     /* نافذة التعيين (fees.js) تأخذ طلابها من هذه القائمة */
     if (e.target.closest('[data-qfsbulk]')) window._QLFeesVisibleList = pick();
   }, true);
