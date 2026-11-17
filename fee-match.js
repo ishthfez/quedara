@@ -23,6 +23,8 @@
     var k = ks.slice().reverse().find(function (x) { return x <= y; }); return String(k != null ? k : ks[0]);
   };
   var curPlaces = function (cfg) { var k = yearKey(cfg); return ((k ? (cfg.years[k] || {}).places : cfg.places) || {}); };
+  /* علامة fee-setup.js «تم الضبط»: حتى لا يعمل تلقائيًا لاحقًا فيفرض نظامًا واحدًا على كل طلاب المكان فوق المطابقة */
+  var markDone = function () { db.settings.priv_fees = Object.assign({}, db.settings.priv_fees || {}, { _feeSetupApplied: true }); };
   function setPrices(list) {
     var cfg = JSON.parse(JSON.stringify(db.settings.priv_fees || {})), k = yearKey(cfg);
     var targets = [cfg.places = (cfg.places && typeof cfg.places === 'object') ? cfg.places : {}];
@@ -97,6 +99,8 @@
   }
 
   function dialog() {
+    /* فتح الأداة يوقف الضبط التلقائي القديم (fee-setup.js) نهائيًا، حتى لا يعمل والنافذة مفتوحة فيغيّر ما تقارنه */
+    if (!(db.settings.priv_fees || {})._feeSetupApplied) { markDone(); save(); }
     var ov = document.createElement('div'); ov.className = 'overlay';
     ov.innerHTML = '<div class="modal wide"><h2>مطابقة الاشتراكات مع كشف الإيراد</h2>'
       + '<p class="muted" style="font-size:.88rem;margin:0 0 .6rem">اختر ملف «مرجع مطابقة الاشتراكات». تظهر الفروق أولًا، ولا يتغيّر شيء إلا بالأزرار أسفل التقرير.</p>'
@@ -123,19 +127,22 @@
     };
     bSys.onclick = function () {
       ask('ضبط نظام الحضور لـ ' + R.sys.length + ' طالب كما في الكشف؟', function () {
+        R = analyse(table); if (R.err) return;   /* إعادة الحساب لحظة التنفيذ: لا يُطبَّق تقرير قديم */
         R.sys.forEach(function (x) { x.s.info = Object.assign({}, x.s.info || {}, { feeSys: x.f }); });
-        save(); render(); toast('ضُبط نظام الحضور لـ ' + R.sys.length + ' طالب'); draw();
+        markDone(); save(); render(); toast('ضُبط نظام الحضور لـ ' + R.sys.length + ' طالب'); draw();
       });
     };
     bPrice.onclick = function () {
       ask('ضبط أسعار الأماكن كما في الجدول (' + R.prices.length + ')؟', function () {
-        setPrices(R.prices); save(); render(); toast('ضُبطت أسعار الأماكن'); draw();
+        R = analyse(table); if (R.err) return;   /* إعادة الحساب لحظة التنفيذ: لا يُطبَّق تقرير قديم */
+        setPrices(R.prices); markDone(); save(); render(); toast('ضُبطت أسعار الأماكن'); draw();
       });
     };
     bFee.onclick = function () {
       ask('وضع مقرر الكشف «مبلغًا خاصًا» لـ ' + R.fee.length + ' طالب؟ (يبقى ثابتًا لهم حتى لو تغيّر سعر المكان)', function () {
+        R = analyse(table); if (R.err) return;   /* إعادة الحساب لحظة التنفيذ: لا يُطبَّق تقرير قديم */
         R.fee.forEach(function (x) { x.s.info = Object.assign({}, x.s.info || {}, { fee: x.f }); });
-        save(); render(); toast('وُضع مبلغ خاص لـ ' + R.fee.length + ' طالب'); draw();
+        markDone(); save(); render(); toast('وُضع مبلغ خاص لـ ' + R.fee.length + ' طالب'); draw();
       });
     };
   }
