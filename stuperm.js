@@ -104,7 +104,9 @@
     const rows = groups.map(g => `<tr class="sum"><td colspan="${ROLES4.length + 1}">${esc(g)}</td></tr>` + ITEMS.filter(i => i[2] === g).map(it =>
       `<tr><td class="qnm">${esc(it[1])}${it[5] === 'lock' ? ' <small class="muted">(إن لم يُسمح يظهر بلا ضغط)</small>' : ''}</td>${ROLES4.map(([r, l]) => `<td><input type="checkbox" data-sup="${r}|${it[0]}" ${roleOn(r, it) ? 'checked' : ''} aria-label="${esc(it[1])} — ${l}"></td>`).join('')}</tr>`).join('')).join('');
     const colAll = ROLES4.map(([, l]) => `<th>${l}</th>`).join('');
-    const allRow = `<tr><td class="qnm muted">لكل الفئة</td>${ROLES4.map(([r]) => `<td><button type="button" class="btn sm" data-supall="${r}|1">الكل</button> <button type="button" class="btn sm" data-supall="${r}|0">لا شيء</button></td>`).join('')}</tr>`;
+    /* «الكل» أو «لا شيء» يظهر مفعّلًا (كحليًا) حين تكون كل خانات الفئة كذلك فعلًا */
+    const state = r => { const n = ITEMS.filter(it => roleOn(r, it)).length; return n === ITEMS.length ? 'all' : n === 0 ? 'none' : ''; };
+    const allRow = `<tr><td class="qnm muted">لكل الفئة</td>${ROLES4.map(([r]) => { const k = state(r); return `<td><button type="button" class="btn sm${k === 'all' ? ' primary' : ''}" data-supall="${r}|1" aria-pressed="${k === 'all'}">الكل</button> <button type="button" class="btn sm${k === 'none' ? ' primary' : ''}" data-supall="${r}|0" aria-pressed="${k === 'none'}">لا شيء</button></td>`; }).join('')}</tr>`;
     return `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">صلاحيات صفحة «الطلاب»</h2><button type="button" class="btn" data-supreset>الاختيارات الافتراضية</button></div>
       <p class="muted" style="font-size:.85rem;margin:0 0 .6rem">ما يظهر لكل فئة من العاملين في صفحة «الطلاب» ونافذة الحضور. المدير يرى كل شيء دائمًا. الإخفاء هنا للعرض فقط: ما يغيّر البيانات يتحقق منه الخادم بصلاحيته في «الصلاحيات».</p>
       <div class="tbl"><table><tr><th class="qnm">العنصر</th>${colAll}</tr>${allRow}${rows}</table></div></div>`;
@@ -115,6 +117,9 @@
     const t = e.target; if (!t.matches?.('[data-sup]') || session?.role !== 'admin') return;
     const [r, k] = t.dataset.sup.split('|');
     persist({ [r]: { [PK(k)]: t.checked } });
+    /* «الكل» و«لا شيء» لهذه الفئة يتحدّثان في مكانهما (بلا إعادة رسم، فيبقى الجدول على موضع تمريره) */
+    const n = ITEMS.filter(it => roleOn(r, it)).length, st = n === ITEMS.length ? '1' : n === 0 ? '0' : '';
+    document.querySelectorAll(`[data-supall^="${r}|"]`).forEach(b => { const on = b.dataset.supall === `${r}|${st}`; b.classList.toggle('primary', on); b.setAttribute('aria-pressed', on); });
     toast('حُفظ');
   });
   document.addEventListener('click', e => {
