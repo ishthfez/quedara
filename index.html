@@ -23,6 +23,9 @@
       .logo-wrap,.sheen{animation:none!important}
     }
     .gbar i{animation-duration:1.1s!important}
+    /* شريط التحميل بـ transform لا بالعرض: يُرسم خارج الخيط الرئيسي فيبقى سلسًا أثناء تحميل التطبيق */
+    .gbar i{width:100%!important;transform:scaleX(0);transform-origin:right;will-change:transform;animation-name:qfill!important}
+    @keyframes qfill{to{transform:scaleX(1)}}
   </style>
 </head>
 <body>
