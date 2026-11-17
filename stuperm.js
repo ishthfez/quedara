@@ -8,7 +8,8 @@
    زر الحالة، تسجيل الحضور، التاريخ) يبقى ظاهرًا بلا ضغط. وقبل أول حفظ تسري الاختيارات الافتراضية في ITEMS.
    أول صف «عرض صفحة الطلاب» يقرر هل تظهر الصفحة للفئة أصلًا (stuview.js)، وهو مطفأ لكل الفئات حتى يفعّله المدير.
    العناصر كلها، كل عداد وكل زر وكل تبويب على حدة، في الصفحة ونافذة الحضور ونافذة الرسالة؛ وأزرار صف الطالب في جدول الصفحة
-   (main > .card) منفصلة عن أزرار صفه في نافذة الحضور (.qatt). */
+   (main > .card) منفصلة عن أزرار صفه في نافذة الحضور (.qatt).
+   ملف الطالب: أقسامه (تُعلَّم بـ data-sk من عناوينها) وأزراره، أينما فُتح (من الجدول أو نافذة الحضور). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./stuperm.js')) VFILES.push('./stuperm.js'); } catch (e) { /* ignore */ } });
   const ROLES4 = [['teacher', 'المعلمون'], ['supervisor', 'المشرفون'], ['accountant', 'المحاسبون'], ['placeadmin', 'الإداريون']];
@@ -80,8 +81,32 @@
     ['a_hist', 'السجل', 'نافذة الحضور', [T, S, P], W + 'td [data-act="hist"]', 'hide'],
     ['a_msg', 'رسالة', 'نافذة الحضور', [T, S, P], W + 'td [data-mnote]:not([data-mnote="*"])', 'hide'],
     ['a_move', 'نقل الطالب إلى حلقة أخرى', 'نافذة الحضور', [S, P], W + '[data-move]', 'hide'],
-    ['a_stat', 'تغيير الحالة (منتظم / منقطع)', 'نافذة الحضور', [], W + '[data-stat]', 'lock']
+    ['a_stat', 'تغيير الحالة (منتظم / منقطع)', 'نافذة الحضور', [], W + '[data-stat]', 'lock'],
+    ['s_own', 'قسم «خاص بالطالب» (بياناته)', 'ملف الطالب', ALL, '.scard [data-sk="own"]', 'hide'],
+    ['s_dec', 'قسم «قرار المسؤول» (الحلقة والمكان والوقت)', 'ملف الطالب', ALL, '.scard [data-sk="dec"]', 'hide'],
+    ['s_fees', 'قسم «الاشتراكات» (عدد الدفعات وإجماليها)', 'ملف الطالب', [A], '.scard [data-sk="fees"]', 'hide'],
+    ['s_login', 'قسم «حساب الدخول»', 'ملف الطالب', [], '.scard [data-sk="login"]', 'hide'],
+    ['s_fee', 'قسم «الاشتراك» (المستحق والخصم)', 'ملف الطالب', [A], '.scard [data-sk="fee"]', 'hide'],
+    ['s_log', 'قسم «سجل الاشتراكات»', 'ملف الطالب', [A], '.scard [data-sk="log"]', 'hide'],
+    ['s_disc', 'قائمة الخصم في الملف', 'ملف الطالب', [A], '.scard select[data-fdisc]', 'hide'],
+    ['s_assign', 'زر «تعديل الفئة»', 'ملف الطالب', [A], '.scard [data-fee-assign]', 'hide'],
+    ['s_feelog', 'زر «سجل الدفعات»', 'ملف الطالب', [A], '.scard [data-fee-log]', 'hide'],
+    ['s_del', 'زر «حذف الطالب»', 'ملف الطالب', [], '.scard [data-act="delMember"]', 'hide'],
+    ['s_edit', 'زر «تعديل»', 'ملف الطالب', [], '.scard [data-act="editStudent"]', 'hide'],
+    ['s_print', 'زر «طباعة»', 'ملف الطالب', ALL, '.scard [data-act="printCard"]', 'hide'],
+    ['s_zoom', 'حجم الخط في جداول الملف', 'ملف الطالب', ALL, '.scard .ztools', 'hide']
   ];
+  /* أقسام ملف الطالب: كل عنوان (h3.sc-h) وما بعده حتى العنوان التالي يُعلَّم بمفتاح قسمه */
+  const SECS = { 'خاص بالطالب': 'own', 'قرار المسؤول': 'dec', 'الاشتراكات': 'fees', 'حساب الدخول': 'login', 'الاشتراك': 'fee', 'سجل الاشتراكات': 'log' };
+  function markCard(m) {
+    m.querySelectorAll('h3.sc-h').forEach(h => {
+      const k = SECS[(h.childNodes[0]?.textContent || h.textContent).trim()]; if (!k) return;
+      for (let e = h; e && (e === h || !e.matches('h3.sc-h')); e = e.nextElementSibling) {
+        if (e.matches('.row') && e.querySelector('[data-close],[data-act="printCard"]')) break;   // صف أزرار الملف الأخير ليس من القسم
+        if (e.dataset.sk !== k) e.dataset.sk = k;
+      }
+    });
+  }
   const PK = k => 'ui.stu.' + k, SET = 'ui.stu._set';
   const conf = () => (db.settings.priv_perms = db.settings.priv_perms || {}, db.settings.priv_perms.roles = db.settings.priv_perms.roles || {}, db.settings.priv_perms);
   const saved = r => (conf().roles[r] || {})[SET] === true;
@@ -143,6 +168,7 @@
   const css = document.createElement('style'); document.head.appendChild(css);
   let lastSig = '';
   function apply() {
+    document.querySelectorAll('.overlay .scard').forEach(markCard);
     const off = session && session.role !== 'admin' ? ITEMS.filter(it => !myOn(it)) : [];
     const sig = (session?.role || '') + '|' + off.map(i => i[0]).join(',');
     if (sig !== lastSig) {
