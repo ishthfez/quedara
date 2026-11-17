@@ -5,7 +5,8 @@
    بزرّي حاضر/غائب ومتأخر وأدوات الحلقة. كل ما فيها يعمل بمعالجاته الأصلية، وتُعاد بعد كل رسم بمحتواها الجديد ومكان التمرير نفسه.
    النافذة داخل <main> (لتعمل فيها معالجات الصفحة كما كانت في التبويب)، وتُغلق بسهم الرجوع أو Esc أو زر رجوع الهاتف.
    ترتيبها: قائمة واحدة «الحلقة — المكان» (بدل قائمتي المكان والحلقة؛ وإن كانت حلقة واحدة يظهر اسمها ومكانها نصًا) و«اليوم»،
-   ثم البحث باسم الطالب وتبويبا المنتظمين والمنقطعين في صف، ثم زر «إشعار للطلاب» أيقونةً وحجم الخط، ثم الجدول.
+   ثم صف واحد (من اليمين): تبويبا المنتظمين والمنقطعين، البحث باسم الطالب، حجم الخط، «إشعار للطلاب» أيقونةً،
+   «إضافة طالب» (كزر الطلاب، والحلقة مختارة مسبقًا في نافذته)؛ ثم الجدول.
    (بلا سطر المكان والوقت ولا العدد ولا عنوان الحلقة، وبلا الطباعة والحفظ)
    «متأخر»: الضغط عليه وهو مفعّل كان يحفظ حالة فارغة يرفضها الخادم (الحالات المقبولة: حاضر/متأخر/معتذر/غائب)، فيعود «متأخر».
    صار يعيد الحالة التي كانت قبل «متأخر» (وإلا «حاضر»)، وما حُفظ فارغًا من قبل يُصحَّح إلى «غائب» (كما كان يظهر). */
@@ -30,6 +31,12 @@
     .qatt .attbar label{display:flex;align-items:center;gap:.5rem;margin:0;font-weight:700;color:var(--navy,#13294b)}
     .qatt .attbar label input{width:auto;margin:0}
     .qatt [data-mnote="*"].icon-only{width:40px;height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+    .qatt .tblprint.qtb > .bar > .mtabs{order:1!important;flex:0 0 auto!important}
+    .qatt .tblprint.qtb > .bar > input[data-mq]{order:2!important;flex:1 1 12rem!important;max-width:24rem!important;min-width:9rem;margin:0}
+    .qatt .tblprint.qtb > .qzoom:not(.bar){order:3!important}
+    .qatt .tblprint.qtb > .bar > [data-mnote="*"]:is(.btn,button){order:4!important}
+    .qatt .tblprint.qtb > .bar > [data-attadd]:is(.btn,button){order:5!important}
+    @media (max-width:600px){.qatt .tblprint.qtb > .bar > input[data-mq]{flex-basis:6rem!important;min-width:6rem!important}}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > [data-attopen]:is(.btn,button){order:4!important;flex:0 0 auto!important}
     [data-attopen]{display:inline-flex;align-items:center;gap:.35rem}
     [data-attopen] svg{width:18px;height:18px}`;
@@ -76,16 +83,18 @@
       const date = C.querySelector('input[data-change="date"]'), dl = date?.closest('label');
       if (dl) { [...dl.childNodes].filter(n => n.nodeType === 3).forEach(n => n.remove()); dl.prepend(date.value === today() ? 'اليوم' : 'التاريخ'); }
     }
-    /* البطاقة الثانية: بلا سطر المكان والوقت ولا العدد؛ البحث ثم التبويبان في صف */
-    const q = C.querySelector('input[data-mq]'), tabs = C.querySelector('.mtabs');
-    if (q && tabs) { const card = q.closest('.card'); card?.querySelector(':scope > p.muted:not([data-mcount])')?.remove(); tabs.before(q); }
+    /* البطاقة الثانية: بلا سطر المكان والوقت ولا العدد ولا عنوان الحلقة؛ التبويبان والبحث والأزرار في صف واحد
+       (شريط الأزرار يدمجه toolbar.js مع حجم الخط، والترتيب من CSS أعلاه) */
+    const q = C.querySelector('input[data-mq]'), tabs = C.querySelector('.mtabs'), all = C.querySelector('[data-mnote="*"]');
+    q?.closest('.card')?.querySelector(':scope > p.muted:not([data-mcount])')?.remove();
     C.querySelector('p[data-mcount]')?.remove();
-    /* صف الأزرار: «إشعار للطلاب» أيقونة (بلا عنوان الحلقة وعدد طلابها)، ثم حجم الخط */
-    const all = C.querySelector('[data-mnote="*"]');
     if (all) {
       const b = all.closest('.bar');
       b?.querySelectorAll(':scope > h2, :scope > .muted').forEach(x => x.remove());
       all.className = 'btn icon-only'; all.title = 'إشعار للطلاب'; all.setAttribute('aria-label', 'إشعار للطلاب'); all.innerHTML = NOTE;
+      if (b && q && tabs) { const old = tabs.closest('.bar'); b.prepend(tabs, q); if (old && old !== b && !old.children.length) old.remove(); }
+      const ADD = (typeof ADD_ICONS !== 'undefined' && ADD_ICONS.quick) || '+';
+      if (session?.role === 'admin' || window.Perms?.can?.('students.add')) all.insertAdjacentHTML('afterend', `<button type="button" class="btn icon-only" data-qadd data-attadd title="إضافة طالب" aria-label="إضافة طالب">${ADD}</button>`);
     }
     return t.innerHTML;
   }
@@ -147,6 +156,14 @@
     open = false; top = 0; document.querySelector('main > .qatt')?.remove();
     render();   /* جدول الطلاب كاملًا من جديد بعد أن كان مختصرًا خلف النافذة */
   }, true);
+
+  /* «إضافة طالب» من النافذة: نافذة الإضافة نفسها (quickAdd في app-forms.js) والحلقة المعروضة مختارة فيها مسبقًا */
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.qatt [data-attadd]')) return;
+    const ov = [...document.querySelectorAll('body > .overlay')].pop(), h = byId(db.halaqat, ui.hid); if (!ov || !h) return;
+    const set = (n, v) => { const el = ov.querySelector(`[name=${n}]`); if (el && v) { el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); } };
+    set('qPlace1', h.placeId); set('qHal1', h.id); set('qPlace2', h.placeId); set('qHal2', h.id);
+  });
 
   /* ===== «متأخر» يلغى تفعيله (A.att في app-actions.js؛ زرّاه من nav.js) ===== */
   const VALID = ['present', 'late', 'excused', 'absent'];
