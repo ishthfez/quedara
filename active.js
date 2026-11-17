@@ -61,8 +61,8 @@
   };
   document.addEventListener('DOMContentLoaded', () => {
     wrapStu();
-    /* الرسم الأول (boot-gate.js) قد سبق التركيب */
-    try { if (document.getElementById('app')?.innerHTML.trim() && ui.tab === 'students') render(); } catch (e) { /* ignore */ }
+    /* الرسم الأول (boot-gate.js) قد سبق التركيب: يُعاد بعد أن تكمل كل الملفات تركيبها (attwin.js يضيف زر «الحضور» بعد هذا) */
+    setTimeout(() => { try { if (document.getElementById('app')?.innerHTML.trim() && ui.tab === 'students') render(); } catch (e) { /* ignore */ } }, 0);
   });
   document.addEventListener('click', e => { const b = e.target.closest?.('[data-sstfv]'); if (!b || b.disabled) return; ui.sstf = b.dataset.sstfv; render(); });
 
