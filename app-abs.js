@@ -146,6 +146,9 @@ try {
     } catch(e) { console.error('buildSummary error:', e); return ''; }
   }
 
+  /* بطاقة الاشتراكات لقائمة طلاب: للصفحة الرئيسية عند المدير (active.js) */
+  window.QLFeeSummary = function(list) { return buildSummary(list); };
+
   if (window.QLFeesEmbed) {
     window.QLFeesEmbed.cells = function(s) {
       try {
@@ -264,6 +267,8 @@ try {
         sumList = pool.filter(function(st) { var h = byId(db.halaqat, st.halaqaId); return (!ui.fh || st.halaqaId === ui.fh) && (!ui.fp || (!!h && h.placeId === ui.fp)); });
       }
       var summary = buildSummary(sumList);
+      /* عند المدير صارت بطاقة الاشتراكات في الصفحة الرئيسية؛ تُحسب هنا مع ذلك (لعدد جرس التذكير وقائمة غير المسددين) */
+      if (session && session.role === 'admin') summary = '';
       /* «تذكير غير المسددين» في صف أدوات الجدول بجانب الطباعة والحفظ (order:4: بعدهما وقبل زر الإضافة) */
       var nUnpaid = (window.QLFees && window.QLFees.unpaid) ? window.QLFees.unpaid.length : 0;
       var remindBtn = hasFees && nUnpaid && can('fees.collect') ? '<button type="button" class="btn" style="order:4" data-remind-all="fees">\u062a\u0630\u0643\u064a\u0631 \u063a\u064a\u0631 \u0627\u0644\u0645\u0633\u062f\u062f\u064a\u0646 (' + nUnpaid + ')</button>' : '';

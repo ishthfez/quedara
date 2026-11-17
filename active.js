@@ -17,6 +17,9 @@
      عمود الأسماء يُعرف من عنوانه (الاسم، الطالب، العامل، الموظف...). جداول المرتبات وبطاقة الطالب كما هي.
      وغلاف الجدول (.tbl) بعرض الجدول نفسه، فشريط تمريره بجانب الجدول لا في طرف الصفحة البعيد.
    - زر «تذكير بالسداد» في سطر مستقل فوق الجدول (notify.js، مثل صفحة «التحصيل» عند المعلم) يُنقل إلى صف أدوات الجدول بجانب الحجم والطباعة.
+   - الصفحة الرئيسية (المدير): بطاقة «الحلقات والطلاب» بعداداتها بشكل عدادات الاشتراكات (البيان والقيمة في سطر ملوّن)،
+     ثم بطاقة «الاشتراكات» نفسها منقولة من صفحة «الطلاب» (QLFeeSummary في app-abs.js، لكل الطلاب)، ثم الإعلانات.
+     وعلى الهاتف عدادان في كل سطر.
    - السرعة: حركة ظهور الصفحة (ql-in في style.css) تعمل عند الانتقال إلى صفحة أخرى فقط، لا عند كل تحديث للصفحة نفسها
      (تسجيل حضور، تبويب حالة، تصفية...): كانت تعيد رسم الجدول كله في كل إطار طوال الحركة. */
 (() => {
@@ -56,6 +59,11 @@
     main .tblprint.qtb:has([data-sstfseg]) > [data-print]:not(.bar):not(.qsp){order:32!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > [data-remind-all]:is(.btn,button){order:33!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > .qadd:is(.btn,button){order:34!important}
+    .qdashcard .qfrow{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+    @media (max-width:600px){.qfrow,.qfrow.qfmon,.qdashcard .qfrow{grid-template-columns:1fr 1fr!important;gap:.45rem}
+      .qfrow .feerow{padding:.5rem .65rem;font-size:.82rem;gap:.3rem;min-width:0}.qfrow .feerow b{font-size:1.05rem}
+      .qfrow .feerow span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qfrow .qfpct .qfbar{display:none}
+      .qfrow > .feerow:last-child:nth-child(odd){grid-column:1 / -1}}
     .qseg{display:inline-flex;border:1px solid var(--line,#e6dfcf);border-radius:10px;overflow:hidden;background:var(--card,#fff)}
     .qseg button{border:0;margin:0;background:transparent;padding:.45rem .9rem;font:inherit;font-weight:700;color:var(--navy,#13294b);cursor:pointer;white-space:nowrap}
     .qseg button+button{border-inline-start:1px solid var(--line,#e6dfcf)}
@@ -124,6 +132,34 @@
       if (!bar.querySelector('button, select, input')) bar.style.margin = '0 0 .4rem';
     });
   }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
+
+  /* ===== الصفحة الرئيسية للمدير ===== */
+  document.addEventListener('DOMContentLoaded', () => {
+    const baseDash = adminViews.dash; if (typeof baseDash !== 'function') return;
+    const MAP = { 'معلم': ['المعلمون', 'fr-plain', 1], 'مشرف': ['المشرفون', 'fr-plain', 1], 'مكان': ['الأماكن', 'fr-plain', 1], 'حلقة': ['الحلقات', 'fr-plain', 1],
+      'طالب': ['الطلاب', 'fr-info', 2], 'حضور اليوم': ['حضور اليوم', 'fr-ok', 2], 'تسجيلات الأسبوع': ['تسجيلات الأسبوع', 'fr-info', 2] };
+    adminViews.dash = function () {
+      const h = baseDash.apply(this, arguments);
+      if (session?.role !== 'admin' || typeof h !== 'string') return h;
+      const t = document.createElement('template'); t.innerHTML = h;
+      const grid = [...t.content.children].find(e => e.classList.contains('grid')); if (!grid) return h;
+      const rows = { 1: [], 2: [] };
+      grid.querySelectorAll('.stat').forEach(st => {
+        const v = st.querySelector('b')?.textContent.trim() || '', l = st.querySelector('span')?.textContent.trim() || '';
+        const [lab, cls, row] = MAP[l] || [l, 'fr-plain', 2];
+        const pct = /%$/.test(v) ? parseInt(v, 10) : null;
+        rows[row].push(pct != null
+          ? `<div class="feerow ${cls} qfpct"><span>${esc(lab)}</span><span class="qfbar" aria-hidden="true"><span style="width:${Math.min(pct, 100)}%"></span></span><b>${esc(v)}</b></div>`
+          : `<div class="feerow ${cls}"><span>${esc(lab)}</span><b>${esc(v)}</b></div>`);
+      });
+      grid.remove();
+      const over = `<div class="card qdashcard" style="margin:0 0 1rem"><h3 style="margin:0 0 .8rem">الحلقات والطلاب</h3>
+        <div class="qfrow">${rows[1].join('')}</div><div class="qfrow">${rows[2].join('')}</div></div>`;
+      let fee = '';
+      try { fee = window.QLFeeSummary ? window.QLFeeSummary(db.students) : ''; } catch (e) { console.error('dash fees:', e); }
+      return over + fee + t.innerHTML;
+    };
+  });
 
   /* ===== العاملون: إخفاء المتوقفين ما لم يُختر «الجميع» ===== */
   const baseW = adminViews.teachers;
