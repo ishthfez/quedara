@@ -18,8 +18,8 @@
   css.textContent = `main .subnav [data-svw="att"]{display:none!important}
     main > .overlay.qatt{z-index:65}
     main:has(> .overlay.qatt){transform:none!important;animation:none!important}
-    /* قاعدة قديمة (app-abs.js) تخفي «إشعار» الفردي حين توجد قائمة حلقة الحضور في الصفحة: تخص النافذة وحدها لا جدول الطلاب خلفها */
-    main:has(> .overlay.qatt) > :not(.qatt) .tbl td [data-mnote]:not([data-mnote="*"]){display:inline-flex!important}
+    /* قاعدة قديمة (app-abs.js) تخفي «رسالة» الطالب حين توجد قائمة حلقة الحضور في الصفحة: الزر ظاهر في كل مكان (جدول الطلاب ونافذة الحضور) */
+    main:has(select[data-atth]) .tbl td [data-mnote]:not([data-mnote="*"]):is(.btn,button){display:inline-flex!important}
     .qatt .tblprint [data-print],.qatt .tblprint .qsave,.qatt .tblprint .texp,.qatt .tblprint [data-heads],.qatt .tblprint > .qsp{display:none!important}
     .qatt .tblprint.qtb{justify-content:flex-start!important}
     .qatt .attbar{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin:0}
