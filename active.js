@@ -26,11 +26,11 @@
     main .tblprint.qtb:has([data-sstfseg]) > .qsp{order:22!important;flex:1 1 0!important;height:auto!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > :is(.btn,button,details){order:35!important}
     main .tblprint.qtb:has([data-sstfseg]) > :not(.bar):not(.qsp){order:35!important}
-    main .tblprint.qtb:has([data-sstfseg]) > .qzoom{order:30!important}
-    main .tblprint.qtb:has([data-sstfseg]) > .qsave{order:31!important}
-    main .tblprint.qtb:has([data-sstfseg]) > [data-print]{order:32!important}
-    main .tblprint.qtb:has([data-sstfseg]) > .bar > [data-remind-all]{order:33!important}
-    main .tblprint.qtb:has([data-sstfseg]) .qadd{order:34!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .qzoom:not(.bar):not(.qsp){order:30!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .qsave:not(.bar):not(.qsp){order:31!important}
+    main .tblprint.qtb:has([data-sstfseg]) > [data-print]:not(.bar):not(.qsp){order:32!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .bar > [data-remind-all]:is(.btn,button){order:33!important}
+    main .tblprint.qtb:has([data-sstfseg]) > .bar > .qadd:is(.btn,button){order:34!important}
     .qseg{display:inline-flex;border:1px solid var(--line,#e6dfcf);border-radius:10px;overflow:hidden;background:var(--card,#fff)}
     .qseg button{border:0;margin:0;background:transparent;padding:.45rem .9rem;font:inherit;font-weight:700;color:var(--navy,#13294b);cursor:pointer;white-space:nowrap}
     .qseg button+button{border-inline-start:1px solid var(--line,#e6dfcf)}
@@ -44,6 +44,8 @@
   /* ===== الطلاب: قائمة الحالة ← ثلاث تبويبات متلاصقة (الكل / منتظم / منقطع) بأعدادها =====
      القيمة نفسها (ui.sstf) التي تقرؤها التصفية في nav.js؛ وتُعطَّل أثناء البحث بالاسم كما كانت القائمة. */
   const SEG = { '': 'الكل', on: 'منتظم', off: 'منقطع' };
+  /* يُركَّب بعد DOMContentLoaded: nav.js يعيد تعريف adminViews.students عنده، فلو رُكّب قبله لضاع */
+  const wrapStu = () => {
   const baseStu = adminViews.students;
   adminViews.students = function () {
     const h = baseStu.apply(this, arguments);
@@ -54,6 +56,12 @@
       return `<div class="qseg" data-sstfseg role="group" aria-label="حالة الطلاب"${title ? ` title="${title}"` : ''}>${items.map(([v, n]) => `<button type="button" class="${v === cur ? 'on' : ''}" data-sstfv="${v}" aria-pressed="${v === cur}"${dis ? ' disabled' : ''}>${SEG[v] || v}${n ? ` <small>(${n})</small>` : ''}</button>`).join('')}</div>`;
     });
   };
+  };
+  document.addEventListener('DOMContentLoaded', () => {
+    wrapStu();
+    /* الرسم الأول (boot-gate.js) قد سبق التركيب */
+    try { if (document.getElementById('app')?.innerHTML.trim() && ui.tab === 'students') render(); } catch (e) { /* ignore */ }
+  });
   document.addEventListener('click', e => { const b = e.target.closest?.('[data-sstfv]'); if (!b || b.disabled) return; ui.sstf = b.dataset.sstfv; render(); });
 
   /* ===== العاملون: إخفاء المتوقفين ما لم يُختر «الجميع» ===== */
