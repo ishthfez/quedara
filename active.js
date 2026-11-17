@@ -3,9 +3,15 @@
    - «الطلاب»: التصفية تبدأ على «المنتظمون»، و«كل الحالات» صار اسمها «الجميع» (المنقطعون يظهرون باختيارها أو باختيار «المنقطعون»).
      (التصفية نفسها في nav.js بالمتغير ui.sstf؛ البحث بالاسم يبقى في كل الطلاب كما كان)
    - «العاملون»: قائمة بجانب الفئة: «العاملون» (الافتراضي) أو «الجميع»؛ المتوقف يُعرف من خانة حالته (.qoff).
-     فئة «المتوقفون» و«غير مصنف» كما هما. */
+     فئة «المتوقفون» و«غير مصنف» كما هما.
+   - زر «إضافة طالب» بلون الموقع (الكحلي) بدل الإطار. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./active.js')) VFILES.push('./active.js'); } catch (e) { /* ignore */ } });
+  const css = document.createElement('style');
+  css.textContent = `main [data-qadd],main [data-act="addStudent"]{background:var(--navy,#13294b)!important;color:var(--on-navy,#fff)!important;border-color:var(--navy,#13294b)!important}
+    main [data-qadd]:hover,main [data-act="addStudent"]:hover{background:var(--navy-d,#0b1b33)!important}
+    main [data-qadd] svg,main [data-act="addStudent"] svg{stroke:currentColor}`;
+  document.head.appendChild(css);
   try { if (ui.sstf === undefined) ui.sstf = 'on'; if (ui.wstf === undefined) ui.wstf = 'on'; } catch (e) { /* ignore */ }
 
   /* ===== الطلاب: «كل الحالات» ← «الجميع» ===== */
