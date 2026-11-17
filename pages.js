@@ -8,7 +8,8 @@
    سهم الرجوع يضغط «إلغاء» الأصلي، وزر رجوع الهاتف يغلقها كما يغلق أي نافذة (nav.js).
    يسري على كل النوافذ في التطبيق، عدا نافذة «تثبيت التطبيق» (.overlay.install). النوافذ العريضة (.wide و.sform) أعرض على الحاسوب.
    عرض فقط: النماذج ومعالجاتها وحساباتها كما هي.
-   «استمارة طالب» تفتح داخل نافذة «إضافة طلاب» نفسها: تبويب ثالث بجانب «طالب واحد» و«عدة طلاب» (آخر الملف). */
+   «استمارة طالب» تفتح داخل نافذة «إضافة طلاب» نفسها: تبويب ثالث بجانب «طالب واحد» و«عدة طلاب» (آخر الملف).
+   «إشعار» لطالب واحد (mine.js) صار «رسالة»: عنوان النافذة «رسالة للطالب/ الاسم» وخانتها «النص»، وزر الصف عنوانه «رسالة». */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./pages.js')) VFILES.push('./pages.js'); } catch (e) { /* ignore */ } });
   const SKIP = '.install';
@@ -39,6 +40,7 @@
   function decorate(ov) {
     if (!ov.isConnected || ov.matches(SKIP)) return;
     const m = ov.querySelector(':scope > .modal'); if (!m) return;
+    msgWords(m);
     ov.classList.add('qpage');
     let head = m.querySelector(':scope > .mhead');
     if (!head) {
@@ -52,6 +54,20 @@
     const y = m.querySelector('[data-cfgy]');
     if (y) { const lab = y.closest('label'); y.setAttribute('aria-label', 'مبالغ سنة'); head.appendChild(y); if (lab && !lab.querySelector('select,input,textarea')) lab.remove(); }
   }
+  /* نافذة الإشعار (noteDialog في mine.js): لطالب واحد «رسالة للطالب/ الاسم»، وخانة النص «النص» */
+  function msgWords(m) {
+    const h = m.querySelector('h2');
+    const one = h && /^\s*إشعار:\s*/.test(h.textContent);
+    if (one) h.textContent = 'رسالة للطالب/ ' + h.textContent.replace(/^\s*إشعار:\s*/, '');
+    if (!one && !/^\s*(رسالة للطالب|إشعار لطلاب)/.test(h?.textContent || '')) return;
+    m.querySelectorAll('label').forEach(l => { const t = [...l.childNodes].find(n => n.nodeType === 3 && n.textContent.trim() === 'نص الإشعار'); if (t) t.textContent = 'النص'; });
+    if (one) m.querySelectorAll('.note, p, small, div').forEach(x => { if (x.children.length === 0 && /^يصل كل طالب في «الإعلانات»/.test(x.textContent.trim())) x.textContent = 'تصل الرسالة إلى الطالب في «الإعلانات» على حسابه، باسمك.'; });
+  }
+  /* زر الصف لطالب واحد: «رسالة» (toolbar.js يضع عنوانه عند تحويله أيقونة، فيُعاد بعده) */
+  let msgT = 0;
+  const msgBtns = () => { msgT = 0; document.querySelectorAll('[data-mnote]:not([data-mnote="*"])').forEach(b => { if (b.title !== 'رسالة') { b.title = 'رسالة'; b.setAttribute('aria-label', 'رسالة'); } }); };
+  new MutationObserver(() => { if (!msgT) msgT = requestAnimationFrame(msgBtns); }).observe(document.body, { childList: true, subtree: true });
+
   /* الرجوع: كما يغلق × في nav.js («إلغاء/إغلاق» النافذة نفسها إن وُجد)، وإلا تُزال النافذة */
   document.addEventListener('click', e => {
     const b = e.target.closest('.qpage .qpback'); if (!b) return;
