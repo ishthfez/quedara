@@ -1,6 +1,7 @@
 'use strict';
 /* ============ صفحة داخل التطبيق بدل النافذة المنبثقة (للنماذج الطويلة) ============
-   النافذة نفسها (.overlay > .modal) تُعرض صفحةً تملأ الشاشة (بلا خلفية معتمة ولا صندوق عائم)، والمحتوى في عمود بعرض مريح في الوسط.
+   النافذة نفسها (.overlay > .modal) تُعرض صفحةً بلا خلفية معتمة: على الجوال تملأ الشاشة، وعلى الحاسوب صندوق في الوسط بعرض 680
+   على خلفية التطبيق (لا يظهر الجدول خلفه).
    في أعلاها سهم رجوع والعنوان (وما يخص الصفحة كاختيار السنة)، و«حفظ/إلغاء» ثابتان أسفلها.
    ترويسة النافذة (.mhead وفيها العنوان و×) يصنعها nav.js؛ هنا تصير شريط الصفحة: سهم رجوع بدل ×.
    وإن أعادت النافذة كتابة محتواها (مثل تغيير السنة) فزالت الترويسة، تُصنع من جديد بالشكل نفسه.
@@ -23,7 +24,10 @@
     .qpage>.modal>.mhead select{width:auto;margin:0;font-size:.95rem}
     .qpage>.modal>:not(.mhead):not(.row:last-child){margin-inline:var(--qpw)!important}
     .qpage>.modal>.mhead+*{margin-top:1rem!important}
-    .qpage>.modal>.row:last-child{position:sticky;bottom:0!important;z-index:3;margin:auto 0 0!important;padding:.7rem var(--qpw) calc(.7rem + env(safe-area-inset-bottom,0px))!important;border-radius:0!important;background:var(--card,#fff)!important;border-top:1px solid var(--line,#e6dfcf)}`;
+    .qpage>.modal>.row:last-child{position:sticky;bottom:0!important;z-index:3;margin:auto 0 0!important;padding:.7rem var(--qpw) calc(.7rem + env(safe-area-inset-bottom,0px))!important;border-radius:0!important;background:var(--card,#fff)!important;border-top:1px solid var(--line,#e6dfcf)}
+    @media (min-width:861px){.overlay.qpage{padding:1.5rem 1rem!important;align-items:flex-start!important}
+      .overlay.qpage>.modal{--qpw:1.25rem;max-width:680px!important;height:auto;max-height:calc(100vh - 3rem)!important;border:1px solid var(--line,#e6dfcf)!important;border-radius:16px!important}
+      .qpage>.modal>.mhead{border-radius:16px 16px 0 0!important}.qpage>.modal>.row:last-child{border-radius:0 0 16px 16px!important}}`;
   document.head.appendChild(css);
 
   /* يُعاد بعد كل إعادة رسم للنافذة */
