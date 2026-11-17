@@ -31,7 +31,7 @@
     if (C.m < 0) return { err: 'لم أجد عمود «الشهر».' };
     if (C.id < 0 && C.old < 0) return { err: 'لم أجد عمود «معرف الطالب» ولا «رقم الطالب القديم».' };
     const byOld = new Map(); db.students.forEach(s => { const c = dg(s.info?.oldCode); if (c) byOld.set(c, s); });
-    const have = new Set((db.fees || []).map(f => `${f.studentId}|${+f.y}|${+f.m}|${+f.amount}|${f.date || ''}|${f.note || ''}`));
+    const have = new Set((db.fees || []).map(f => `${f.studentId}|${+f.y}|${+f.m}|${+f.amount}|${f.date || ''}`));
     const out = { ok: [], dup: 0, none: [], bad: 0 };
     grid.slice(hi + 1).forEach(r => {
       const amount = +dg(r[C.amt]); if (!(amount > 0)) return;
@@ -41,12 +41,10 @@
       if (!m) { out.bad++; return; }
       const s = (C.id >= 0 && byId(db.students, dg(r[C.id]))) || (C.old >= 0 && byOld.get(dg(r[C.old]))) || null;
       if (!s) { out.none.push({ name: C.name >= 0 ? r[C.name] : '', old: C.old >= 0 ? dg(r[C.old]) : '', m, y, amount }); return; }
-      const note = (C.note >= 0 ? r[C.note] : '') || 'استيراد من كشف الإيراد';
-      /* الملاحظة جزء من مفتاح التكرار: دفعتان متساويتان في اليوم نفسه بملاحظتين مختلفتين (مثل «الدفعة الثانية») لا تُعدّان تكرارًا */
-      const k = `${s.id}|${y}|${m}|${amount}|${date}|${note}`;
+      const k = `${s.id}|${y}|${m}|${amount}|${date}`;
       if (have.has(k)) { out.dup++; return; }
       have.add(k);
-      out.ok.push({ id: uid(), studentId: s.id, y, m, amount, date: date || today(), by: 'كشف الإيراد', byMember: session?.id || '', note });
+      out.ok.push({ id: uid(), studentId: s.id, y, m, amount, date: date || today(), by: 'كشف الإيراد', byMember: session?.id || '', note: (C.note >= 0 ? r[C.note] : '') || 'استيراد من كشف الإيراد' });
     });
     return out;
   }
