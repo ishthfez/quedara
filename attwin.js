@@ -39,7 +39,7 @@
     if (!open) return;
     /* خطوة السجل التي أضافها الفتح: الرجوع إليها يُغلقها (popstate أدناه) */
     if (history.state?.qatt) { history.back(); return; }
-    open = false; top = 0; document.querySelector('main > .qatt')?.remove();
+    open = false; top = 0; document.querySelector('main > .qatt')?.remove(); render();
   }
   /* كل رسم يستبدل <main> (وقد يتأخر الرسم إلى الإطار التالي)، فتُعاد النافذة متى خلت منها الصفحة وهي مفتوحة */
   const watch = () => {
@@ -54,7 +54,9 @@
     /* زر «الحضور» في صف أدوات الطلاب (بعد قائمة الحلقة) */
     const baseStu = adminViews.students;
     adminViews.students = function () {
-      const h = baseStu.apply(this, arguments);
+      /* والنافذة مفتوحة: جدول الطلاب خلفها مختصر (app-abs.js)، فيخف كل رسم أثناء التحضير */
+      window.QLStuLite = open && ui.svw !== 'att';
+      let h; try { h = baseStu.apply(this, arguments); } finally { window.QLStuLite = false; }
       if (typeof h !== 'string' || ui.svw === 'att' || !isAdm()) return h;
       return h.replace(/(<div class="qseg" data-sstfseg|<select data-sstf)/, `<button type="button" class="btn" data-attopen>${ICON}الحضور</button>$1`);
     };
@@ -82,5 +84,6 @@
     if (!open || e.state?.qatt || document.querySelector('body > .overlay')) return;
     e.stopImmediatePropagation();
     open = false; top = 0; document.querySelector('main > .qatt')?.remove();
+    render();   /* جدول الطلاب كاملًا من جديد بعد أن كان مختصرًا خلف النافذة */
   }, true);
 })();
