@@ -44,7 +44,6 @@
       <table>${due != null ? row('المستحق للشهر', money(due) + ' جنيه') : ''}${rest ? row('الباقي', money(rest) + ' جنيه') : due != null && paid >= due ? row('الحالة', 'مسدَّد بالكامل') : ''}${row('ملاحظة', f.note || '')}${row('المستلم', f.by || me()?.name || '')}</table>
       <div class="hr"></div>
       <div class="sig">التوقيع: ............................</div>
-      <div class="c muted" style="margin-top:3mm">جزاكم الله خيرًا</div>
     </body></html>`;
   }
   /* الطباعة من إطار مخفي: صفحة بمقاس الإيصال وحده */
