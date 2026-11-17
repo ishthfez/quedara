@@ -16,8 +16,13 @@
   css.textContent = `main [data-qadd],main [data-act="addStudent"]{background:var(--navy,#13294b)!important;color:var(--on-navy,#fff)!important;border-color:var(--navy,#13294b)!important}
     main [data-qadd]:hover,main [data-act="addStudent"]:hover{background:var(--navy-d,#0b1b33)!important}
     main [data-qadd] svg,main [data-act="addStudent"] svg{stroke:currentColor}
+    main .tblprint.qtb:has(select[data-sstf]){justify-content:flex-start!important}
+    main .tblprint.qtb:has(select[data-sstf]) > .bar > *{order:25!important}
+    main .tblprint.qtb:has(select[data-sstf]) > .bar > h2{order:1!important;flex:0 0 auto!important}
+    main .tblprint.qtb:has(select[data-sstf]) > .bar > :is(input[data-sq],.msearch){order:2!important;flex:0 1 18rem!important;max-width:18rem!important}
+    main .tblprint.qtb:has(select[data-sstf]) > .bar > :is(select,.qcombo):not([data-sstf]){order:3!important;flex:0 1 14rem!important;max-width:14rem!important}
     main .tblprint.qtb:has(select[data-sstf])::after{content:'';flex:0 0 100%;height:0;order:20}
-    main .tblprint.qtb:has(select[data-sstf]) > .bar > select[data-sstf]{order:21!important}
+    main .tblprint.qtb:has(select[data-sstf]) > .bar > select[data-sstf]{order:21!important;flex:0 0 auto!important}
     main .tblprint.qtb:has(select[data-sstf]) > .qsp{order:22!important;flex:1 1 0!important;height:auto!important}
     main .tblprint.qtb:has(select[data-sstf]) > .bar > :is(.btn,button,details){order:23!important}
     main .tblprint.qtb:has(select[data-sstf]) > :not(.bar):not(.qsp){order:24!important}
