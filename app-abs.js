@@ -8,11 +8,14 @@ try {
   css.textContent = 'tr.tr-off td{color:var(--red,#b3372f)!important;opacity:.75} tr.tr-off .tag,tr.tr-off .btn{opacity:.85} body,table,input,select,textarea,.card,.stat,.feerow,.feebar-label,.tbl,.tag,.btn,.modal{font-feature-settings:"tnum";-webkit-locale:"en"} .feerow b,.feebar-label span,.tag,.stat b,.stat .num{unicode-bidi:plaintext;direction:ltr} .tbl table tr td .hname .tag,.tbl table tr td .hname small{display:none!important}';
   document.head.appendChild(css);
 
-  /* اسم الحلقة: نعرض hName الأصلي ملفوفاً بـ span.hname — CSS يخفي الكبسولات */
   function cleanHName(hid) {
     try {
       return '<span class="hname">' + hName(hid) + '</span>';
     } catch(e) { return '\u2014'; }
+  }
+
+  function feeSysLabel(st) {
+    try { return ((st.info || {}).feeSys === '3') ? '3 \u0623\u064a\u0627\u0645' : '6 \u0623\u064a\u0627\u0645'; } catch(e) { return '6 \u0623\u064a\u0627\u0645'; }
   }
 
   var _absCache = { key: '', absMap: {}, activeH: {} };
@@ -25,10 +28,8 @@ try {
       var prefix = fy + '-' + pad(fm);
       var absMap = {}, activeH = {};
       var stuH = {};
-      var sts = db && db.students ? db.students : [];
-      sts.forEach(function(s) { stuH[s.id] = s.halaqaId; });
-      var att = db && db.attendance ? db.attendance : [];
-      att.forEach(function(a) {
+      (db && db.students ? db.students : []).forEach(function(s) { stuH[s.id] = s.halaqaId; });
+      (db && db.attendance ? db.attendance : []).forEach(function(a) {
         if (!a.date || a.date.indexOf(prefix) !== 0) return;
         var hid = stuH[a.studentId];
         if (hid) activeH[hid] = true;
@@ -203,9 +204,9 @@ try {
         ? (can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u0627\u0634\u062a\u0631\u0627\u0643</button>' : '') + (can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>\u062a\u0639\u064a\u064a\u0646 \u0644\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0628\u062d\u062b</button>' : '') : '';
       var rows = list.map(function(st) {
         var off = stOff(st);
-        return '<tr' + (off ? ' class="tr-off"' : '') + '><td><span class="who">' + avatar(st) + '<span>' + esc(st.name) + '</span></span></td><td>' + (ageOf(st) === '' ? '\u2014' : ageOf(st)) + '</td><td>' + cleanHName(st.halaqaId) + '</td><td>' + esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014') + '</td><td>' + esc(lastHifz(st.id)) + '</td><td><button type="button" class="btn sm' + (off ? ' danger' : '') + '" data-stat="' + st.id + '">' + (off ? '\u0645\u0646\u0642\u0637\u0639' : '\u0645\u0646\u062a\u0638\u0645') + '</button></td><td>' + absMonthCell(st) + '</td>' + (hasFees ? F.cells(st) : '') + '<td><button class="btn sm primary" data-act="studentCard" data-id="' + st.id + '">\u0627\u0644\u0645\u0644\u0641</button><button class="btn sm" data-act="hist" data-id="' + st.id + '">\u0627\u0644\u0633\u062c\u0644</button><button class="btn sm" data-act="editStudent" data-id="' + st.id + '">\u062a\u0639\u062f\u064a\u0644</button>' + (db.fields.students.length ? '<button class="btn sm" data-act="editExtra" data-k="students" data-id="' + st.id + '">\u0625\u0636\u0627\u0641\u064a\u0629</button>' : '') + (hasFees ? F.actions(st) : '') + '</td></tr>';
+        return '<tr' + (off ? ' class="tr-off"' : '') + '><td><span class="who">' + avatar(st) + '<span>' + esc(st.name) + '</span></span></td><td>' + (ageOf(st) === '' ? '\u2014' : ageOf(st)) + '</td><td>' + feeSysLabel(st) + '</td><td>' + cleanHName(st.halaqaId) + '</td><td>' + esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014') + '</td><td>' + esc(lastHifz(st.id)) + '</td><td><button type="button" class="btn sm' + (off ? ' danger' : '') + '" data-stat="' + st.id + '">' + (off ? '\u0645\u0646\u0642\u0637\u0639' : '\u0645\u0646\u062a\u0638\u0645') + '</button></td><td>' + absMonthCell(st) + '</td>' + (hasFees ? F.cells(st) : '') + '<td><button class="btn sm primary" data-act="studentCard" data-id="' + st.id + '">\u0627\u0644\u0645\u0644\u0641</button><button class="btn sm" data-act="hist" data-id="' + st.id + '">\u0627\u0644\u0633\u062c\u0644</button><button class="btn sm" data-act="editStudent" data-id="' + st.id + '">\u062a\u0639\u062f\u064a\u0644</button>' + (db.fields.students.length ? '<button class="btn sm" data-act="editExtra" data-k="students" data-id="' + st.id + '">\u0625\u0636\u0627\u0641\u064a\u0629</button>' : '') + (hasFees ? F.actions(st) : '') + '</td></tr>';
       }).join('');
-      return buildSummary(list) + '<div class="card"><div class="bar"><h2 class="grow" style="margin:0">\u0627\u0644\u0637\u0644\u0627\u0628</h2>' + toolbar + '<select data-change="fcat"><option value="">\u0627\u0644\u0635\u063a\u0627\u0631 \u0648\u0627\u0644\u0643\u0628\u0627\u0631</option>' + Object.keys(CATS).map(function(k) { return '<option value="' + k + '"' + (ui.fcat === k ? ' selected' : '') + '>' + (k === 'child' ? '\u0627\u0644\u0635\u063a\u0627\u0631' : '\u0627\u0644\u0643\u0628\u0627\u0631') + '</option>'; }).join('') + '</select><select data-change="fh"><option value="">\u0643\u0644 \u0627\u0644\u062d\u0644\u0642\u0627\u062a</option>' + db.halaqat.map(function(h) { return '<option value="' + esc(h.id) + '"' + (h.id === ui.fh ? ' selected' : '') + '>' + esc(halaqaLabel(h)) + '</option>'; }).join('') + '</select><button class="btn primary" data-act="addStudent">+ \u0627\u0633\u062a\u0645\u0627\u0631\u0629 \u0637\u0627\u0644\u0628</button></div>' + (list.length ? '<div class="tbl"><table><tr><th>\u0627\u0644\u0627\u0633\u0645</th><th>\u0627\u0644\u0633\u0646</th><th>\u0627\u0644\u062d\u0644\u0642\u0629</th><th>\u0627\u0644\u0645\u0643\u0627\u0646</th><th>\u0622\u062e\u0631 \u062d\u0641\u0638</th><th>\u0627\u0644\u062d\u0627\u0644\u0629</th><th>\u063a\u064a\u0627\u0628 \u0627\u0644\u0634\u0647\u0631</th>' + feeH + '<th></th></tr>' + rows + '</table></div>' : empty('\u0644\u0627 \u064a\u0648\u062c\u062f \u0637\u0644\u0627\u0628.')) + '</div>';
+      return buildSummary(list) + '<div class="card"><div class="bar"><h2 class="grow" style="margin:0">\u0627\u0644\u0637\u0644\u0627\u0628</h2>' + toolbar + '<select data-change="fcat"><option value="">\u0627\u0644\u0635\u063a\u0627\u0631 \u0648\u0627\u0644\u0643\u0628\u0627\u0631</option>' + Object.keys(CATS).map(function(k) { return '<option value="' + k + '"' + (ui.fcat === k ? ' selected' : '') + '>' + (k === 'child' ? '\u0627\u0644\u0635\u063a\u0627\u0631' : '\u0627\u0644\u0643\u0628\u0627\u0631') + '</option>'; }).join('') + '</select><select data-change="fh"><option value="">\u0643\u0644 \u0627\u0644\u062d\u0644\u0642\u0627\u062a</option>' + db.halaqat.map(function(h) { return '<option value="' + esc(h.id) + '"' + (h.id === ui.fh ? ' selected' : '') + '>' + esc(halaqaLabel(h)) + '</option>'; }).join('') + '</select><button class="btn primary" data-act="addStudent">+ \u0627\u0633\u062a\u0645\u0627\u0631\u0629 \u0637\u0627\u0644\u0628</button></div>' + (list.length ? '<div class="tbl"><table><tr><th>\u0627\u0644\u0627\u0633\u0645</th><th>\u0627\u0644\u0633\u0646</th><th>\u0627\u0644\u062d\u0636\u0648\u0631</th><th>\u0627\u0644\u062d\u0644\u0642\u0629</th><th>\u0627\u0644\u0645\u0643\u0627\u0646</th><th>\u0622\u062e\u0631 \u062d\u0641\u0638</th><th>\u0627\u0644\u062d\u0627\u0644\u0629</th><th>\u063a\u064a\u0627\u0628 \u0627\u0644\u0634\u0647\u0631</th>' + feeH + '<th></th></tr>' + rows + '</table></div>' : empty('\u0644\u0627 \u064a\u0648\u062c\u062f \u0637\u0644\u0627\u0628.')) + '</div>';
     } catch(e) {
       console.error('adminViews.students error:', e);
       return '<div class="card"><p style="color:red">\u062e\u0637\u0623: ' + String(e.message || e) + '</p></div>';
