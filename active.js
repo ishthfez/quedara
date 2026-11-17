@@ -48,7 +48,9 @@
   const wrapStu = () => {
   const baseStu = adminViews.students;
   adminViews.students = function () {
-    const h = baseStu.apply(this, arguments);
+    /* القائمة الكاملة قبل تضييقها بالحالة في nav.js: لعدادات الاشتراكات في app-abs.js */
+    window.QLStuPool = db.students;
+    let h; try { h = baseStu.apply(this, arguments); } finally { window.QLStuPool = null; }
     if (typeof h !== 'string') return h;
     return h.replace(/<select data-sstf([^>]*)>([\s\S]*?)<\/select>/, (m, attrs, opts) => {
       const dis = /\sdisabled/.test(attrs), title = (attrs.match(/title="([^"]*)"/) || [])[1] || '', cur = ui.sstf || '';
