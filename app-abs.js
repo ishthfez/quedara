@@ -71,7 +71,10 @@ try {
   function can(p) { try { return window.Perms ? Perms.can(p) : session && session.role === 'admin'; } catch(e) { return false; } }
   function money(n) { return (Math.round((+n || 0) * 100) / 100).toLocaleString('en-US'); }
   function feeRow(cls, v, l) { return '<div class="feerow ' + cls + '"><span>' + esc(l) + '</span><b>' + v + '</b></div>'; }
-  function getPaid(sid, y, m) { try { var fees = Array.isArray(db.fees) ? db.fees : []; var p = 0; fees.forEach(function(f) { if (f.studentId === sid && +f.y === y && +f.m === m) p += +f.amount || 0; }); return p; } catch(e) { return 0; } }
+  /* المدفوع للطالب في شهر: من فهرس يُبنى مرة واحدة لكل رسم (كان يمر على كل الدفعات لكل طالب، فيبطئ قسم الطلاب كثيرًا).
+     يُبنى من جديد إن تغيّرت مصفوفة الدفعات أو عددها، ويُلغى بعد انتهاء الرسم الحالي فيلتقط أي تعديل لاحق على مبلغ. */
+  var _pIdx = null, _pRef = null, _pLen = -1;
+  function getPaid(sid, y, m) { try { var fees = Array.isArray(db.fees) ? db.fees : []; if (!_pIdx || _pRef !== fees || _pLen !== fees.length) { var I = new Map(); fees.forEach(function(f) { var k = f.studentId + '|' + (+f.y) + '|' + (+f.m); I.set(k, (I.get(k) || 0) + (+f.amount || 0)); }); _pIdx = I; _pRef = fees; _pLen = fees.length; setTimeout(function() { _pIdx = null; }, 0); } return _pIdx.get(sid + '|' + (+y) + '|' + (+m)) || 0; } catch(e) { return 0; } }
 
   function buildSummary(list) {
     try {
