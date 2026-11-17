@@ -18,7 +18,12 @@
     .qatt .tblprint [data-print],.qatt .tblprint .qsave,.qatt .tblprint .texp,.qatt .tblprint [data-heads],.qatt .tblprint > .qsp{display:none!important}
     .qatt .tblprint.qtb{justify-content:flex-start!important}
     .qatt .attbar{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin:0}
-    .qatt .attbar > select,.qatt .attbar > .qcombo{flex:1 1 16rem;max-width:30rem;margin:0}
+    .qatt .attbar > select,.qatt .attbar > .qcombo,.qatt .attbar > .qatt-hw{flex:1 1 16rem;max-width:30rem;margin:0}
+    .qatt .qatt-hw{position:relative;min-width:0}
+    .qatt .qatt-hw > .qcombo,.qatt .qatt-hw > select{width:100%;max-width:none;margin:0}
+    .qatt .qatt-hw:not(:focus-within) .qcombo-in{color:transparent!important}
+    .qatt .qatt-disp{position:absolute;top:0;bottom:0;inset-inline-start:0;inset-inline-end:2.4rem;display:flex;align-items:center;gap:.25rem;padding-inline-start:.8rem;pointer-events:none;white-space:nowrap;overflow:hidden;font-weight:700;color:var(--navy,#13294b)}
+    .qatt .qatt-hw:focus-within .qatt-disp,.qatt .qatt-hw:not(:has(.qcombo)) .qatt-disp{display:none}
     .qatt .attbar .qatt-one{flex:1 1 auto;font-weight:700;color:var(--navy,#13294b)}
     .qatt .attbar label{display:flex;align-items:center;gap:.5rem;margin:0;font-weight:700;color:var(--navy,#13294b)}
     .qatt .attbar label input{width:auto;margin:0}
@@ -53,13 +58,18 @@
       const cur = sel.value || sel.querySelector('option[selected]')?.value || ui.hid;
       const pl = h0 => (typeof placeName === 'function' && placeName(h0)) || '';
       const hs = (db.halaqat || []).slice().sort((a, b) => (pl(a)).localeCompare(pl(b), 'ar') || halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'));
-      const lab = h0 => `${halaqaLabel(h0)}${pl(h0) ? ' — ' + pl(h0) : ''}`;
+      /* halaqaLabel يذكر المكان أحيانًا (معلم له حلقات في أكثر من مكان): لا يتكرر */
+      const lab = h0 => { const l = halaqaLabel(h0), p = pl(h0); return p && !l.includes(p) ? `${l} — ${p}` : l; };
       if (hs.length === 1) {
         const one = document.createElement('span'); one.className = 'qatt-one'; one.textContent = lab(hs[0]);
         (sel.closest('.qcombo') || sel).replaceWith(one);
       } else {
         sel.setAttribute('aria-label', 'الحلقة والمكان');
         sel.innerHTML = hs.map(h0 => `<option value="${esc(h0.id)}"${h0.id === cur ? ' selected' : ''}>${esc(lab(h0))}</option>`).join('');
+        /* المختارة تُعرض «حلقة فلان» ومكانها في كبسولة (nav.js يحوّل «… — المكان» إلى كبسولة)، وعند الكتابة للبحث يظهر النص العادي */
+        const hw = document.createElement('div'); hw.className = 'qatt-hw'; sel.replaceWith(hw); hw.appendChild(sel);
+        const ch = hs.find(h0 => h0.id === cur);
+        if (ch) { const d = document.createElement('span'); d.className = 'qatt-disp'; d.setAttribute('aria-hidden', 'true'); d.textContent = lab(ch); hw.appendChild(d); }
       }
       const date = C.querySelector('input[data-change="date"]'), dl = date?.closest('label');
       if (dl) { [...dl.childNodes].filter(n => n.nodeType === 3).forEach(n => n.remove()); dl.prepend(date.value === today() ? 'اليوم' : 'التاريخ'); }
