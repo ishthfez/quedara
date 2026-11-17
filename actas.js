@@ -5,6 +5,7 @@
    - الخادم يعرفه مديرًا فيقبل كل عمل؛ وكل ما يُسجَّل يُكتب باسم المدير لا باسم من يعمل بصفته
      (الدفعات وإيصالاتها، وغياب المعلمين، وقوائم التحصيل، والإشعارات)، حتى لا تختلط الأمور.
    - شريط ثابت أعلى الشاشة يذكّر بالوضع، وفيه «رجوع إلى المدير». إعادة تحميل الصفحة تعيد المدير أيضًا.
+     وفي الشريط نفسه قائمتا الفئة والشخص: التبديل منهما إلى غيره مباشرة، دون الرجوع إلى المدير أولًا.
    يُحمَّل بعد perms.js و fees.js وقبل app-actions.js. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./actas.js')) VFILES.push('./actas.js'); } catch (e) { /* ignore */ } });
@@ -89,6 +90,8 @@
   css.textContent = `#actasbar{position:fixed;top:0;inset-inline:0;z-index:60;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;justify-content:center;
       padding:max(.45rem,env(safe-area-inset-top)) .8rem .45rem;background:#8a4b0f;color:#fff;font-weight:700;font-size:.92rem;box-shadow:0 2px 8px rgba(0,0,0,.2)}
     #actasbar small{font-weight:400;opacity:.9}#actasbar .btn{background:#fff;color:#8a4b0f;border:0;min-height:32px;padding:0 .8rem}
+    #actasbar select,#actasbar .qcombo-in{width:auto;max-width:15rem;min-height:32px;margin:0;padding:0 .5rem;border:0;border-radius:8px;background:#fff;color:#8a4b0f;font:inherit;font-weight:700}
+    #actasbar .qcombo{width:auto;max-width:15rem;margin:0}
     html.actas body{padding-top:var(--actas-h,44px)}html.actas .content .top{top:var(--actas-h,44px)}
     .side .actas-btn{display:block;width:100%;margin:.45rem 0 0;font-size:.82rem}`;
   document.head.appendChild(css);
@@ -97,10 +100,31 @@
     document.documentElement.classList.toggle('actas', !!act);
     if (!act) { b?.remove(); return; }
     if (!b) { b = document.createElement('div'); b.id = 'actasbar'; document.body.appendChild(b); }
-    b.innerHTML = `<span>تعمل الآن بصفة ${esc(roleL(act.role))} «${esc(act.name)}»</span><small>كل ما تسجّله يُكتب باسمك</small><button type="button" class="btn sm" data-actas-exit>رجوع إلى المدير</button>`;
+    /* التبديل من الشريط نفسه: الفئة ثم الشخص، فيتحول التطبيق إليه مباشرة دون الرجوع إلى المدير */
+    const coll = ROLES.find(x => x[0] === act.role)?.[2];
+    const ppl = (db[coll] || []).slice().sort((a, c) => a.name.localeCompare(c.name, 'ar'));
+    b.innerHTML = `<span>تعمل الآن بصفة</span>
+      <select data-asbr aria-label="الفئة">${ROLES.map(([k, l, c]) => `<option value="${k}" ${k === act.role ? 'selected' : ''} ${(db[c] || []).length ? '' : 'disabled'}>${l}</option>`).join('')}</select>
+      <select data-asbp aria-label="الشخص">${ppl.map(m => `<option value="${esc(m.id)}" ${m.id === act.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
+      <small>كل ما تسجّله يُكتب باسمك</small><button type="button" class="btn sm" data-actas-exit>رجوع إلى المدير</button>`;
     requestAnimationFrame(() => document.documentElement.style.setProperty('--actas-h', b.offsetHeight + 'px'));
   }
   document.addEventListener('click', e => { if (e.target.closest('[data-actas-exit]')) exit(); });
+  /* تبديل الشخص أو الفئة من الشريط: يُغلق العمل بصفة الحالي بهدوء ثم يبدأ بالجديد */
+  function swap(role, id) {
+    if (!act || !id || (role === act.role && id === act.id)) return;
+    fixBy();
+    session = { role: 'admin', id: act.adminId };
+    act = null;
+    enter(role, id);
+  }
+  document.addEventListener('change', e => {
+    const t = e.target; if (!act || !t.closest?.('#actasbar')) return;
+    if (t.matches('[data-asbr]')) {
+      const coll = ROLES.find(x => x[0] === t.value)?.[2], first = (db[coll] || []).slice().sort((a, c) => a.name.localeCompare(c.name, 'ar'))[0];
+      if (first) swap(t.value, first.id);
+    } else if (t.matches('[data-asbp]')) swap(act.role, t.value);
+  });
 
   /* ===== زر «العمل بصفة…» في القائمة الجانبية للمدير ===== */
   new MutationObserver(() => {
