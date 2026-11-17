@@ -1,6 +1,2 @@
-'use strict';
-/* ملفات التطبيق ثلاثة تُحمَّل بالترتيب ويتشارك بعضها تعريفات بعض:
-   app.js (الأساس والواجهات) ← app-forms.js (الاستيراد والنماذج) ← app-actions.js (الإجراءات والمزامنة والتشغيل) */
-/* وضع قاعدة البيانات: يعمل تلقائيًا عند وجود cloud.js مضبوطًا، وإلا يبقى التطبيق محليًا كما كان */
-const CLOUD = !!(window.Cloud && window.Cloud.enabled);
-const ss={get:k=>{try{return sessionStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{sessionStorage.setItem(k,v)}catch(e){}},del:k=>{try{sessionStorage.removeItem(k)}catch(e){}}};
+/* temporary loader — يحمّل app.js الأصلي من آخر commit سليم */
+(async()=>{try{const r=await fetch('https://raw.githubusercontent.com/ishthfez/quedara/60839154ad897237e3ef1133aba061cafba677ee/app.js');if(!r.ok)throw new Error(r.status);const t=await r.text();const s=document.createElement('script');s.textContent=t;document.head.appendChild(s);}catch(e){document.getElementById('app').innerHTML='<div style="text-align:center;padding:3rem"><h2>خطأ في تحميل التطبيق</h2><p>'+e.message+'</p><button onclick="location.reload()">إعادة المحاولة</button></div>';}})();
