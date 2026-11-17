@@ -9,7 +9,8 @@
    يسري على كل النوافذ في التطبيق، عدا نافذة «تثبيت التطبيق» (.overlay.install). النوافذ العريضة (.wide و.sform) أعرض على الحاسوب.
    عرض فقط: النماذج ومعالجاتها وحساباتها كما هي.
    «استمارة طالب» تفتح داخل نافذة «إضافة طلاب» نفسها: تبويب ثالث بجانب «طالب واحد» و«عدة طلاب» (آخر الملف).
-   «إشعار» لطالب واحد (mine.js) صار «رسالة»: عنوان النافذة «رسالة للطالب/ الاسم» وخانتها «النص»، وزر الصف عنوانه «رسالة». */
+   «إشعار» لطالب واحد (mine.js) صار «رسالة»: عنوان النافذة «رسالة للطالب/ الاسم» وخانتها «النص»، وزر الصف عنوانه «رسالة».
+   تبويبا حالة الطلاب في الحلقة (mine.js: نافذة الحضور وصفحة المعلم والمشرف) «منتظم / منقطع» كما في «الطلاب»، لا «المنتظمون / المنقطعون». */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./pages.js')) VFILES.push('./pages.js'); } catch (e) { /* ignore */ } });
   const SKIP = '.install';
@@ -65,7 +66,12 @@
   }
   /* زر الصف لطالب واحد: «رسالة» (toolbar.js يضع عنوانه عند تحويله أيقونة، فيُعاد بعده) */
   let msgT = 0;
-  const msgBtns = () => { msgT = 0; document.querySelectorAll('[data-mnote]:not([data-mnote="*"])').forEach(b => { if (b.title !== 'رسالة') { b.title = 'رسالة'; b.setAttribute('aria-label', 'رسالة'); } }); };
+  const TABW = { 'المنتظمون': 'منتظم', 'المنقطعون': 'منقطع' };
+  const msgBtns = () => {
+    msgT = 0;
+    document.querySelectorAll('[data-mnote]:not([data-mnote="*"])').forEach(b => { if (b.title !== 'رسالة') { b.title = 'رسالة'; b.setAttribute('aria-label', 'رسالة'); } });
+    document.querySelectorAll('[data-mtab]').forEach(b => { const t = [...b.childNodes].find(n => n.nodeType === 3 && TABW[n.textContent.trim()]); if (t) t.textContent = TABW[t.textContent.trim()] + ' '; });
+  };
   new MutationObserver(() => { if (!msgT) msgT = requestAnimationFrame(msgBtns); }).observe(document.body, { childList: true, subtree: true });
 
   /* الرجوع: كما يغلق × في nav.js («إلغاء/إغلاق» النافذة نفسها إن وُجد)، وإلا تُزال النافذة */
