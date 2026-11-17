@@ -69,7 +69,30 @@ try {
   document.addEventListener('click', function(e) { var b = e.target.closest('[data-abs-log]'); if (b) absLog(b.dataset.absLog); });
 
   function can(p) { try { return window.Perms ? Perms.can(p) : session && session.role === 'admin'; } catch(e) { return false; } }
-  function money(n) { return (Math.round((+n || 0) * 100) / 100).toLocaleString('en-US'); }
+  /* تنسيق الأرقام بمنسّق واحد (toLocaleString لكل رقم بطيء مع آلاف الصفوف) */
+  var NF = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+  function money(n) { return NF.format(Math.round((+n || 0) * 100) / 100); }
+  /* «آخر حفظ» من فهرس يُبنى مرة لكل رسم بدل المرور على كل التسميعات لكل طالب (lastHifz في app.js، تُستبدل للتطبيق كله).
+     النتيجة نفسها: أحدث تسميع «حفظ» بالتاريخ، وعند تساوي التاريخ الأحدث إدخالًا. */
+  var _hIdx = null, _hRef = null, _hLen = -1;
+  if (typeof lastHifz === 'function' && typeof SURAHS !== 'undefined') {
+    lastHifz = function(sid) {
+      try {
+        var R = Array.isArray(db.records) ? db.records : [];
+        if (!_hIdx || _hRef !== R || _hLen !== R.length) {
+          var I = new Map();
+          R.forEach(function(r) { if (r.type !== 'حفظ') return; var c = I.get(r.studentId); if (!c || String(r.date) >= String(c.date)) I.set(r.studentId, r); });
+          _hIdx = I; _hRef = R; _hLen = R.length; setTimeout(function() { _hIdx = null; }, 0);
+        }
+        var r = _hIdx.get(sid);
+        return r ? 'سورة ' + SURAHS[r.surah - 1][0] + ' – آية ' + r.to : '—';
+      } catch(e) { return '—'; }
+    };
+  }
+  /* صفوف «الطلاب»: staff.js يعرض أول 200 (60 على الهاتف) حتى «عرض الكل»، فلا تُبنى الصفوف المخفية كاملة:
+     تبقى صفًا فارغًا (ليعدّها staff.js) إلى أن يُضغط «عرض الكل»، ويعود ذلك عند تغيّر عدد الطلاب كما في staff.js */
+  var _stAll = false, _stN = -1;
+  document.addEventListener('click', function(e) { if (e.target.closest && e.target.closest('[data-stall]')) _stAll = true; }, true);
   function feeRow(cls, v, l) { return '<div class="feerow ' + cls + '"><span>' + esc(l) + '</span><b>' + v + '</b></div>'; }
   /* المدفوع للطالب في شهر: من فهرس يُبنى مرة واحدة لكل رسم (كان يمر على كل الدفعات لكل طالب، فيبطئ قسم الطلاب كثيرًا).
      يُبنى من جديد إن تغيّرت مصفوفة الدفعات أو عددها، ويُلغى بعد انتهاء الرسم الحالي فيلتقط أي تعديل لاحق على مبلغ. */
@@ -246,7 +269,10 @@ try {
       var toolbar = hasFees && (can('fees.collect') || can('fees.amount'))
         ? (can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u0627\u0634\u062a\u0631\u0627\u0643</button>' : '') + (can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>\u062a\u0639\u064a\u064a\u0646 \u0644\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0628\u062d\u062b</button>' : '') : '';
       toolbar += remindBtn;
-      var rows = list.map(function(st) {
+      if (list.length !== _stN) { _stN = list.length; _stAll = false; }
+      var cap = _stAll ? Infinity : (matchMedia('(max-width:860px)').matches ? 60 : 200);
+      var rows = list.map(function(st, i) {
+        if (i >= cap) return '<tr></tr>';
         var off = stOff(st);
         return '<tr' + (off ? ' class="tr-off"' : '') + '><td><span class="who">' + avatar(st) + '<span>' + esc(st.name) + '</span></span></td><td>' + (ageOf(st) === '' ? '\u2014' : ageOf(st)) + '</td><td>' + cleanHName(st.halaqaId) + '</td><td>' + esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014') + '</td><td>' + esc(lastHifz(st.id)) + '</td><td><button type="button" class="btn sm' + (off ? ' danger' : '') + '" data-stat="' + st.id + '">' + (off ? '\u0645\u0646\u0642\u0637\u0639' : '\u0645\u0646\u062a\u0638\u0645') + '</button></td><td>' + absMonthCell(st) + '</td>' + (hasFees ? F.cells(st) : '') + '<td><button class="btn sm primary" data-act="studentCard" data-id="' + st.id + '">\u0627\u0644\u0645\u0644\u0641</button><button class="btn sm" data-act="hist" data-id="' + st.id + '">\u0627\u0644\u0633\u062c\u0644</button><button type="button" class="btn sm" data-mnote="' + esc(st.id) + '" title="\u0625\u0634\u0639\u0627\u0631 \u0644\u0647\u0630\u0627 \u0627\u0644\u0637\u0627\u0644\u0628">\u0625\u0634\u0639\u0627\u0631</button>' + (hasFees ? payBtn(st) : '') + '<button class="btn sm" data-act="editStudent" data-id="' + st.id + '">\u062a\u0639\u062f\u064a\u0644</button>' + (db.fields.students.length ? '<button class="btn sm" data-act="editExtra" data-k="students" data-id="' + st.id + '">\u0625\u0636\u0627\u0641\u064a\u0629</button>' : '') + (hasFees ? F.actions(st) : '') + '</td></tr>';
       }).join('');
