@@ -251,7 +251,8 @@
   let lastSig = '';
   function apply() {
     document.querySelectorAll('.overlay .scard').forEach(markCard);
-    const off = session && session.role !== 'admin' ? ITEMS.filter(it => !myOn(it)) : [];
+    /* القواعد لصفحة «الطلاب» (ونوافذها) وحدها: لا تمسّ صفحات العامل الأخرى مثل «التحصيل» */
+    const off = session && session.role !== 'admin' && ui.tab === 'students' ? ITEMS.filter(it => !myOn(it)) : [];
     const sig = (session?.role || '') + '|' + off.map(i => i[0]).join(',');
     if (sig !== lastSig) {
       lastSig = sig;
