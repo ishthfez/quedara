@@ -5,13 +5,15 @@
    ما يخصه من الخادم عبر my_perms كبقية الصلاحيات، بلا تعديل على الخادم.
    هذا للعرض فقط: إظهار العنصر أو إخفاؤه. ما يغيّر البيانات (التحصيل، الحالة، النقل...) يبقى الخادم يتحقق من صلاحيته الأصلية.
    التطبيق على صفحة الطلاب لغير المدير يعمل متى عُرضت لهم (أسفل الملف): العنصر غير المسموح يُخفى، وما لا يُخفى (اسم الطالب،
-   زر الحالة، تسجيل الحضور، التاريخ) يبقى ظاهرًا بلا ضغط. وقبل أول حفظ تسري الاختيارات الافتراضية في ITEMS. */
+   زر الحالة، تسجيل الحضور، التاريخ) يبقى ظاهرًا بلا ضغط. وقبل أول حفظ تسري الاختيارات الافتراضية في ITEMS.
+   أول صف «عرض صفحة الطلاب» يقرر هل تظهر الصفحة للفئة أصلًا (stuview.js)، وهو مطفأ لكل الفئات حتى يفعّله المدير. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./stuperm.js')) VFILES.push('./stuperm.js'); } catch (e) { /* ignore */ } });
   const ROLES4 = [['teacher', 'المعلمون'], ['supervisor', 'المشرفون'], ['accountant', 'المحاسبون'], ['placeadmin', 'الإداريون']];
   const T = 'teacher', S = 'supervisor', A = 'accountant', P = 'placeadmin', ALL = [T, S, A, P];
   /* [المفتاح، العنصر، المجموعة، الفئات المسموح لها افتراضيًا، المحدِّد، النوع: hide (يُخفى) | lock (يظهر بلا ضغط) | col (عمود بعنوانه)] */
   const ITEMS = [
+    ['page', 'عرض صفحة «الطلاب» لهذه الفئة (بدل صفحاتها للطلاب والحضور)', 'الصفحة', [], '', 'flag'],
     ['sum', 'بطاقة الاشتراكات كلها', 'بطاقة الاشتراكات', [A], 'main .feecard', 'hide'],
     ['sumstu', 'عدادات الطلاب (العدد، مسدّد، لم يسدّد، معفى)', 'بطاقة الاشتراكات', [A], 'main .feecard .qfstu', 'hide'],
     ['summon', 'عدادات المبالغ ونسبة التحصيل', 'بطاقة الاشتراكات', [A], 'main .feecard .qfmon', 'hide'],
@@ -101,7 +103,7 @@
   /* ===== التطبيق على صفحة «الطلاب» لغير المدير ===== */
   const myOn = it => {
     if (!session || session.role === 'admin') return true;
-    if (!CLOUD) return roleOn(session.role, it);
+    if (!CLOUD || window.QLActAs?.()) return roleOn(session.role, it);   // «العمل بصفة»: المدير يقرأ الاختيارات كلها
     const mp = db.myPerms || [];
     return mp.includes(SET) ? mp.includes(PK(it[0])) : it[3].includes(session.role);
   };
@@ -112,7 +114,7 @@
     const sig = (session?.role || '') + '|' + off.map(i => i[0]).join(',');
     if (sig !== lastSig) {
       lastSig = sig;
-      css.textContent = off.filter(i => i[5] !== 'col').map(i => `${i[4].split(',').map(x => x.trim()).join(',')}{${i[5] === 'lock' ? 'pointer-events:none!important;cursor:default!important' : 'display:none!important'}}`).join('\n')
+      css.textContent = off.filter(i => i[5] === 'hide' || i[5] === 'lock').map(i => `${i[4].split(',').map(x => x.trim()).join(',')}{${i[5] === 'lock' ? 'pointer-events:none!important;cursor:default!important' : 'display:none!important'}}`).join('\n')
         + (off.some(i => i[0] === 'r_file') ? '\nmain .tbl [data-act="studentCard"]{color:inherit!important;text-decoration:none!important}' : '');
     }
     /* الأعمدة: بعنوانها في جداول صفحة الطلاب */
