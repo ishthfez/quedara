@@ -6,16 +6,17 @@
    ترويسة النافذة (.mhead وفيها العنوان و×) يصنعها nav.js؛ هنا تصير شريط الصفحة: سهم رجوع بدل ×.
    وإن أعادت النافذة كتابة محتواها (مثل تغيير السنة) فزالت الترويسة، تُصنع من جديد بالشكل نفسه.
    سهم الرجوع يضغط «إلغاء» الأصلي، وزر رجوع الهاتف يغلقها كما يغلق أي نافذة (nav.js).
-   عرض فقط: النموذج ومعالجاته وحساباته كما هي. القائمة PAGES تحدد النوافذ التي تصير صفحات (بعنوانها). */
+   يسري على كل النوافذ في التطبيق، عدا نافذة «تثبيت التطبيق» (.overlay.install). النوافذ العريضة (.wide و.sform) أعرض على الحاسوب.
+   عرض فقط: النماذج ومعالجاتها وحساباتها كما هي. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./pages.js')) VFILES.push('./pages.js'); } catch (e) { /* ignore */ } });
-  const PAGES = [/^\s*إعدادات الاشتراك\s*$/];
+  const SKIP = '.install';
   const BACK = '<button type="button" class="qpback" aria-label="رجوع" title="رجوع"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>';
   const css = document.createElement('style');
   css.textContent = `.overlay.qpage{background:var(--bg,#f8f5ee)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;padding:0!important;align-items:stretch!important;justify-content:center}
     .overlay.qpage>.modal{--qpw:max(1rem,calc((100% - 680px) / 2));display:flex;flex-direction:column;width:100%;max-width:none!important;height:100%;max-height:none!important;margin:0;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:var(--card,#fff)!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;overflow-y:auto;animation:none!important}
     .overlay.qpage>.modal>*{flex:none}
-    .qpage>.modal>.mhead{position:sticky;top:0!important;z-index:3;display:flex;align-items:center;gap:.6rem;margin:0!important;padding:.7rem var(--qpw)!important;border-radius:0!important;background:var(--card,#fff)!important;border-bottom:1px solid var(--line,#e6dfcf)}
+    .qpage>.modal>.mhead{position:sticky;top:0!important;z-index:3;display:flex;align-items:center;justify-content:flex-start!important;gap:.6rem;margin:0!important;padding:.7rem var(--qpw)!important;border-radius:0!important;background:var(--card,#fff)!important;border-bottom:1px solid var(--line,#e6dfcf)}
     .qpage>.modal>.mhead h2{margin:0;flex:1;min-width:0;font-size:1.05rem}
     .qpage>.modal>.mhead .mclose{display:none!important}
     .qpage .qpback{flex:none;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;padding:0;border:1px solid var(--line,#e6dfcf);border-radius:10px;background:transparent;color:var(--navy,#13294b);cursor:pointer}
@@ -27,27 +28,36 @@
     .qpage>.modal>.row:last-child{position:sticky;bottom:0!important;z-index:3;margin:auto 0 0!important;padding:.7rem var(--qpw) calc(.7rem + env(safe-area-inset-bottom,0px))!important;border-radius:0!important;background:var(--card,#fff)!important;border-top:1px solid var(--line,#e6dfcf)}
     @media (min-width:861px){.overlay.qpage{background:rgba(10,18,35,.1)!important;padding:1.5rem 1rem!important;align-items:flex-start!important}
       .overlay.qpage>.modal{--qpw:1.25rem;max-width:680px!important;height:auto;max-height:calc(100vh - 3rem)!important;border:1px solid var(--line,#e6dfcf)!important;border-radius:16px!important;box-shadow:0 14px 44px rgba(10,18,35,.2)!important}
-      .qpage>.modal>.mhead{border-radius:16px 16px 0 0!important}.qpage>.modal>.row:last-child{border-radius:0 0 16px 16px!important}}`;
+      .overlay.qpage>.modal.wide{max-width:800px!important}.overlay.qpage>.modal.sform{max-width:860px!important}
+      .qpage>.modal>.mhead{border-radius:16px 16px 0 0!important}.qpage>.modal>.row:last-child{border-radius:0 0 16px 16px!important}}
+    @media print{.qpage .qpback{display:none!important}.qpage>.modal>.mhead,.qpage>.modal>.row:last-child{position:static!important;border:0!important;box-shadow:none!important}.overlay.qpage>.modal{box-shadow:none!important;border:0!important}}`;
   document.head.appendChild(css);
 
-  /* يُعاد بعد كل إعادة رسم للنافذة */
+  /* يُعاد بعد كل إعادة رسم للنافذة (بعضها يعيد كتابة محتواها كله، فتزول الترويسة) */
   function decorate(ov) {
-    if (!ov.isConnected) return;
+    if (!ov.isConnected || ov.matches(SKIP)) return;
     const m = ov.querySelector(':scope > .modal'); if (!m) return;
+    ov.classList.add('qpage');
     let head = m.querySelector(':scope > .mhead');
-    const h = head ? head.querySelector('h2') : m.querySelector(':scope > h2');
-    if (!ov.classList.contains('qpage')) { if (!h || !PAGES.some(r => r.test(h.textContent))) return; ov.classList.add('qpage'); }
-    if (!h) return;
-    if (!head) { head = document.createElement('div'); head.className = 'mhead'; m.prepend(head); head.appendChild(h); }
+    if (!head) {
+      head = document.createElement('div'); head.className = 'mhead';
+      const h = m.firstElementChild?.tagName === 'H2' ? m.firstElementChild : null;
+      m.prepend(head); if (h) head.appendChild(h);
+    }
     if (head.querySelector('.qpback')) return;
     head.insertAdjacentHTML('afterbegin', BACK);
     /* اختيار السنة (إعدادات الاشتراك) بجانب العنوان */
     const y = m.querySelector('[data-cfgy]');
     if (y) { const lab = y.closest('label'); y.setAttribute('aria-label', 'مبالغ سنة'); head.appendChild(y); if (lab && !lab.querySelector('select,input,textarea')) lab.remove(); }
   }
+  /* الرجوع: كما يغلق × في nav.js («إلغاء/إغلاق» النافذة نفسها إن وُجد)، وإلا تُزال النافذة */
   document.addEventListener('click', e => {
     const b = e.target.closest('.qpage .qpback'); if (!b) return;
-    b.closest('.modal')?.querySelector('[data-close]')?.click();
+    const ov = b.closest('.overlay'), m = b.closest('.modal');
+    const x = m?.querySelector(':scope > .mhead .mclose');
+    if (x && ov === [...document.querySelectorAll('.overlay')].pop()) { x.click(); return; }
+    const c = m?.querySelector(':scope > .row:last-child [data-close], [data-close]');
+    if (c) c.click(); else ov?.remove();
   });
   const watch = ov => { decorate(ov); if (ov.classList.contains('qpage') && !ov._qpw) { ov._qpw = new MutationObserver(() => decorate(ov)); ov._qpw.observe(ov, { childList: true }); } };
   new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1 && n.classList.contains('overlay')) watch(n); }))).observe(document.body, { childList: true });
