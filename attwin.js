@@ -51,14 +51,17 @@
   const BACK = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
   let open = false, top = 0;
   const isAdm = () => typeof session !== 'undefined' && session?.role === 'admin';
-  const onStu = () => { try { return ui.tab === 'students' && isAdm(); } catch (e) { return false; } };
+  /* المدير، ومن تظهر له صفحة «الطلاب» ومعها زر «الحضور» (stuview.js وstuperm.js) */
+  const canAtt = () => isAdm() || (!!window.QLStuView?.on() && !!window.QLStuPerm?.can('att'));
+  const onStu = () => { try { return ui.tab === 'students' && canAtt(); } catch (e) { return false; } };
 
   const NOTE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.55L3 21l1.95-5.6A8.5 8.5 0 1 1 21 11.5z"/></svg>';
   /* محتوى تبويب «الحضور» القديم نفسه (attWork في nav.js)، بلا شريط تبويبات «الطلاب»، ثم يُرتَّب كما في أول الملف */
   function attHtml() {
     const keep = ui.svw, keepP = ui.fp; let h = '';
     /* تصفية المكان في «الطلاب» لا تخص النافذة: قائمتها كل الحلقات بأماكنها */
-    try { ui.svw = 'att'; ui.fp = ''; h = adminViews.students(); } finally { ui.svw = keep; ui.fp = keepP; }
+    const run = window.QLStuView?.scoped || (f => f());
+    try { ui.svw = 'att'; ui.fp = ''; h = run(() => adminViews.students()); } finally { ui.svw = keep; ui.fp = keepP; }
     const i = h.indexOf('<div class="card subnav">');
     if (i > -1) { const e = h.indexOf('</div></div>', i); if (e > -1) h = h.slice(0, i) + h.slice(e + 12); }
     try { return tidy(h); } catch (e) { console.error('attwin tidy:', e); return h; }
@@ -72,7 +75,7 @@
       C.querySelector('select[data-fplace]')?.closest('.qcombo, label')?.remove(); C.querySelector('select[data-fplace]')?.remove();
       const cur = sel.value || sel.querySelector('option[selected]')?.value || ui.hid;
       const pl = h0 => (typeof placeName === 'function' && placeName(h0)) || '';
-      const hs = (db.halaqat || []).slice().sort((a, b) => (pl(a)).localeCompare(pl(b), 'ar') || halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'));
+      const hs = ((window.QLStuView?.on() && window.QLStuView.scopeH()) || db.halaqat || []).slice().sort((a, b) => (pl(a)).localeCompare(pl(b), 'ar') || halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'));
       /* halaqaLabel يذكر المكان أحيانًا (معلم له حلقات في أكثر من مكان): لا يتكرر */
       const lab = h0 => { const l = halaqaLabel(h0), p = pl(h0); return p && !l.includes(p) ? `${l} — ${p}` : l; };
       if (hs.length === 1) {
@@ -133,7 +136,7 @@
       /* والنافذة مفتوحة: جدول الطلاب خلفها مختصر (app-abs.js)، فيخف كل رسم أثناء التحضير */
       window.QLStuLite = open && ui.svw !== 'att';
       let h; try { h = baseStu.apply(this, arguments); } finally { window.QLStuLite = false; }
-      if (typeof h !== 'string' || ui.svw === 'att' || !isAdm()) return h;
+      if (typeof h !== 'string' || ui.svw === 'att' || !canAtt()) return h;
       return h.replace(/(<div class="qseg" data-sstfseg|<select data-sstf)/, `<button type="button" class="btn" data-attopen>${ICON}الحضور</button>$1`);
     };
     new MutationObserver(() => { try { watch(); } catch (e) { console.error('attwin:', e); } }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
