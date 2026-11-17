@@ -255,7 +255,9 @@
     const sig = (session?.role || '') + '|' + off.map(i => i[0]).join(',');
     if (sig !== lastSig) {
       lastSig = sig;
-      css.textContent = off.filter(i => i[5] === 'hide' || i[5] === 'lock').map(i => `${i[4].split(',').map(x => x.trim()).join(',')}{${i[5] === 'lock' ? 'pointer-events:none!important;cursor:default!important' : 'display:none!important'}}`).join('\n')
+      /* «يظهر بلا ضغط»: باهت ورمادي حتى لا يبدو معطّلًا بلا سبب (اسم الطالب يبقى بلونه نصًا عاديًا).
+         :not(#qz0) يرفع أولوية القاعدة فوق قواعد الملفات الأخرى (مثل إظهار «رسالة» في نافذة الحضور في attwin.js) */
+      css.textContent = off.filter(i => i[5] === 'hide' || i[5] === 'lock').map(i => `${i[4].split(',').map(x => x.trim() + ':not(#qz0)').join(',')}{${i[5] === 'lock' ? 'pointer-events:none!important;cursor:not-allowed!important' + (i[0] === 'r_file' ? '' : ';opacity:.45!important;filter:grayscale(1)!important') : 'display:none!important'}}`).join('\n')
         + (off.some(i => i[0] === 'r_file') ? '\nmain .tbl [data-act="studentCard"]{color:inherit!important;text-decoration:none!important}' : '');
     }
     /* الأعمدة: بعنوانها في جداول صفحة الطلاب */
