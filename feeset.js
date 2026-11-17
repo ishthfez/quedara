@@ -5,7 +5,9 @@
      - «تعيين لمجموعة طلاب»: يختار المكان أو الحلقة والحالة، ثم يفتح نافذة التعيين نفسها (data-fee-bulk في fees.js)
        على هؤلاء الطلاب (بدل «تعيين لنتائج البحث» في الطلاب).
    والزرّان في «الطلاب» و«الاشتراكات» يُخفيان عن المدير (يبقيان للمحاسب الذي ليس له «الإعدادات»).
-   شريط تبويبات «الإعدادات» يصنعه nav.js؛ هنا يُضاف إليه تبويب «الاشتراكات» ويُعرض محتواه حين يُختار. */
+   شريط تبويبات «الإعدادات» يصنعه nav.js؛ هنا يُضاف إليه تبويب «الاشتراكات» ويُعرض محتواه حين يُختار.
+   ملف الطالب (قسم «الاشتراك» الذي يضيفه app-abs.js): المستحق بعد الخصم وبجانبه قبله مشطوبًا، وصف «الخصم» بقائمة تعيّنه مباشرة
+   (معالج data-fdisc في fees.js)، وزر «سجل الدفعات» (من حصّلها وملاحظتها والحذف، log في fees.js) بجانب «سجل الاشتراكات». */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./feeset.js')) VFILES.push('./feeset.js'); } catch (e) { /* ignore */ } });
   const KEY = 'qfeeset';
@@ -70,5 +72,55 @@
     else if (t.matches('[data-qfss]')) st.s = t.value;
     else return;
     render();
+  });
+
+  /* ===== ملف الطالب: الخصم والمستحق قبل الخصم وسجل الدفعات ===== */
+  let cardSid = null;
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof studentCard !== 'function') return;
+    const base = studentCard;
+    const w = function (st) { cardSid = st?.id || null; return base.apply(this, arguments); };
+    window.studentCard = w; studentCard = w;
+  });
+  const canAmt = () => { try { return window.Perms ? Perms.can('fees.amount') : session?.role === 'admin'; } catch (e) { return false; } };
+  const fmt = n => (Math.round((+n || 0) * 100) / 100).toLocaleString('en-US');
+  const discsList = () => { const c = db.settings?.priv_fees || {}; let d = Array.isArray(c.discs) ? c.discs : []; if (!c.v) d = d.map(x => (x.id === 'd_special' ? { ...x, each: true } : x)); return d; };
+  const discTxt = d => (d.each ? `${d.name} (يُحدَّد لكل طالب)` : `${d.name} (${d.type === 'amt' ? fmt(d.value) + ' جنيه' : (d.value ?? 0) + '%'})`);
+  function dueHtml(s) {
+    if (!window.QLFeeDue) return '';
+    const I = s.info || {}, due = window.QLFeeDue(s); let base = due;
+    if (I.feeDisc) { const k = I.feeDisc; I.feeDisc = ''; try { base = window.QLFeeDue(s); } finally { I.feeDisc = k; } }
+    if (due == null) return 'غير محدد';
+    return `<b>${fmt(due)}</b> جنيه${base != null && base > due ? ` <s class="muted" title="قبل الخصم">${fmt(base)}</s>` : ''}`;
+  }
+  /* جدول القسم: أول .tbl بعد عنوانه (قد يسبقه شريط الحجم .ztools) */
+  const secTbl = h => { for (let e = h?.nextElementSibling; e && !e.matches('h3'); e = e.nextElementSibling) { const t = e.matches('.tbl') ? e.querySelector('table') : null; if (t) return t; } return null; };
+  const subH = m => [...m.querySelectorAll('h3.sc-h')].find(h => h.textContent.trim() === 'الاشتراك');
+  function enhance(modal) {
+    const h3 = subH(modal); if (!h3 || modal.dataset.qfc) return;
+    const sid = modal.querySelector('[data-fee-assign]')?.dataset.feeAssign || cardSid, s = byId(db.students, sid); if (!s) return;
+    modal.dataset.qfc = sid;
+    const tbl = secTbl(h3), td = tbl?.rows[0]?.cells[1];
+    if (td) td.innerHTML = dueHtml(s);
+    const D = discsList(), cur = (s.info || {}).feeDisc || '';
+    if (tbl && (D.length || cur)) {
+      const curD = D.find(d => d.id === cur);
+      const cell = canAmt() && D.length
+        ? `<select class="mini" data-fdisc="${esc(s.id)}" aria-label="الخصم أو الإعفاء" style="width:auto;margin:0"><option value="">بلا خصم</option>${D.map(d => `<option value="${esc(d.id)}" ${d.id === cur ? 'selected' : ''}>${esc(discTxt(d))}</option>`).join('')}</select>`
+        : esc(curD ? discTxt(curD) : 'بلا خصم');
+      tbl.insertAdjacentHTML('beforeend', `<tr data-qfdisc><th>الخصم</th><td>${cell}</td></tr>`);
+    }
+    const lh = [...modal.querySelectorAll('h3.sc-h')].find(h => h.textContent.trim() === 'سجل الاشتراكات');
+    if (lh && (db.fees || []).some(f => f.studentId === s.id)) {
+      lh.style.cssText += ';display:flex;align-items:center;gap:.6rem';
+      lh.insertAdjacentHTML('beforeend', `<button type="button" class="btn sm noprint" data-fee-log="${esc(s.id)}" style="margin-inline-start:auto;font-size:.8rem">سجل الدفعات</button>`);
+    }
+  }
+  let cardRaf = 0;
+  new MutationObserver(() => { if (!cardRaf) cardRaf = requestAnimationFrame(() => { cardRaf = 0; document.querySelectorAll('.overlay .scard').forEach(m => { try { enhance(m); } catch (e) { console.error('feeset card:', e); } }); }); }).observe(document.body, { childList: true, subtree: true });
+  /* بعد تغيير الخصم من الملف (يحفظه fees.js أولًا): المستحق في الملف يتحدّث */
+  document.addEventListener('change', e => {
+    const t = e.target; if (!t.matches?.('.scard [data-fdisc]')) return;
+    setTimeout(() => { const m = t.closest('.scard'), s = byId(db.students, t.dataset.fdisc); const td = m && secTbl(subH(m))?.rows[0]?.cells[1]; if (s && td) td.innerHTML = dueHtml(s); }, 0);
   });
 })();
