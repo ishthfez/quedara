@@ -8,6 +8,7 @@
 (function () {
   'use strict';
   var dg = function (s) { return String(s == null ? '' : s).replace(/[٠-٩]/g, function (c) { return c.charCodeAt(0) - 1632; }).replace(/\.0+$/, '').trim(); };
+  var SYS3_MIN = 65, SYS3_MAX = 80;   /* حدود مقرر نظام 3 أيام */
   var money = function (n) { return (Math.round((+n || 0) * 100) / 100).toLocaleString('en-US'); };
   var baseOf = function (s, sys) {
     if (typeof window.QLFeeDue !== 'function') return null;
@@ -51,6 +52,8 @@
       if (stOff(s)) { out.off++; return; }
       out.matched++;
       var fSys = dg(r[C.sys]) === '3' ? '3' : '6', aSys = (s.info || {}).feeSys === '3' ? '3' : '6', fFee = +dg(r[C.fee]);
+      /* مقرر نظام 3 أيام بين 65 و80 فقط: ما خرج عنه فهو نظام 6 أيام (ولو كان المستوى الأول أو الثاني) */
+      if (fSys === '3' && (fFee < SYS3_MIN || fFee > SYS3_MAX)) fSys = '6';
       if (aSys !== fSys) out.sys.push({ s: s, a: aSys, f: fSys, lv: r[C.lv] || '' });
       var h0 = byId(db.halaqat, s.halaqaId), pid = h0 && h0.placeId;
       if (pid) { var vk = pid + '|' + fSys; votes[vk] = votes[vk] || {}; votes[vk][fFee] = (votes[vk][fFee] || 0) + 1; }
