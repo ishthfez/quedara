@@ -10,6 +10,8 @@
    بطاقتا «استيراد» و«حالة الموقع» (app-import.js) كانتا فوق شريط التبويبات في كل تبويب: صار «الاستيراد» تبويبًا بعد «الاشتراكات»،
    و«حالة الموقع» داخل تبويب «الإعدادات» أول محتواه. وبطاقة «الاستيراد والمراجعة» القديمة في «الإعدادات» (nav.js) تُحذف:
    أزرارها كلها في تبويب «الاستيراد».
+   «تعديل الخصومات» (disc-setup.js) و«مطابقة الاشتراكات مع كشف الإيراد» (fee-match.js) ليسا استيرادًا: يُخفيان من بطاقة الاستيراد
+   ويظهران في تبويب «الاشتراكات» في بطاقة «أدوات الاشتراكات» (معالجاهما الأصليان يعملان من أي مكان).
    ملف الطالب (قسم «الاشتراك» الذي يضيفه app-abs.js): المستحق بعد الخصم وبجانبه قبله مشطوبًا، وصف «الخصم» بقائمة تعيّنه مباشرة
    (معالج data-fdisc في fees.js)، وزر «سجل الدفعات» (من حصّلها وملاحظتها والحذف، log في fees.js) بجانب «سجل الاشتراكات». */
 (() => {
@@ -25,7 +27,8 @@
   const css = document.createElement('style');
   css.textContent = `html.qfs-adm main [data-fee-cfg]:not(.qkeep),html.qfs-adm main [data-fee-bulk]:not(.qkeep){display:none!important}
     .qfs .bar{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.3rem 0 .6rem}
-    .qfs .bar select{width:auto;max-width:18rem;margin:0}`;
+    .qfs .bar select{width:auto;max-width:18rem;margin:0}
+    .qimp [data-disc-setup],.qimp [data-fee-match]{display:none!important}`;
   document.head.appendChild(css);
   new MutationObserver(() => document.documentElement.classList.toggle('qfs-adm', isAdm())).observe(document.getElementById('app') || document.body, { childList: true });
 
@@ -47,7 +50,10 @@
           <select data-qfsh aria-label="الحلقة"><option value="">كل الحلقات</option>${hs.map(h => `<option value="${esc(h.id)}" ${h.id === st.h ? 'selected' : ''}>${esc(halaqaLabel(h))}</option>`).join('')}</select>
           <select data-qfss aria-label="الحالة">${[['on', 'المنتظمون'], ['', 'كل الحالات'], ['off', 'المنقطعون']].map(([v, l]) => `<option value="${v}" ${st.s === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
         </div>
-        <div class="row"><button type="button" class="btn qkeep" data-fee-bulk data-qfsbulk ${n ? '' : 'disabled'}>تعيين لـ${n} طالب</button></div></div>`;
+        <div class="row"><button type="button" class="btn qkeep" data-fee-bulk data-qfsbulk ${n ? '' : 'disabled'}>تعيين لـ${n} طالب</button></div></div>
+      <div class="card qfs"><h2>أدوات الاشتراكات</h2>
+        <p class="muted" style="margin:0 0 .7rem;font-size:.9rem">«تعديل الخصومات» يراجع الطلاب الذين تنطبق عليهم الخصومات ويعيّنها لهم، و«مطابقة الاشتراكات» تقارن ما سُجّل في التطبيق بكشف الإيراد وتعرض الفروق.</p>
+        <div class="row" style="flex-wrap:wrap;gap:.5rem"><button type="button" class="btn" data-disc-setup>تعديل الخصومات</button><button type="button" class="btn" data-fee-match>مطابقة الاشتراكات مع كشف الإيراد</button></div></div>`;
   }
 
   TABX.push({ key: 'fees', label: 'الاشتراكات', after: 'الإعدادات', view });
