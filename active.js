@@ -13,6 +13,8 @@
    - جرس «تذكير غير المسددين» في «الطلاب» أيقونة فقط بلا عدد.
    - زر الحجم في كل التطبيق: الحرفان AA وبجانبهما + وتحته − (بلا النسبة). زر الصفحات (toolbar.js) يفتح شريط الحجم كما كان،
      وأزرار جداول النوافذ (.ztools في nav.js) صارت AA بجانبه زرّا + و− فوق بعض، بلا زر النسبة.
+   - كل الجداول: البيانات في وسط الخلايا عدا عمود الأسماء (يمينًا)، وعرض كل عمود بقدر أطول ما فيه (لا يتمدد الجدول ليملأ المساحة).
+     عمود الأسماء يُعرف من عنوانه (الاسم، الطالب، العامل، الموظف...). جداول المرتبات وبطاقة الطالب كما هي.
    - السرعة: حركة ظهور الصفحة (ql-in في style.css) تعمل عند الانتقال إلى صفحة أخرى فقط، لا عند كل تحديث للصفحة نفسها
      (تسجيل حضور، تبويب حالة، تصفية...): كانت تعيد رسم الجدول كله في كل إطار طوال الحركة. */
 (() => {
@@ -33,6 +35,9 @@
     .ztools .btn{min-width:28px!important;min-height:0!important;height:22px;padding:0 .3rem!important;font-size:0!important;line-height:1}
     .ztools [data-tz="1"]::after,.ztools [data-pvtz="1"]::after{content:'+';font:700 .85rem Arial,sans-serif}
     .ztools [data-tz="-1"]::after,.ztools [data-pvtz="-1"]::after{content:'−';font:700 .85rem Arial,sans-serif}
+    .tbl:not(.paytbl):not(.scard .tbl) th,.tbl:not(.paytbl):not(.scard .tbl) td{text-align:center!important;white-space:nowrap}
+    .tbl:not(.paytbl):not(.scard .tbl) :is(th,td).qnm{text-align:right!important}
+    .tbl:not(.paytbl):not(.scard .tbl) > table{width:max-content!important;min-width:0!important;max-width:none}
     main .tblprint.qtb:has([data-sstfseg]){justify-content:flex-start!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > *{order:25!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > h2{order:1!important;flex:0 0 auto!important}
@@ -90,6 +95,22 @@
     };
   });
   document.addEventListener('click', e => { const b = e.target.closest?.('[data-sstfv]'); if (!b || b.disabled) return; ui.sstf = b.dataset.sstfv; render(); });
+
+  /* ===== عمود الأسماء في كل جدول: يمينًا (الباقي في الوسط من CSS أعلاه) ===== */
+  const NAMEH = new Set(['الاسم', 'الطالب', 'العامل', 'الموظف', 'المعلم', 'المشرف', 'المحاسب', 'الإداري', 'اسم الطالب', 'اسم المعلم', 'العضو']);
+  const nmSig = new WeakMap();
+  function markNames() {
+    document.querySelectorAll('.tbl:not(.paytbl) > table').forEach(tbl => {
+      if (tbl.closest('.scard')) return;
+      const sig = tbl.rows.length + '|' + (tbl.rows[1]?.cells.length || 0) + '|' + (tbl.rows[1]?.textContent.length || 0);
+      if (nmSig.get(tbl) === sig) return; nmSig.set(tbl, sig);
+      const head = [...tbl.rows].find(r => r.querySelector('th')); if (!head || [...head.cells].some(c => c.colSpan > 1)) return;
+      const idx = [...head.cells].map((c, i) => NAMEH.has(c.textContent.trim()) ? i : -1).filter(i => i > -1); if (!idx.length) return;
+      [...tbl.rows].forEach(r => idx.forEach(i => r.cells[i]?.classList.add('qnm')));
+    });
+  }
+  let nmRaf = 0;
+  new MutationObserver(() => { if (!nmRaf) nmRaf = requestAnimationFrame(() => { nmRaf = 0; try { markNames(); } catch (e) { /* ignore */ } }); }).observe(document.body, { childList: true, subtree: true });
 
   /* ===== العاملون: إخفاء المتوقفين ما لم يُختر «الجميع» ===== */
   const baseW = adminViews.teachers;
