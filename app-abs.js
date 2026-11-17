@@ -5,7 +5,7 @@ try {
   var MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
   var css = document.createElement('style');
-  css.textContent = 'tr.tr-off td{color:var(--red,#b3372f)!important;opacity:.75} tr.tr-off .tag,tr.tr-off .btn{opacity:.85} body,table,input,select,textarea,.card,.stat,.feerow,.feebar-label,.tbl,.tag,.btn,.modal{font-feature-settings:"tnum";-webkit-locale:"en"} .feerow b,.feebar-label span,.tag,.stat b,.stat .num{unicode-bidi:plaintext;direction:ltr} .tbl table tr td .hname .tag,.tbl table tr td .hname small{display:none!important} tr.tr-off select,tr.qoffr select{color:var(--red,#b3372f)!important;border-color:var(--red,#b3372f)!important;background:color-mix(in srgb,var(--red,#b3372f) 7%,transparent)!important} main:has(select[data-atth]) .tbl td [data-mnote]:not([data-mnote="*"]){display:none!important}';
+  css.textContent = 'tr.tr-off td{color:var(--red,#b3372f)!important;opacity:.75} tr.tr-off .tag,tr.tr-off .btn{opacity:.85} body,table,input,select,textarea,.card,.stat,.feerow,.feebar-label,.tbl,.tag,.btn,.modal{font-feature-settings:"tnum";-webkit-locale:"en"} .feerow b,.feebar-label span,.tag,.stat b,.stat .num{unicode-bidi:plaintext;direction:ltr} .tbl table tr td .hname .tag,.tbl table tr td .hname small{display:none!important} tr.tr-off select,tr.qoffr select{color:var(--red,#b3372f)!important;border-color:var(--red,#b3372f)!important;background:color-mix(in srgb,var(--red,#b3372f) 7%,transparent)!important} main:has(select[data-atth]) .tbl td [data-mnote]:not([data-mnote="*"]){display:none!important} .qfrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.5rem;margin:0 0 .5rem} .qfrow.qfmon{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))} .qfrow .feerow{margin:0}';
   document.head.appendChild(css);
 
   function cleanHName(hid) {
@@ -114,10 +114,10 @@ try {
       var left = feeRow('fr-plain', activeN, 'عدد الطلاب') + feeRow('fr-ok', paidN, 'مسدَّد')
         + feeRow('fr-no', noneN, 'لم يسدّد')
         + feeRow('fr-info', freeN, 'معفى') + (noFeeN ? feeRow('fr-plain', noFeeN, 'بلا اشتراك محدد') : '');
-      var right = feeRow('fr-plain', money(expected), 'المتوقع') + feeRow('fr-ok', money(got), 'المحصّل') + feeRow('fr-no', money(remaining), 'الباقي')
-        + '<div class="feebar"><span style="width:' + Math.min(pct, 100) + '%"></span></div><div class="feebar-label"><span>' + pct + '%</span><span>نسبة التحصيل</span></div>'
+      var right = feeRow('fr-plain', money(expected), 'المتوقع') + feeRow('fr-ok', money(got), 'المحصّل') + feeRow('fr-no', money(remaining), 'الباقي');
+      var bar = '<div class="feebar"><span style="width:' + Math.min(pct, 100) + '%"></span></div><div class="feebar-label"><span>' + pct + '%</span><span>نسبة التحصيل</span></div>'
         + (extra ? '<p class="muted" style="font-size:.8rem;margin:.4rem 0 0">وصل أيضًا ' + money(extra) + ' من منقطعين أو معفيين أو بلا اشتراك محدد (خارج المحصّل والنسبة).</p>' : '');
-      return '<div class="card feecard" style="margin:0 0 1rem"><div style="display:flex;align-items:center;gap:.7rem;margin:0 0 .8rem;flex-wrap:wrap"><h3 style="margin:0;flex:1">الاشتراكات</h3><select data-fmonth style="width:auto">' + mOpts + '</select></div><div class="feecards" style="margin:0"><div>' + left + '</div><div>' + right + '</div></div></div>';
+      return '<div class="card feecard" style="margin:0 0 1rem"><div style="display:flex;align-items:center;gap:.7rem;margin:0 0 .8rem;flex-wrap:wrap"><h3 style="margin:0;flex:1">الاشتراكات</h3><select data-fmonth style="width:auto">' + mOpts + '</select></div><div class="qfrow qfstu">' + left + '</div><div class="qfrow qfmon">' + right + '</div>' + bar + '</div>';
     } catch(e) { console.error('buildSummary error:', e); return ''; }
   }
 
