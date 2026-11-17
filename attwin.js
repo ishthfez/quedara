@@ -9,7 +9,9 @@
    «إضافة طالب» (كزر الطلاب، والحلقة مختارة مسبقًا في نافذته)؛ ثم الجدول.
    (بلا سطر المكان والوقت ولا العدد ولا عنوان الحلقة، وبلا الطباعة والحفظ)
    «متأخر»: الضغط عليه وهو مفعّل كان يحفظ حالة فارغة يرفضها الخادم (الحالات المقبولة: حاضر/متأخر/معتذر/غائب)، فيعود «متأخر».
-   صار يعيد الحالة التي كانت قبل «متأخر» (وإلا «حاضر»)، وما حُفظ فارغًا من قبل يُصحَّح إلى «غائب» (كما كان يظهر). */
+   صار يعيد الحالة التي كانت قبل «متأخر» (وإلا «حاضر»)، وما حُفظ فارغًا من قبل يُصحَّح إلى «غائب» (كما كان يظهر).
+   نافذة واحدة: ما يُفتح من داخل نافذة الحضور (السجل، الملف، التسميع، النقل، الرسالة...) يظهر في صندوقها نفسه وبحجمه
+   بدل نافذة فوق نافذة: تختفي محتويات الحضور ما دام غيرها مفتوحًا، ولا يظهر إلا الأعلى، وسهم الرجوع يعود خطوة. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./attwin.js')) VFILES.push('./attwin.js'); } catch (e) { /* ignore */ } });
   const css = document.createElement('style');
@@ -39,6 +41,10 @@
     @media (max-width:600px){.qatt .tblprint.qtb > .bar > input[data-mq]{flex-basis:6rem!important;min-width:6rem!important}}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > [data-attopen]:is(.btn,button){order:4!important;flex:0 0 auto!important}
     [data-attopen]{display:inline-flex;align-items:center;gap:.35rem}
+    body:has(main > .qatt) > .overlay.qpage{background:transparent!important}
+    body:has(main > .qatt):has(> .overlay.qpage) main > .qatt > .modal{visibility:hidden}
+    body:has(main > .qatt) > .overlay.qpage:has(~ .overlay.qpage) > .modal{visibility:hidden}
+    @media (min-width:861px){body:has(main > .qatt) > .overlay.qpage > .modal{max-width:860px!important;min-height:var(--qattH,0px)}}
     [data-attopen] svg{width:18px;height:18px}`;
   document.head.appendChild(css);
   const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/><path d="M9 15l2 2 4-4"/></svg>';
@@ -156,6 +162,14 @@
     open = false; top = 0; document.querySelector('main > .qatt')?.remove();
     render();   /* جدول الطلاب كاملًا من جديد بعد أن كان مختصرًا خلف النافذة */
   }, true);
+
+  /* نافذة واحدة: ما يُفتح فوق نافذة الحضور يأخذ ارتفاع صندوقها (العرض والمكان من CSS أعلاه) */
+  new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+    if (n.nodeType !== 1 || !n.classList?.contains('overlay')) return;
+    const qm = document.querySelector('main > .qatt > .modal'); if (!qm) return;
+    const h = Math.min(qm.offsetHeight, window.innerHeight - 48);
+    if (h) n.style.setProperty('--qattH', h + 'px');
+  }))).observe(document.body, { childList: true });
 
   /* «إضافة طالب» من النافذة: نافذة الإضافة نفسها (quickAdd في app-forms.js) والحلقة المعروضة مختارة فيها مسبقًا */
   document.addEventListener('click', e => {
