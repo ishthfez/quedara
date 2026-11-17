@@ -69,6 +69,8 @@ try {
   document.addEventListener('click', function(e) { var b = e.target.closest('[data-abs-log]'); if (b) absLog(b.dataset.absLog); });
 
   function can(p) { try { return window.Perms ? Perms.can(p) : session && session.role === 'admin'; } catch(e) { return false; } }
+  /* عرض الاشتراكات في «الطلاب»: من له التحصيل أو قيمة الاشتراك، أو عامل تظهر له الصفحة واشتراكات حلقاته (stuview.js) */
+  function feeView() { return can('fees.collect') || can('fees.amount') || !!(window.QLStaffFees && window.QLStaffFees.ok()); }
   /* تنسيق الأرقام بمنسّق واحد (toLocaleString لكل رقم بطيء مع آلاف الصفوف) */
   var NF = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
   function money(n) { return NF.format(Math.round((+n || 0) * 100) / 100); }
@@ -101,7 +103,7 @@ try {
 
   function buildSummary(list) {
     try {
-      if (!can('fees.collect') && !can('fees.amount')) return '';
+      if (!feeView()) return '';
       var F = window.QLFeesEmbed; if (!F) return '';
       F.summary(list);
       _absCache.key = '';
@@ -147,7 +149,7 @@ try {
   if (window.QLFeesEmbed) {
     window.QLFeesEmbed.cells = function(s) {
       try {
-        if (!can('fees.collect') && !can('fees.amount')) return '';
+        if (!feeView()) return '';
         var fee = window.QLFeeDue ? window.QLFeeDue(s) : null;
         var fy = (window.QLFees && window.QLFees.y) || new Date().getFullYear();
         var fm = (window.QLFees && window.QLFees.m) || (new Date().getMonth() + 1);
@@ -265,7 +267,7 @@ try {
       /* «تذكير غير المسددين» في صف أدوات الجدول بجانب الطباعة والحفظ (order:4: بعدهما وقبل زر الإضافة) */
       var nUnpaid = (window.QLFees && window.QLFees.unpaid) ? window.QLFees.unpaid.length : 0;
       var remindBtn = hasFees && nUnpaid && can('fees.collect') ? '<button type="button" class="btn" style="order:4" data-remind-all="fees">\u062a\u0630\u0643\u064a\u0631 \u063a\u064a\u0631 \u0627\u0644\u0645\u0633\u062f\u062f\u064a\u0646 (' + nUnpaid + ')</button>' : '';
-      var feeH = hasFees ? '<th>\u0627\u0644\u0645\u0633\u062a\u062d\u0642</th>' : '';
+      var feeH = hasFees && feeView() ? '<th>\u0627\u0644\u0645\u0633\u062a\u062d\u0642</th>' : '';
       var toolbar = hasFees && (can('fees.collect') || can('fees.amount'))
         ? (can('fees.amount') ? '<button type="button" class="btn" data-fee-cfg>\u0625\u0639\u062f\u0627\u062f\u0627\u062a \u0627\u0644\u0627\u0634\u062a\u0631\u0627\u0643</button>' : '') + (can('fees.amount') ? '<button type="button" class="btn" data-fee-bulk>\u062a\u0639\u064a\u064a\u0646 \u0644\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0628\u062d\u062b</button>' : '') : '';
       toolbar += remindBtn;
