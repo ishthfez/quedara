@@ -10,7 +10,9 @@
    عرض فقط: النماذج ومعالجاتها وحساباتها كما هي.
    «استمارة طالب» تفتح داخل نافذة «إضافة طلاب» نفسها: تبويب ثالث بجانب «طالب واحد» و«عدة طلاب» (آخر الملف).
    «إشعار» لطالب واحد (mine.js) صار «رسالة»: عنوان النافذة «رسالة للطالب/ الاسم» وخانتها «النص»، وزر الصف عنوانه «رسالة».
-   تبويبا حالة الطلاب في الحلقة (mine.js: نافذة الحضور وصفحة المعلم والمشرف) «منتظم / منقطع» كما في «الطلاب»، لا «المنتظمون / المنقطعون». */
+   تبويبا حالة الطلاب في الحلقة (mine.js: نافذة الحضور وصفحة المعلم والمشرف) «منتظم / منقطع» كما في «الطلاب»، لا «المنتظمون / المنقطعون».
+   «رسالة» لطالب واحد فيها تبويبان: «رسالة للطالب» و«تذكير بالاشتراك» (نافذة التذكير نفسها من notify.js)، يتبدّلان في النافذة نفسها؛
+   وزر «تذكير» المستقل في صف الطالب صار داخلها فلا يظهر وحده. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./pages.js')) VFILES.push('./pages.js'); } catch (e) { /* ignore */ } });
   const SKIP = '.install';
@@ -42,6 +44,7 @@
     if (!ov.isConnected || ov.matches(SKIP)) return;
     const m = ov.querySelector(':scope > .modal'); if (!m) return;
     msgWords(m);
+    msgTabs(ov, m);
     ov.classList.add('qpage');
     let head = m.querySelector(':scope > .mhead');
     if (!head) {
@@ -64,6 +67,36 @@
     m.querySelectorAll('label').forEach(l => { const t = [...l.childNodes].find(n => n.nodeType === 3 && n.textContent.trim() === 'نص الإشعار'); if (t) t.textContent = 'النص'; });
     if (one) m.querySelectorAll('.note, p, small, div').forEach(x => { if (x.children.length === 0 && /^يصل كل طالب في «الإعلانات»/.test(x.textContent.trim())) x.textContent = 'تصل الرسالة إلى الطالب في «الإعلانات» على حسابه، باسمك.'; });
   }
+  /* ===== تبويبا «رسالة للطالب» و«تذكير بالاشتراك» ===== */
+  let msgSid = null, msgAt = 0;
+  document.addEventListener('click', e => { const b = e.target.closest?.('[data-mnote]:not([data-mnote="*"]),[data-remind]'); if (b) { msgSid = b.dataset.mnote || b.dataset.remind; msgAt = Date.now(); } }, true);
+  const canRemind = () => { try { return session?.role === 'admin' || ['teacher', 'placeadmin'].includes(session?.role) || (window.Perms && Perms.can('fees.collect')); } catch (e) { return false; } };
+  function msgTabs(ov, m) {
+    if (m.querySelector('[data-msgtabs]')) return;
+    const t = (m.querySelector('h2')?.textContent || '').trim();
+    const kind = /^رسالة للطالب\//.test(t) ? 'msg' : /^تذكير بسداد الاشتراك/.test(t) ? 'rem' : '';
+    if (!kind) return;
+    if (!ov._msgSid) { if (!msgSid || Date.now() - msgAt > 3000) return; ov._msgSid = msgSid; }
+    if (!canRemind() && kind === 'msg') return;
+    const s = byId(db.students, ov._msgSid); if (!s) return;
+    if (kind === 'rem') { const h = m.querySelector('h2'); if (h) h.textContent = 'تذكير بالاشتراك/ ' + s.name; }
+    const bar = `<div class="qseg" data-msgtabs role="tablist" style="margin:0 0 .8rem;align-self:flex-start"><button type="button" data-msgtab="msg" class="${kind === 'msg' ? 'on' : ''}" aria-selected="${kind === 'msg'}">رسالة للطالب</button><button type="button" data-msgtab="rem" class="${kind === 'rem' ? 'on' : ''}" aria-selected="${kind === 'rem'}">تذكير بالاشتراك</button></div>`;
+    const head = m.querySelector(':scope > .mhead') || m.querySelector(':scope > h2');
+    if (head) head.insertAdjacentHTML('afterend', bar); else m.insertAdjacentHTML('afterbegin', bar);
+  }
+  /* التبديل: تُغلق النافذة الحالية وتُفتح الأخرى للطالب نفسه (بزر مؤقت في الصفحة يلتقطه معالجه الأصلي) */
+  document.addEventListener('click', e => {
+    const b = e.target.closest?.('[data-msgtab]'); if (!b || b.classList.contains('on')) return;
+    const ov = b.closest('.overlay'), sid = ov?._msgSid, main = document.querySelector('main'); if (!sid || !main) return;
+    const c = ov.querySelector('[data-close]'); if (c) c.click(); else ov.remove();
+    const t = document.createElement('button'); t.type = 'button'; t.hidden = true;
+    if (b.dataset.msgtab === 'rem') t.dataset.remind = sid; else t.dataset.mnote = sid;
+    main.appendChild(t); t.click(); t.remove();
+  });
+  const rcss = document.createElement('style');
+  rcss.textContent = 'main .tbl td [data-remind]{display:none!important}';
+  document.head.appendChild(rcss);
+
   /* زر الصف لطالب واحد: «رسالة» (toolbar.js يضع عنوانه عند تحويله أيقونة، فيُعاد بعده) */
   let msgT = 0;
   const TABW = { 'المنتظمون': 'منتظم', 'المنقطعون': 'منقطع' };
