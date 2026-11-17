@@ -10,7 +10,9 @@
    العناصر كلها، كل عداد وكل زر وكل تبويب على حدة، في الصفحة ونافذة الحضور ونافذة الرسالة؛ وأزرار صف الطالب في جدول الصفحة
    (main > .card) منفصلة عن أزرار صفه في نافذة الحضور (.qatt).
    ملف الطالب: أقسامه (تُعلَّم بـ data-sk من عناوينها) وأزراره، أينما فُتح (من الجدول أو نافذة الحضور).
-   مكانه: تبويب «الصلاحيات» نفسه، بقسمين متلاصقين أعلاه: «مهام التطبيق والأفراد» (perms.js كما هو) و«صفحة الطلاب» (هذا الجدول). */
+   مكانه: تبويب «الصلاحيات» نفسه، بقسمين متلاصقين أعلاه: «مهام التطبيق والأفراد» (perms.js كما هو) و«صفحة الطلاب» (هذا الجدول).
+   استثناءات لأفراد: لشخص بعينه أن يظهر له عنصر أو يُخفى عنه خلافًا لفئته؛ تُحفظ في priv_perms.members[معرّفه]['ui.stu.…']
+   (الموضع نفسه لاستثناءات «الصلاحيات»، فيصل الشخص من الخادم بالدالة نفسها has_perm التي تقدّم استثناء الفرد على فئته). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./stuperm.js')) VFILES.push('./stuperm.js'); } catch (e) { /* ignore */ } });
   const ROLES4 = [['teacher', 'المعلمون'], ['supervisor', 'المشرفون'], ['accountant', 'المحاسبون'], ['placeadmin', 'الإداريون']];
@@ -112,6 +114,8 @@
   const conf = () => (db.settings.priv_perms = db.settings.priv_perms || {}, db.settings.priv_perms.roles = db.settings.priv_perms.roles || {}, db.settings.priv_perms);
   const saved = r => (conf().roles[r] || {})[SET] === true;
   /* للمدير في الجدول: اختيار الفئة إن حُفظ، وإلا الافتراضي */
+  /* استثناء الشخص لعنصر: true / false، أو undefined (حسب فئته) */
+  const personOv = (id, it) => { const v = ((conf().members || {})[id] || {})[PK(it[0])]; return v === undefined ? undefined : !!v; };
   const roleOn = (r, it) => { const v = (conf().roles[r] || {})[PK(it[0])]; return saved(r) && v !== undefined ? !!v : it[3].includes(r); };
   /* تُحفظ كل الخانات صراحة (الخادم يُرسل للعامل ما حُفظ له فقط) */
   function persist(changes) {
@@ -135,8 +139,67 @@
     const allRow = `<tr><td class="qnm muted">لكل الفئة</td>${ROLES4.map(([r]) => { const k = state(r); return `<td><button type="button" class="btn sm${k === 'all' ? ' primary' : ''}" data-supall="${r}|1" aria-pressed="${k === 'all'}">الكل</button> <button type="button" class="btn sm${k === 'none' ? ' primary' : ''}" data-supall="${r}|0" aria-pressed="${k === 'none'}">لا شيء</button></td>`; }).join('')}</tr>`;
     return `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">صلاحيات صفحة «الطلاب»</h2><button type="button" class="btn" data-supreset>الاختيارات الافتراضية</button></div>
       <p class="muted" style="font-size:.85rem;margin:0 0 .6rem">ما يظهر لكل فئة من العاملين في صفحة «الطلاب» ونافذة الحضور. المدير يرى كل شيء دائمًا. الإخفاء هنا للعرض فقط: ما يغيّر البيانات يتحقق منه الخادم بصلاحيته في «الصلاحيات».</p>
-      <div class="qsuptbl"><table><tr><th class="qnm">العنصر</th>${colAll}</tr>${allRow}${rows}</table></div></div>`;
+      <div class="qsuptbl"><table><tr><th class="qnm">العنصر</th>${colAll}</tr>${allRow}${rows}</table></div></div>` + exView();
   }
+  /* ===== استثناءات لأفراد ===== */
+  const COLL = { teacher: 'teachers', supervisor: 'supervisors', accountant: 'accountants', placeadmin: 'placeadmins' };
+  const RL = { teacher: 'معلم', supervisor: 'مشرف', accountant: 'محاسب', placeadmin: 'إداري' };
+  const staff = () => ROLES4.flatMap(([r]) => (db[COLL[r]] || []).map(m => ({ m, r })));
+  const exOf = id => Object.entries((conf().members || {})[id] || {}).filter(([k]) => k.startsWith('ui.stu.') && k !== SET);
+  function exView() {
+    const people = staff().filter(p => exOf(p.m.id).length);
+    const lab = k => ITEMS.find(i => PK(i[0]) === k)?.[1] || k;
+    const rows = people.map(({ m, r }) => `<tr><td class="qnm"><b>${esc(m.name)}</b><br><small class="muted">${RL[r]}</small></td>
+      <td class="qnm">${exOf(m.id).map(([k, v]) => `<span class="tag ${v ? 'tag-ok' : 'tag-no'}" style="margin:.1rem">${v ? '+' : '−'} ${esc(lab(k))}</span>`).join(' ')}</td>
+      <td><button type="button" class="btn sm" data-supex="${esc(m.id)}">تعديل</button> <button type="button" class="btn sm danger" data-supexdel="${esc(m.id)}">إلغاء الاستثناء</button></td></tr>`).join('');
+    return `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">استثناءات لأفراد</h2><button type="button" class="btn primary" data-supex="">+ إضافة استثناء</button></div>
+      <p class="muted" style="font-size:.85rem;margin:0 0 .6rem">تتقدّم على اختيار فئة الشخص: «+» يظهر له العنصر وإن كان مخفيًا عن فئته، و«−» يُخفى عنه وإن كان ظاهرًا لها.</p>
+      ${rows ? `<div class="qsuptbl"><table><tr><th class="qnm">الشخص</th><th class="qnm">الاستثناءات</th><th></th></tr>${rows}</table></div>` : '<p class="muted">لا توجد استثناءات لأفراد.</p>'}</div>`;
+  }
+  function exDialog(id0) {
+    const people = staff().sort((a, b) => ROLES4.findIndex(x => x[0] === a.r) - ROLES4.findIndex(x => x[0] === b.r) || a.m.name.localeCompare(b.m.name, 'ar'));
+    if (!people.length) { toast('لا يوجد عاملون'); return; }
+    let id = id0 || people[0].m.id;
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    const body = () => {
+      const p = people.find(x => x.m.id === id), r = p?.r;
+      const groups = [...new Set(ITEMS.map(i => i[2]))];
+      const rows = groups.map(g => `<tr class="sum"><td colspan="3">${esc(g)}</td></tr>` + ITEMS.filter(i => i[2] === g).map(it => {
+        const o = personOv(id, it), def = r ? roleOn(r, it) : false;
+        return `<tr><td class="qnm">${esc(it[1])}</td><td><small class="muted">${def ? 'ظاهر' : 'مخفي'}</small></td>
+          <td><select data-exk="${esc(it[0])}" style="width:auto;margin:0"><option value="">حسب فئته</option><option value="1" ${o === true ? 'selected' : ''}>يظهر له</option><option value="0" ${o === false ? 'selected' : ''}>لا يظهر له</option></select></td></tr>`;
+      }).join('')).join('');
+      return `<div class="modal wide"><h2>استثناء لصفحة الطلاب</h2>
+        <label>الشخص<select data-exp>${ROLES4.map(([rr, l]) => { const ps = people.filter(x => x.r === rr); return ps.length ? `<optgroup label="${l}">${ps.map(x => `<option value="${esc(x.m.id)}" ${x.m.id === id ? 'selected' : ''}>${esc(x.m.name)}</option>`).join('')}</optgroup>` : ''; }).join('')}</select></label>
+        <p class="muted" style="font-size:.85rem;margin:.2rem 0 .6rem">«لفئته» ما تراه فئته الآن (${esc(RL[r] || '')}). غيّر ما تريد استثناءه فقط، واترك الباقي «حسب فئته».</p>
+        <div class="qsuptbl"><table><tr><th class="qnm">العنصر</th><th>لفئته</th><th>لهذا الشخص</th></tr>${rows}</table></div>
+        <div class="row"><button type="button" class="btn primary" data-exsave>حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
+    };
+    ov.innerHTML = body();
+    document.body.appendChild(ov);
+    ov.addEventListener('change', e => { if (e.target.matches('[data-exp]')) { id = e.target.value; ov.innerHTML = body(); } });
+    ov.addEventListener('click', e => {
+      if (e.target.closest('[data-close]')) { ov.remove(); return; }
+      if (!e.target.closest('[data-exsave]')) return;
+      const c = conf(); c.members = c.members || {};
+      const M = { ...(c.members[id] || {}) };
+      Object.keys(M).forEach(k => { if (k.startsWith('ui.stu.')) delete M[k]; });
+      ov.querySelectorAll('[data-exk]').forEach(s => { if (s.value !== '') M[PK(s.dataset.exk)] = s.value === '1'; });
+      if (Object.keys(M).length) c.members[id] = M; else delete c.members[id];
+      save(); ov.remove(); render(); toast('حُفظ الاستثناء');
+    });
+  }
+  document.addEventListener('click', e => {
+    if (session?.role !== 'admin') return;
+    const a = e.target.closest('[data-supex]'); if (a) { exDialog(a.dataset.supex); return; }
+    const d = e.target.closest('[data-supexdel]');
+    if (d) ask('إلغاء استثناءات هذا الشخص في صفحة الطلاب؟ يعود إلى اختيارات فئته.', () => {
+      const c = conf(), M = { ...((c.members || {})[d.dataset.supexdel] || {}) };
+      Object.keys(M).forEach(k => { if (k.startsWith('ui.stu.')) delete M[k]; });
+      if (Object.keys(M).length) c.members[d.dataset.supexdel] = M; else delete c.members[d.dataset.supexdel];
+      save(); render(); toast('أُلغي الاستثناء');
+    });
+  });
   /* ===== قسما تبويب «الصلاحيات» ===== */
   const SEGK = 'qpermseg';
   let seg = 'app'; try { seg = sessionStorage.getItem(SEGK) || 'app'; } catch (e) { /* ignore */ }
@@ -146,7 +209,9 @@
     if (session?.role !== 'admin' || !/class="btn on" data-subtab="perms"/.test(html)) return html;
     const i = html.indexOf('<div class="card subnav">'), e = i < 0 ? -1 : html.indexOf('</div></div>', i); if (e < 0) return html;
     const bar = `<div class="qseg" role="tablist" style="margin:0 0 1rem"><button type="button" data-permseg="app" class="${seg === 'app' ? 'on' : ''}" aria-selected="${seg === 'app'}">مهام التطبيق والأفراد</button><button type="button" data-permseg="stu" class="${seg === 'stu' ? 'on' : ''}" aria-selected="${seg === 'stu'}">صفحة الطلاب</button></div>`;
-    return html.slice(0, e + 12) + bar + (seg === 'stu' ? view() : html.slice(e + 12));
+    /* قسم «مهام التطبيق والأفراد» (perms.js) لا يعرف استثناءات صفحة الطلاب: لا تظهر فيه مفاتيحها، فمكانها القسم الآخر */
+    const app = () => html.slice(e + 12).replace(/<span class="tag[^"]*">[+−] ui\.stu\.[^<]*<\/span>\s*/g, '');
+    return html.slice(0, e + 12) + bar + (seg === 'stu' ? view() : app());
   };
   document.addEventListener('click', ev => { const b = ev.target.closest?.('[data-permseg]'); if (!b) return; seg = b.dataset.permseg; try { sessionStorage.setItem(SEGK, seg); } catch (e) { /* ignore */ } render(); });
 
@@ -173,7 +238,7 @@
   /* ===== التطبيق على صفحة «الطلاب» لغير المدير ===== */
   const myOn = it => {
     if (!session || session.role === 'admin') return true;
-    if (!CLOUD || window.QLActAs?.()) return roleOn(session.role, it);   // «العمل بصفة»: المدير يقرأ الاختيارات كلها
+    if (!CLOUD || window.QLActAs?.()) { const o = personOv(session.id, it); return o !== undefined ? o : roleOn(session.role, it); }   // «العمل بصفة»: المدير يقرأ الاختيارات كلها
     const mp = db.myPerms || [];
     return mp.includes(SET) ? mp.includes(PK(it[0])) : it[3].includes(session.role);
   };
