@@ -7,6 +7,9 @@
 (function () {
   'use strict';
   if (typeof render !== 'function') return;
+  /* الوضع المحلي (?local=1) على متصفح جديد: البيانات الأولى (seed في app.js) لا تمر بالترقية (migrate)، فتنقصها مجموعات
+     مثل المحاسبين والدفعات، فيتعطل أول رسم. تُرقّى هنا مرة واحدة (بعد roles.js الذي يضيف الإداريين إلى الترقية) وتُحفظ. */
+  try { if (!CLOUD && db && ['accountants', 'placeadmins', 'fees'].some(function (k) { return !Array.isArray(db[k]); })) { db = migrate(db); save(); } } catch (e) { console.error('boot-gate migrate:', e); }
   var base = render, ready = false, pending = false;
   render = function () { if (!ready) { pending = true; return; } return base.apply(this, arguments); };
   document.addEventListener('DOMContentLoaded', function () {
