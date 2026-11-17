@@ -10,6 +10,9 @@
    - «المعاينة» بآخر إصدار دائمًا: المعاينة تُرسم بشيفرة التطبيق المفتوح نفسه، فإن نُشر تحديث يُعاد تحميل التطبيق فورًا
      (فحص التحديث في app-actions.js، كل 30 ثانية ما دامت المعاينة مفتوحة بدل كل 5 دقائق)، ويبقى الاختيار (النوع والشخص والجهاز).
      وبصمة التحديث صارت تشمل كل ملفات التطبيق (كل سكربت في index.html)، لا بعضها.
+   - جرس «تذكير غير المسددين» في «الطلاب» أيقونة فقط بلا عدد.
+   - زر الحجم في كل التطبيق: الحرفان AA وبجانبهما + وتحته − (بلا النسبة). زر الصفحات (toolbar.js) يفتح شريط الحجم كما كان،
+     وأزرار جداول النوافذ (.ztools في nav.js) صارت AA بجانبه زرّا + و− فوق بعض، بلا زر النسبة.
    - السرعة: حركة ظهور الصفحة (ql-in في style.css) تعمل عند الانتقال إلى صفحة أخرى فقط، لا عند كل تحديث للصفحة نفسها
      (تسجيل حضور، تبويب حالة، تصفية...): كانت تعيد رسم الجدول كله في كل إطار طوال الحركة. */
 (() => {
@@ -19,6 +22,17 @@
     main [data-qadd]:hover,main [data-act="addStudent"]:hover{background:var(--navy-d,#0b1b33)!important}
     main [data-qadd] svg,main [data-act="addStudent"] svg{stroke:currentColor}
     html.qnoanim .content main,html.qnoanim .subnav ~ *{animation:none!important}
+    main .tblprint.qtb:has([data-sstfseg]) [data-remind-all] .cnt{display:none!important}
+    [data-qz] [data-qzv]{display:none!important}
+    [data-qz]::after{content:'+\\A−';white-space:pre;display:inline-block;font:700 .82rem/0.9 Arial,sans-serif;text-align:center}
+    .ztools{display:grid!important;grid-template-columns:auto auto;grid-template-rows:auto auto;justify-content:end;align-items:center;gap:.1rem .3rem}
+    .ztools::before{content:'AA';grid-column:1;grid-row:1 / 3;font:700 .95rem Arial,sans-serif;color:var(--navy,#13294b)}
+    .ztools [data-tz="0"],.ztools [data-pvtz="0"]{display:none!important}
+    .ztools [data-tz="1"],.ztools [data-pvtz="1"]{grid-column:2;grid-row:1}
+    .ztools [data-tz="-1"],.ztools [data-pvtz="-1"]{grid-column:2;grid-row:2}
+    .ztools .btn{min-width:28px!important;min-height:0!important;height:22px;padding:0 .3rem!important;font-size:0!important;line-height:1}
+    .ztools [data-tz="1"]::after,.ztools [data-pvtz="1"]::after{content:'+';font:700 .85rem Arial,sans-serif}
+    .ztools [data-tz="-1"]::after,.ztools [data-pvtz="-1"]::after{content:'−';font:700 .85rem Arial,sans-serif}
     main .tblprint.qtb:has([data-sstfseg]){justify-content:flex-start!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > *{order:25!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > h2{order:1!important;flex:0 0 auto!important}
