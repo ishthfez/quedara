@@ -3,7 +3,10 @@
    كان تبويبًا في شريط «الطلاب» (الطلاب · الحضور · الاشتراكات · تحصيل المعلمين)؛ صار زر «الحضور» في صف أدوات جدول الطلاب
    (يسار البحث والقوائم)، يفتح نافذة فيها مساحة عمل الحضور نفسها (attWork في nav.js): المكان والحلقة والتاريخ، وجدول الحلقة
    بزرّي حاضر/غائب ومتأخر وأدوات الحلقة. كل ما فيها يعمل بمعالجاته الأصلية، وتُعاد بعد كل رسم بمحتواها الجديد ومكان التمرير نفسه.
-   النافذة داخل <main> (لتعمل فيها معالجات الصفحة كما كانت في التبويب)، وتُغلق بسهم الرجوع أو Esc أو زر رجوع الهاتف. */
+   النافذة داخل <main> (لتعمل فيها معالجات الصفحة كما كانت في التبويب)، وتُغلق بسهم الرجوع أو Esc أو زر رجوع الهاتف.
+   ترتيبها: قائمة واحدة «الحلقة — المكان» (بدل قائمتي المكان والحلقة؛ وإن كانت حلقة واحدة يظهر اسمها ومكانها نصًا) و«اليوم»،
+   ثم البحث باسم الطالب وتبويبا المنتظمين والمنقطعين في صف، ثم زر «إشعار للطلاب» أيقونةً وحجم الخط، ثم الجدول.
+   (بلا سطر المكان والوقت ولا العدد ولا عنوان الحلقة، وبلا الطباعة والحفظ) */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./attwin.js')) VFILES.push('./attwin.js'); } catch (e) { /* ignore */ } });
   const css = document.createElement('style');
@@ -12,6 +15,14 @@
     main:has(> .overlay.qatt){transform:none!important;animation:none!important}
     /* قاعدة قديمة (app-abs.js) تخفي «إشعار» الفردي حين توجد قائمة حلقة الحضور في الصفحة: تخص النافذة وحدها لا جدول الطلاب خلفها */
     main:has(> .overlay.qatt) > :not(.qatt) .tbl td [data-mnote]:not([data-mnote="*"]){display:inline-flex!important}
+    .qatt .tblprint [data-print],.qatt .tblprint .qsave,.qatt .tblprint .texp,.qatt .tblprint [data-heads],.qatt .tblprint > .qsp{display:none!important}
+    .qatt .tblprint.qtb{justify-content:flex-start!important}
+    .qatt .attbar{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin:0}
+    .qatt .attbar > select,.qatt .attbar > .qcombo{flex:1 1 16rem;max-width:30rem;margin:0}
+    .qatt .attbar .qatt-one{flex:1 1 auto;font-weight:700;color:var(--navy,#13294b)}
+    .qatt .attbar label{display:flex;align-items:center;gap:.5rem;margin:0;font-weight:700;color:var(--navy,#13294b)}
+    .qatt .attbar label input{width:auto;margin:0}
+    .qatt [data-mnote="*"].icon-only{width:40px;height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > [data-attopen]:is(.btn,button){order:4!important;flex:0 0 auto!important}
     [data-attopen]{display:inline-flex;align-items:center;gap:.35rem}
     [data-attopen] svg{width:18px;height:18px}`;
@@ -22,13 +33,49 @@
   const isAdm = () => typeof session !== 'undefined' && session?.role === 'admin';
   const onStu = () => { try { return ui.tab === 'students' && isAdm(); } catch (e) { return false; } };
 
-  /* محتوى تبويب «الحضور» القديم نفسه، بلا شريط تبويبات «الطلاب» */
+  const NOTE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.55L3 21l1.95-5.6A8.5 8.5 0 1 1 21 11.5z"/></svg>';
+  /* محتوى تبويب «الحضور» القديم نفسه (attWork في nav.js)، بلا شريط تبويبات «الطلاب»، ثم يُرتَّب كما في أول الملف */
   function attHtml() {
-    const keep = ui.svw; let h = '';
-    try { ui.svw = 'att'; h = adminViews.students(); } finally { ui.svw = keep; }
+    const keep = ui.svw, keepP = ui.fp; let h = '';
+    /* تصفية المكان في «الطلاب» لا تخص النافذة: قائمتها كل الحلقات بأماكنها */
+    try { ui.svw = 'att'; ui.fp = ''; h = adminViews.students(); } finally { ui.svw = keep; ui.fp = keepP; }
     const i = h.indexOf('<div class="card subnav">');
     if (i > -1) { const e = h.indexOf('</div></div>', i); if (e > -1) h = h.slice(0, i) + h.slice(e + 12); }
-    return h;
+    try { return tidy(h); } catch (e) { console.error('attwin tidy:', e); return h; }
+  }
+  function tidy(h) {
+    const t = document.createElement('template'); t.innerHTML = h; const C = t.content;
+    /* الصف الأول: «الحلقة — المكان» واليوم */
+    const sel = C.querySelector('select[data-atth]');
+    if (sel) {
+      const bar = sel.closest('.bar') || sel.parentElement; bar.classList.add('attbar');
+      C.querySelector('select[data-fplace]')?.closest('.qcombo, label')?.remove(); C.querySelector('select[data-fplace]')?.remove();
+      const cur = sel.value || sel.querySelector('option[selected]')?.value || ui.hid;
+      const pl = h0 => (typeof placeName === 'function' && placeName(h0)) || '';
+      const hs = (db.halaqat || []).slice().sort((a, b) => (pl(a)).localeCompare(pl(b), 'ar') || halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'));
+      const lab = h0 => `${halaqaLabel(h0)}${pl(h0) ? ' — ' + pl(h0) : ''}`;
+      if (hs.length === 1) {
+        const one = document.createElement('span'); one.className = 'qatt-one'; one.textContent = lab(hs[0]);
+        (sel.closest('.qcombo') || sel).replaceWith(one);
+      } else {
+        sel.setAttribute('aria-label', 'الحلقة والمكان');
+        sel.innerHTML = hs.map(h0 => `<option value="${esc(h0.id)}"${h0.id === cur ? ' selected' : ''}>${esc(lab(h0))}</option>`).join('');
+      }
+      const date = C.querySelector('input[data-change="date"]'), dl = date?.closest('label');
+      if (dl) { [...dl.childNodes].filter(n => n.nodeType === 3).forEach(n => n.remove()); dl.prepend(date.value === today() ? 'اليوم' : 'التاريخ'); }
+    }
+    /* البطاقة الثانية: بلا سطر المكان والوقت ولا العدد؛ البحث ثم التبويبان في صف */
+    const q = C.querySelector('input[data-mq]'), tabs = C.querySelector('.mtabs');
+    if (q && tabs) { const card = q.closest('.card'); card?.querySelector(':scope > p.muted:not([data-mcount])')?.remove(); tabs.before(q); }
+    C.querySelector('p[data-mcount]')?.remove();
+    /* صف الأزرار: «إشعار للطلاب» أيقونة (بلا عنوان الحلقة وعدد طلابها)، ثم حجم الخط */
+    const all = C.querySelector('[data-mnote="*"]');
+    if (all) {
+      const b = all.closest('.bar');
+      b?.querySelectorAll(':scope > h2, :scope > .muted').forEach(x => x.remove());
+      all.className = 'btn icon-only'; all.title = 'إشعار للطلاب'; all.setAttribute('aria-label', 'إشعار للطلاب'); all.innerHTML = NOTE;
+    }
+    return t.innerHTML;
   }
   function place() {
     const main = document.querySelector('main'); if (!main) return;
