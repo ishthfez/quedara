@@ -232,7 +232,13 @@ try {
     try {
       var list = db.students.filter(function(st) { return (!ui.fh || st.halaqaId === ui.fh) && (!ui.fcat || (st.cat || 'child') === ui.fcat); });
       var F = window.QLFeesEmbed, hasFees = !!F;
-      var summary = buildSummary(list);
+      /* عدادات الاشتراكات لا تتأثر بتبويب الحالة (الكل / منتظم / منقطع): تُحسب على طلاب المكان والحلقة كلهم.
+         nav.js يضيّق db.students بالحالة قبل الوصول إلى هنا، فالقائمة الكاملة تأتي من active.js (QLStuPool) */
+      var sumList = list, pool = window.QLStuPool;
+      if (pool && pool !== db.students && ui.sstf && !String(ui.sq || '').trim()) {
+        sumList = pool.filter(function(st) { var h = byId(db.halaqat, st.halaqaId); return (!ui.fh || st.halaqaId === ui.fh) && (!ui.fp || (!!h && h.placeId === ui.fp)); });
+      }
+      var summary = buildSummary(sumList);
       /* «تذكير غير المسددين» في صف أدوات الجدول بجانب الطباعة والحفظ (order:4: بعدهما وقبل زر الإضافة) */
       var nUnpaid = (window.QLFees && window.QLFees.unpaid) ? window.QLFees.unpaid.length : 0;
       var remindBtn = hasFees && nUnpaid && can('fees.collect') ? '<button type="button" class="btn" style="order:4" data-remind-all="fees">\u062a\u0630\u0643\u064a\u0631 \u063a\u064a\u0631 \u0627\u0644\u0645\u0633\u062f\u062f\u064a\u0646 (' + nUnpaid + ')</button>' : '';
