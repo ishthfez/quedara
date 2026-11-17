@@ -7,7 +7,8 @@
    وإن أعادت النافذة كتابة محتواها (مثل تغيير السنة) فزالت الترويسة، تُصنع من جديد بالشكل نفسه.
    سهم الرجوع يضغط «إلغاء» الأصلي، وزر رجوع الهاتف يغلقها كما يغلق أي نافذة (nav.js).
    يسري على كل النوافذ في التطبيق، عدا نافذة «تثبيت التطبيق» (.overlay.install). النوافذ العريضة (.wide و.sform) أعرض على الحاسوب.
-   عرض فقط: النماذج ومعالجاتها وحساباتها كما هي. */
+   عرض فقط: النماذج ومعالجاتها وحساباتها كما هي.
+   «استمارة طالب» تفتح داخل نافذة «إضافة طلاب» نفسها: تبويب ثالث بجانب «طالب واحد» و«عدة طلاب» (آخر الملف). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./pages.js')) VFILES.push('./pages.js'); } catch (e) { /* ignore */ } });
   const SKIP = '.install';
@@ -28,8 +29,9 @@
     .qpage>.modal>.row:last-child{position:sticky;bottom:0!important;z-index:3;margin:auto 0 0!important;padding:.7rem var(--qpw) calc(.7rem + env(safe-area-inset-bottom,0px))!important;border-radius:0!important;background:var(--card,#fff)!important;border-top:1px solid var(--line,#e6dfcf)}
     @media (min-width:861px){.overlay.qpage{background:rgba(10,18,35,.1)!important;padding:1.5rem 1rem!important;align-items:flex-start!important}
       .overlay.qpage>.modal{--qpw:1.25rem;max-width:680px!important;height:auto;max-height:calc(100vh - 3rem)!important;border:1px solid var(--line,#e6dfcf)!important;border-radius:16px!important;box-shadow:0 14px 44px rgba(10,18,35,.2)!important}
-      .overlay.qpage>.modal.wide{max-width:800px!important}.overlay.qpage>.modal.sform{max-width:860px!important}
+      .overlay.qpage>.modal.wide{max-width:800px!important}.overlay.qpage>.modal.sform,.overlay.qpage>.modal.qaddw{max-width:860px!important}
       .qpage>.modal>.mhead{border-radius:16px 16px 0 0!important}.qpage>.modal>.row:last-child{border-radius:0 0 16px 16px!important}}
+    .overlay.qhide{display:none!important}
     @media print{.qpage .qpback{display:none!important}.qpage>.modal>.mhead,.qpage>.modal>.row:last-child{position:static!important;border:0!important;box-shadow:none!important}.overlay.qpage>.modal{box-shadow:none!important;border:0!important}}`;
   document.head.appendChild(css);
 
@@ -61,4 +63,43 @@
   });
   const watch = ov => { decorate(ov); if (ov.classList.contains('qpage') && !ov._qpw) { ov._qpw = new MutationObserver(() => decorate(ov)); ov._qpw.observe(ov, { childList: true }); } };
   new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1 && n.classList.contains('overlay')) watch(n); }))).observe(document.body, { childList: true });
+
+  /* ===== «استمارة طالب» داخل نافذة «إضافة طلاب» =====
+     نافذة «إضافة طلاب» (quickAdd في app-forms.js) تُخفى ولا تُغلق (فيبقى ما كُتب فيها)، وتُفتح الاستمارة الكاملة (studentForm)
+     بالعنوان نفسه وشريط التبويبات نفسه وبالعرض نفسه، فتبدو نافذة واحدة يتغيّر محتواها.
+     «طالب واحد» أو «عدة طلاب» من الاستمارة: تُغلق الاستمارة وتعود «إضافة طلاب» على التبويب المختار.
+     إغلاق الاستمارة أو حفظها يُغلق «إضافة طلاب» معها. (يسبق معالج toolbar.js القديم الذي كان يغلق ويفتح نافذة أخرى) */
+  window.addEventListener('click', e => {
+    const t = e.target.closest?.('.overlay [data-qm]'); if (!t) return;
+    const ov = t.closest('.overlay'), mode = t.dataset.qm;
+    if (mode === 'form' && ov.querySelector('[data-qp]')) {
+      if (typeof A === 'undefined' || !A.addStudent) return;
+      e.stopImmediatePropagation(); e.preventDefault();
+      const quick = ov;
+      quick.classList.add('qhide');
+      A.addStudent();
+      const f = [...document.querySelectorAll('.overlay')].pop();
+      if (!f || f === quick) { quick.classList.remove('qhide'); return; }
+      f._quick = quick; f.classList.add('qaddform');
+      const m = f.querySelector(':scope > .modal'), qm = quick.querySelector(':scope > .modal');
+      m?.classList.add('qaddw'); qm?.classList.add('qaddw');
+      const tabs = t.parentElement.cloneNode(true);
+      tabs.querySelectorAll('[data-qm]').forEach(b => b.classList.toggle('on', b.dataset.qm === 'form'));
+      const h = m?.querySelector(':scope > .mhead h2, :scope > h2'), qh = quick.querySelector('h2');
+      if (h && qh) h.textContent = qh.textContent;
+      const after = m?.querySelector(':scope > .mhead') || h;
+      if (after) after.after(tabs); else m?.prepend(tabs);
+      return;
+    }
+    if (ov.classList.contains('qaddform') && mode !== 'form') {
+      e.stopImmediatePropagation(); e.preventDefault();
+      const quick = ov._quick;
+      ov._qsw = true;   // انتقال بين التبويبات: لا تُغلق «إضافة طلاب» معها
+      const c = ov.querySelector('[data-close]'); if (c) c.click(); else ov.remove();
+      if (quick?.isConnected) { quick.classList.remove('qhide'); quick.querySelector(`[data-qm="${mode}"]`)?.click(); }
+    }
+  }, true);
+  new MutationObserver(ms => ms.forEach(m => m.removedNodes.forEach(n => {
+    if (n.nodeType === 1 && n._quick && !n._qsw && n._quick.isConnected) n._quick.remove();
+  }))).observe(document.body, { childList: true });
 })();
