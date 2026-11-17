@@ -10,6 +10,8 @@
   css.textContent = `main .subnav [data-svw="att"]{display:none!important}
     main > .overlay.qatt{z-index:65}
     main:has(> .overlay.qatt){transform:none!important;animation:none!important}
+    /* قاعدة قديمة (app-abs.js) تخفي «إشعار» الفردي حين توجد قائمة حلقة الحضور في الصفحة: تخص النافذة وحدها لا جدول الطلاب خلفها */
+    main:has(> .overlay.qatt) > :not(.qatt) .tbl td [data-mnote]:not([data-mnote="*"]){display:inline-flex!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > [data-attopen]:is(.btn,button){order:4!important;flex:0 0 auto!important}
     [data-attopen]{display:inline-flex;align-items:center;gap:.35rem}
     [data-attopen] svg{width:18px;height:18px}`;
