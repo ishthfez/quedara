@@ -56,7 +56,7 @@
     adminViews.students = function () {
       const h = baseStu.apply(this, arguments);
       if (typeof h !== 'string' || ui.svw === 'att' || !isAdm()) return h;
-      return h.replace(/(<div class="qseg" data-sstfseg)/, `<button type="button" class="btn" data-attopen>${ICON}الحضور</button>$1`);
+      return h.replace(/(<div class="qseg" data-sstfseg|<select data-sstf)/, `<button type="button" class="btn" data-attopen>${ICON}الحضور</button>$1`);
     };
     new MutationObserver(() => { try { watch(); } catch (e) { console.error('attwin:', e); } }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
   });
