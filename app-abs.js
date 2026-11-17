@@ -5,7 +5,7 @@ try {
   var MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
   var css = document.createElement('style');
-  css.textContent = 'tr.tr-off td{color:var(--red,#b3372f)!important;opacity:.75} tr.tr-off .tag,tr.tr-off .btn{opacity:.85} body,table,input,select,textarea,.card,.stat,.feerow,.feebar-label,.tbl,.tag,.btn,.modal{font-feature-settings:"tnum";-webkit-locale:"en"} .feerow b,.feebar-label span,.tag,.stat b,.stat .num{unicode-bidi:plaintext;direction:ltr} .tbl table tr td .hname .tag,.tbl table tr td .hname small{display:none!important} tr.tr-off select,tr.qoffr select{color:var(--red,#b3372f)!important;border-color:var(--red,#b3372f)!important;background:color-mix(in srgb,var(--red,#b3372f) 7%,transparent)!important}';
+  css.textContent = 'tr.tr-off td{color:var(--red,#b3372f)!important;opacity:.75} tr.tr-off .tag,tr.tr-off .btn{opacity:.85} body,table,input,select,textarea,.card,.stat,.feerow,.feebar-label,.tbl,.tag,.btn,.modal{font-feature-settings:"tnum";-webkit-locale:"en"} .feerow b,.feebar-label span,.tag,.stat b,.stat .num{unicode-bidi:plaintext;direction:ltr} .tbl table tr td .hname .tag,.tbl table tr td .hname small{display:none!important} tr.tr-off select,tr.qoffr select{color:var(--red,#b3372f)!important;border-color:var(--red,#b3372f)!important;background:color-mix(in srgb,var(--red,#b3372f) 7%,transparent)!important} main:has(select[data-atth]) .tbl td [data-mnote]:not([data-mnote="*"]){display:none!important}';
   document.head.appendChild(css);
 
   function cleanHName(hid) {
@@ -142,10 +142,32 @@ try {
         var fee = window.QLFeeDue ? window.QLFeeDue(s) : null;
         var paid = getPaid(s.id, window.QLFees && window.QLFees.y, window.QLFees && window.QLFees.m);
         var needRemind = can('fees.collect') && !stOff(s) && fee !== 0 && fee && paid <= 0;
-        return (can('fees.collect') ? '<button type="button" class="btn sm primary" data-fee-pay2="' + esc(s.id) + '"' + (fee === 0 ? ' disabled' : '') + '>\u062a\u062d\u0635\u064a\u0644</button>' : '') + (needRemind ? '<button type="button" class="btn sm" data-remind="' + esc(s.id) + '" title="\u062a\u0630\u0643\u064a\u0631">\u062a\u0630\u0643\u064a\u0631</button>' : '');
+        return needRemind ? '<button type="button" class="btn sm" data-remind="' + esc(s.id) + '" title="\u062a\u0630\u0643\u064a\u0631">\u062a\u0630\u0643\u064a\u0631</button>' : '';
       } catch(e) { return ''; }
     };
   }
+
+  /* زر «تحصيل» في صف الطالب: أيقونة مالية (ورقة نقدية)، بعد «السجل» و«الإشعار» */
+  var PAY_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v5M18 9.5v5"/></svg>';
+  function payBtn(s) {
+    try {
+      if (!can('fees.collect')) return '';
+      var fee = window.QLFeeDue ? window.QLFeeDue(s) : null;
+      return '<button type="button" class="btn sm primary qri" data-fee-pay2="' + esc(s.id) + '" title="\u062a\u062d\u0635\u064a\u0644" aria-label="\u062a\u062d\u0635\u064a\u0644"' + (fee === 0 ? ' disabled' : '') + '>' + PAY_ICON + '</button>';
+    } catch(e) { return ''; }
+  }
+  /* «إشعار لهذا الطالب» من جدول الطلاب: نافذة الإشعار (mine.js) تحتاج حلقة مختارة (ui.hid)،
+     فتُضبط على حلقة الطالب لحظة الضغط ثم تعود كما كانت. */
+  document.addEventListener('click', function(e) {
+    try {
+      var b = e.target.closest('main [data-mnote]'); if (!b || b.dataset.mnote === '*') return;
+      var s = byId(db.students, b.dataset.mnote); if (!s) return;
+      var hid = s.halaqaId && byId(db.halaqat, s.halaqaId) ? s.halaqaId : (byId(db.halaqat, ui.hid) ? ui.hid : (db.halaqat[0] && db.halaqat[0].id));
+      if (!hid || hid === ui.hid) return;
+      var old = ui.hid; ui.hid = hid;
+      setTimeout(function() { ui.hid = old; }, 0);
+    } catch(err) { /* ignore */ }
+  }, true);
 
   document.addEventListener('click', function(e) {
     try {
@@ -220,7 +242,7 @@ try {
       toolbar += remindBtn;
       var rows = list.map(function(st) {
         var off = stOff(st);
-        return '<tr' + (off ? ' class="tr-off"' : '') + '><td><span class="who">' + avatar(st) + '<span>' + esc(st.name) + '</span></span></td><td>' + (ageOf(st) === '' ? '\u2014' : ageOf(st)) + '</td><td>' + cleanHName(st.halaqaId) + '</td><td>' + esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014') + '</td><td>' + esc(lastHifz(st.id)) + '</td><td><button type="button" class="btn sm' + (off ? ' danger' : '') + '" data-stat="' + st.id + '">' + (off ? '\u0645\u0646\u0642\u0637\u0639' : '\u0645\u0646\u062a\u0638\u0645') + '</button></td><td>' + absMonthCell(st) + '</td>' + (hasFees ? F.cells(st) : '') + '<td><button class="btn sm primary" data-act="studentCard" data-id="' + st.id + '">\u0627\u0644\u0645\u0644\u0641</button><button class="btn sm" data-act="hist" data-id="' + st.id + '">\u0627\u0644\u0633\u062c\u0644</button><button class="btn sm" data-act="editStudent" data-id="' + st.id + '">\u062a\u0639\u062f\u064a\u0644</button>' + (db.fields.students.length ? '<button class="btn sm" data-act="editExtra" data-k="students" data-id="' + st.id + '">\u0625\u0636\u0627\u0641\u064a\u0629</button>' : '') + (hasFees ? F.actions(st) : '') + '</td></tr>';
+        return '<tr' + (off ? ' class="tr-off"' : '') + '><td><span class="who">' + avatar(st) + '<span>' + esc(st.name) + '</span></span></td><td>' + (ageOf(st) === '' ? '\u2014' : ageOf(st)) + '</td><td>' + cleanHName(st.halaqaId) + '</td><td>' + esc(placeName(byId(db.halaqat, st.halaqaId)) || '\u2014') + '</td><td>' + esc(lastHifz(st.id)) + '</td><td><button type="button" class="btn sm' + (off ? ' danger' : '') + '" data-stat="' + st.id + '">' + (off ? '\u0645\u0646\u0642\u0637\u0639' : '\u0645\u0646\u062a\u0638\u0645') + '</button></td><td>' + absMonthCell(st) + '</td>' + (hasFees ? F.cells(st) : '') + '<td><button class="btn sm primary" data-act="studentCard" data-id="' + st.id + '">\u0627\u0644\u0645\u0644\u0641</button><button class="btn sm" data-act="hist" data-id="' + st.id + '">\u0627\u0644\u0633\u062c\u0644</button><button type="button" class="btn sm" data-mnote="' + esc(st.id) + '" title="\u0625\u0634\u0639\u0627\u0631 \u0644\u0647\u0630\u0627 \u0627\u0644\u0637\u0627\u0644\u0628">\u0625\u0634\u0639\u0627\u0631</button>' + (hasFees ? payBtn(st) : '') + '<button class="btn sm" data-act="editStudent" data-id="' + st.id + '">\u062a\u0639\u062f\u064a\u0644</button>' + (db.fields.students.length ? '<button class="btn sm" data-act="editExtra" data-k="students" data-id="' + st.id + '">\u0625\u0636\u0627\u0641\u064a\u0629</button>' : '') + (hasFees ? F.actions(st) : '') + '</td></tr>';
       }).join('');
       return summary + '<div class="card"><div class="bar"><h2 class="grow" style="margin:0">\u0627\u0644\u0637\u0644\u0627\u0628</h2>' + toolbar + '<select data-change="fcat"><option value="">\u0627\u0644\u0635\u063a\u0627\u0631 \u0648\u0627\u0644\u0643\u0628\u0627\u0631</option>' + Object.keys(CATS).map(function(k) { return '<option value="' + k + '"' + (ui.fcat === k ? ' selected' : '') + '>' + (k === 'child' ? '\u0627\u0644\u0635\u063a\u0627\u0631' : '\u0627\u0644\u0643\u0628\u0627\u0631') + '</option>'; }).join('') + '</select><select data-change="fh"><option value="">\u0643\u0644 \u0627\u0644\u062d\u0644\u0642\u0627\u062a</option>' + db.halaqat.map(function(h) { return '<option value="' + esc(h.id) + '"' + (h.id === ui.fh ? ' selected' : '') + '>' + esc(halaqaLabel(h)) + '</option>'; }).join('') + '</select><button class="btn primary" data-act="addStudent">+ \u0627\u0633\u062a\u0645\u0627\u0631\u0629 \u0637\u0627\u0644\u0628</button></div>' + (list.length ? '<div class="tbl"><table><tr><th>\u0627\u0644\u0627\u0633\u0645</th><th>\u0627\u0644\u0633\u0646</th><th>\u0627\u0644\u062d\u0644\u0642\u0629</th><th>\u0627\u0644\u0645\u0643\u0627\u0646</th><th>\u0622\u062e\u0631 \u062d\u0641\u0638</th><th>\u0627\u0644\u062d\u0627\u0644\u0629</th><th>\u063a\u064a\u0627\u0628 \u0627\u0644\u0634\u0647\u0631</th>' + feeH + '<th></th></tr>' + rows + '</table></div>' : empty('\u0644\u0627 \u064a\u0648\u062c\u062f \u0637\u0644\u0627\u0628.')) + '</div>';
     } catch(e) {
