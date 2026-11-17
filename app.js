@@ -1,2 +1,4 @@
-/* temporary loader — يحمّل app.js الأصلي من آخر commit سليم */
-(async()=>{try{const r=await fetch('https://raw.githubusercontent.com/ishthfez/quedara/60839154ad897237e3ef1133aba061cafba677ee/app.js');if(!r.ok)throw new Error(r.status);const t=await r.text();const s=document.createElement('script');s.textContent=t;document.head.appendChild(s);}catch(e){document.getElementById('app').innerHTML='<div style="text-align:center;padding:3rem"><h2>خطأ في تحميل التطبيق</h2><p>'+e.message+'</p><button onclick="location.reload()">إعادة المحاولة</button></div>';}})();
+/* loader متزامن — يحمّل app.js الأصلي قبل أي ملف آخر */
+var _x=new XMLHttpRequest();
+_x.open('GET','https://raw.githubusercontent.com/ishthfez/quedara/60839154ad897237e3ef1133aba061cafba677ee/app.js',false);
+try{_x.send();if(_x.status===200)eval(_x.responseText);else throw new Error(_x.status);}catch(e){document.getElementById('app').innerHTML='<div style="text-align:center;padding:3rem;direction:rtl"><h2>خطأ في تحميل التطبيق</h2><p>'+e.message+'</p><button onclick="location.reload()">إعادة المحاولة</button></div>';}
