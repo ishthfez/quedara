@@ -9,13 +9,16 @@
      بدل القائمة المنسدلة، والأزرار يسارًا بالترتيب من اليمين: الحجم، الحفظ، الطباعة، التذكير، الإضافة.
    - «المعاينة» بآخر إصدار دائمًا: المعاينة تُرسم بشيفرة التطبيق المفتوح نفسه، فإن نُشر تحديث يُعاد تحميل التطبيق فورًا
      (فحص التحديث في app-actions.js، كل 30 ثانية ما دامت المعاينة مفتوحة بدل كل 5 دقائق)، ويبقى الاختيار (النوع والشخص والجهاز).
-     وبصمة التحديث صارت تشمل كل ملفات التطبيق (كل سكربت في index.html)، لا بعضها. */
+     وبصمة التحديث صارت تشمل كل ملفات التطبيق (كل سكربت في index.html)، لا بعضها.
+   - السرعة: حركة ظهور الصفحة (ql-in في style.css) تعمل عند الانتقال إلى صفحة أخرى فقط، لا عند كل تحديث للصفحة نفسها
+     (تسجيل حضور، تبويب حالة، تصفية...): كانت تعيد رسم الجدول كله في كل إطار طوال الحركة. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./active.js')) VFILES.push('./active.js'); } catch (e) { /* ignore */ } });
   const css = document.createElement('style');
   css.textContent = `main [data-qadd],main [data-act="addStudent"]{background:var(--navy,#13294b)!important;color:var(--on-navy,#fff)!important;border-color:var(--navy,#13294b)!important}
     main [data-qadd]:hover,main [data-act="addStudent"]:hover{background:var(--navy-d,#0b1b33)!important}
     main [data-qadd] svg,main [data-act="addStudent"] svg{stroke:currentColor}
+    html.qnoanim .content main,html.qnoanim .subnav ~ *{animation:none!important}
     main .tblprint.qtb:has([data-sstfseg]){justify-content:flex-start!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > *{order:25!important}
     main .tblprint.qtb:has([data-sstfseg]) > .bar > h2{order:1!important;flex:0 0 auto!important}
@@ -61,6 +64,16 @@
   };
   document.addEventListener('DOMContentLoaded', () => {
     wrapStu();   /* الرسم الأول ينتظر انتهاء كل معالجات DOMContentLoaded (boot-gate.js)، فيأتي بهذا التركيب */
+    /* حركة الظهور للانتقال بين الصفحات فقط */
+    let lastView = null;
+    const baseRender = render;
+    render = function () {
+      let k = '';
+      try { k = [session?.role, window.QLView ? window.QLView() : ui.tab, ui.svw || '', ui.msub || ''].join('|'); } catch (e) { /* ignore */ }
+      document.documentElement.classList.toggle('qnoanim', k === lastView);
+      lastView = k;
+      return baseRender.apply(this, arguments);
+    };
   });
   document.addEventListener('click', e => { const b = e.target.closest?.('[data-sstfv]'); if (!b || b.disabled) return; ui.sstf = b.dataset.sstfv; render(); });
 
