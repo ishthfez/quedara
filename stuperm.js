@@ -6,30 +6,49 @@
    هذا للعرض فقط: إظهار العنصر أو إخفاؤه. ما يغيّر البيانات (التحصيل، الحالة، النقل...) يبقى الخادم يتحقق من صلاحيته الأصلية.
    التطبيق على صفحة الطلاب لغير المدير يعمل متى عُرضت لهم (أسفل الملف): العنصر غير المسموح يُخفى، وما لا يُخفى (اسم الطالب،
    زر الحالة، تسجيل الحضور، التاريخ) يبقى ظاهرًا بلا ضغط. وقبل أول حفظ تسري الاختيارات الافتراضية في ITEMS.
-   أول صف «عرض صفحة الطلاب» يقرر هل تظهر الصفحة للفئة أصلًا (stuview.js)، وهو مطفأ لكل الفئات حتى يفعّله المدير. */
+   أول صف «عرض صفحة الطلاب» يقرر هل تظهر الصفحة للفئة أصلًا (stuview.js)، وهو مطفأ لكل الفئات حتى يفعّله المدير.
+   العناصر كلها، كل عداد وكل زر وكل تبويب على حدة، في الصفحة ونافذة الحضور ونافذة الرسالة؛ وأزرار صف الطالب في جدول الصفحة
+   (main > .card) منفصلة عن أزرار صفه في نافذة الحضور (.qatt). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./stuperm.js')) VFILES.push('./stuperm.js'); } catch (e) { /* ignore */ } });
   const ROLES4 = [['teacher', 'المعلمون'], ['supervisor', 'المشرفون'], ['accountant', 'المحاسبون'], ['placeadmin', 'الإداريون']];
   const T = 'teacher', S = 'supervisor', A = 'accountant', P = 'placeadmin', ALL = [T, S, A, P];
   /* [المفتاح، العنصر، المجموعة، الفئات المسموح لها افتراضيًا، المحدِّد، النوع: hide (يُخفى) | lock (يظهر بلا ضغط) | col (عمود بعنوانه)] */
+  const ST = 'main > .card .tbl td ', W = '.qatt ';
   const ITEMS = [
     ['page', 'عرض صفحة «الطلاب» لهذه الفئة (بدل صفحاتها للطلاب والحضور)', 'الصفحة', [], '', 'flag'],
+    ['subnav', 'شريط تبويبات الصفحة (الطلاب / الاشتراكات / تحصيل المعلمين)', 'الصفحة', [A], 'main .subnav', 'hide'],
+    ['tfees', 'تبويب «الاشتراكات»', 'الصفحة', [A], 'main .subnav [data-svw="fees"]', 'hide'],
+    ['tcol', 'تبويب «تحصيل المعلمين»', 'الصفحة', [A], 'main .subnav [data-svw="tcollect"]', 'hide'],
     ['sum', 'بطاقة الاشتراكات كلها', 'بطاقة الاشتراكات', [A], 'main .feecard', 'hide'],
-    ['sumstu', 'عدادات الطلاب (العدد، مسدّد، لم يسدّد، معفى)', 'بطاقة الاشتراكات', [A], 'main .feecard .qfstu', 'hide'],
-    ['summon', 'عدادات المبالغ ونسبة التحصيل', 'بطاقة الاشتراكات', [A], 'main .feecard .qfmon', 'hide'],
     ['month', 'اختيار شهر الاشتراكات', 'بطاقة الاشتراكات', [A], 'main .feecard [data-fmonth]', 'hide'],
-    ['tfees', 'تبويب «الاشتراكات»', 'تبويبات الصفحة', [A], 'main .subnav [data-svw="fees"]', 'hide'],
-    ['tcol', 'تبويب «تحصيل المعلمين»', 'تبويبات الصفحة', [A], 'main .subnav [data-svw="tcollect"]', 'hide'],
+    ['sumstu', 'صف عدادات الطلاب كله', 'بطاقة الاشتراكات', [A], 'main .feecard .qfstu', 'hide'],
+    ['k_n', 'عداد «عدد الطلاب»', 'بطاقة الاشتراكات', [A], 'main .feecard .qfstu > .feerow:nth-child(1)', 'hide'],
+    ['k_paid', 'عداد «مسدَّد»', 'بطاقة الاشتراكات', [A], 'main .feecard .qfstu > .feerow:nth-child(2)', 'hide'],
+    ['k_unpaid', 'عداد «لم يسدّد»', 'بطاقة الاشتراكات', [A], 'main .feecard .qfstu > .feerow:nth-child(3)', 'hide'],
+    ['k_free', 'عداد «معفى»', 'بطاقة الاشتراكات', [A], 'main .feecard .qfstu > .feerow:nth-child(4)', 'hide'],
+    ['k_none', 'عداد «بلا اشتراك محدد»', 'بطاقة الاشتراكات', [A], 'main .feecard .qfstu > .feerow:nth-child(5)', 'hide'],
+    ['summon', 'صف عدادات المبالغ كله', 'بطاقة الاشتراكات', [A], 'main .feecard .qfmon', 'hide'],
+    ['k_exp', 'عداد «المتوقع»', 'بطاقة الاشتراكات', [A], 'main .feecard .qfmon > .feerow:nth-child(1)', 'hide'],
+    ['k_got', 'عداد «المحصّل»', 'بطاقة الاشتراكات', [A], 'main .feecard .qfmon > .feerow:nth-child(2)', 'hide'],
+    ['k_rest', 'عداد «الباقي»', 'بطاقة الاشتراكات', [A], 'main .feecard .qfmon > .feerow:nth-child(3)', 'hide'],
+    ['k_pct', 'عداد «نسبة التحصيل»', 'بطاقة الاشتراكات', [A], 'main .feecard .qfmon > .qfpct', 'hide'],
+    ['k_note', 'سطر «وصل أيضًا … من منقطعين أو معفيين»', 'بطاقة الاشتراكات', [A], 'main .feecard > p.muted', 'hide'],
     ['search', 'البحث باسم الطالب', 'أدوات الجدول', ALL, 'main input[data-sq]', 'hide'],
-    ['place', 'قائمة المكان', 'أدوات الجدول', [S, A, P], 'main .qcombo:has([data-fplace]),main select[data-fplace]', 'hide'],
+    ['place', 'قائمة المكان', 'أدوات الجدول', [S, A, P], 'main > .card .qcombo:has([data-fplace]),main > .card select[data-fplace]', 'hide'],
     ['halaqa', 'قائمة الحلقة', 'أدوات الجدول', [S, A, P], 'main .qcombo:has([data-change="fh"]),main select[data-change="fh"]', 'hide'],
     ['att', 'زر «الحضور» (نافذة تسجيل الحضور)', 'أدوات الجدول', [T, S, P], 'main [data-attopen]', 'hide'],
-    ['seg', 'تبويبات الحالة (الكل / منتظم / منقطع)', 'أدوات الجدول', ALL, 'main [data-sstfseg]', 'hide'],
-    ['zoom', 'حجم الخط', 'أدوات الجدول', ALL, 'main .qzoom', 'hide'],
-    ['save', 'حفظ الجدول (Excel / PDF)', 'أدوات الجدول', [A], 'main .qsave', 'hide'],
-    ['print', 'الطباعة', 'أدوات الجدول', ALL, 'main [data-print]', 'hide'],
+    ['seg', 'تبويبات الحالة كلها (الكل / منتظم / منقطع)', 'أدوات الجدول', ALL, 'main [data-sstfseg]', 'hide'],
+    ['seg_all', 'تبويب «الكل»', 'أدوات الجدول', ALL, 'main [data-sstfv=""]', 'hide'],
+    ['seg_on', 'تبويب «منتظم»', 'أدوات الجدول', ALL, 'main [data-sstfv="on"]', 'hide'],
+    ['seg_off', 'تبويب «منقطع»', 'أدوات الجدول', ALL, 'main [data-sstfv="off"]', 'hide'],
+    ['zoom', 'حجم الخط', 'أدوات الجدول', ALL, 'main > .card .qzoom', 'hide'],
+    ['save', 'حفظ الجدول (Excel / PDF)', 'أدوات الجدول', [A], 'main > .card .qsave', 'hide'],
+    ['print', 'الطباعة', 'أدوات الجدول', ALL, 'main > .card [data-print]', 'hide'],
     ['remindall', 'تذكير غير المسددين (الجرس)', 'أدوات الجدول', [A], 'main [data-remind-all]', 'hide'],
-    ['add', 'إضافة طالب', 'أدوات الجدول', [], 'main [data-qadd],main [data-act="addStudent"]', 'hide'],
+    ['add', 'إضافة طالب', 'أدوات الجدول', [], 'main > .card [data-qadd],main [data-act="addStudent"]', 'hide'],
+    ['heads', 'تعديل رؤوس الأعمدة (القلم فوق الجدول)', 'أدوات الجدول', [], 'main [data-heads]', 'hide'],
+    ['more', '«عرض المزيد» و«عرض الكل» أسفل الجدول', 'أدوات الجدول', ALL, 'main > .card .pgmore', 'hide'],
     ['c_age', 'عمود «السن»', 'أعمدة الجدول', [T, S, P], 'السن', 'col'],
     ['c_sys', 'عمود «الحضور» (نظام 6 / 3 أيام)', 'أعمدة الجدول', [S, A, P], 'الحضور', 'col'],
     ['c_hal', 'عمود «الحلقة»', 'أعمدة الجدول', ALL, 'الحلقة', 'col'],
@@ -39,20 +58,29 @@
     ['c_abs', 'عمود «غياب الشهر»', 'أعمدة الجدول', [T, S, P], 'غياب الشهر', 'col'],
     ['c_due', 'عمود «المستحق»', 'أعمدة الجدول', [A], 'المستحق', 'col'],
     ['r_file', 'فتح ملف الطالب (الضغط على اسمه)', 'أزرار صف الطالب', ALL, 'main .tbl [data-act="studentCard"]', 'lock'],
-    ['r_hist', 'السجل', 'أزرار صف الطالب', [T, S, P], 'main .tbl td [data-act="hist"]', 'hide'],
-    ['r_msg', 'رسالة', 'أزرار صف الطالب', [T, S, P], 'main .tbl td [data-mnote]:not([data-mnote="*"])', 'hide'],
-    ['r_pay', 'تحصيل', 'أزرار صف الطالب', [A], 'main .tbl td [data-fee-pay2]', 'hide'],
-    ['r_edit', 'تعديل بيانات الطالب', 'أزرار صف الطالب', [], 'main .tbl td [data-act="editStudent"]', 'hide'],
-    ['r_extra', 'البيانات الإضافية', 'أزرار صف الطالب', [], 'main .tbl td [data-act="editExtra"]', 'hide'],
-    ['r_remind', 'تذكير فردي بالسداد', 'أزرار صف الطالب', [A], 'main .tbl td [data-remind]', 'hide'],
-    ['r_stat', 'تغيير الحالة (منتظم / منقطع)', 'أزرار صف الطالب', [], 'main .tbl [data-stat]', 'lock'],
-    ['r_sys', 'تغيير نظام الحضور (6 / 3 أيام)', 'أزرار صف الطالب', [], 'main .tbl select[data-fsys]', 'lock'],
-    ['a_mark', 'تسجيل الحضور (حاضر / غائب / متأخر)', 'نافذة الحضور', [T, S, P], '.qatt [data-act="att"]', 'lock'],
-    ['a_date', 'تغيير تاريخ الحضور', 'نافذة الحضور', [S, P], '.qatt input[data-change="date"]', 'lock'],
-    ['a_rec', 'تسجيل التسميع', 'نافذة الحضور', [T, S, P], '.qatt [data-act="rec"]', 'hide'],
-    ['a_move', 'نقل الطالب إلى حلقة أخرى', 'نافذة الحضور', [S, P], '.qatt [data-move]', 'hide'],
-    ['a_all', 'إشعار للطلاب (جماعي)', 'نافذة الحضور', [T, S, P], '.qatt [data-mnote="*"]', 'hide'],
-    ['a_add', 'إضافة طالب من نافذة الحضور', 'نافذة الحضور', [], '.qatt [data-attadd]', 'hide']
+    ['r_hist', 'السجل', 'أزرار صف الطالب', [T, S, P], ST + '[data-act="hist"]', 'hide'],
+    ['r_msg', 'رسالة', 'أزرار صف الطالب', [T, S, P], ST + '[data-mnote]:not([data-mnote="*"])', 'hide'],
+    ['r_pay', 'تحصيل', 'أزرار صف الطالب', [A], ST + '[data-fee-pay2]', 'hide'],
+    ['r_edit', 'تعديل بيانات الطالب', 'أزرار صف الطالب', [], ST + '[data-act="editStudent"]', 'hide'],
+    ['r_extra', 'البيانات الإضافية', 'أزرار صف الطالب', [], ST + '[data-act="editExtra"]', 'hide'],
+    ['r_stat', 'تغيير الحالة (منتظم / منقطع)', 'أزرار صف الطالب', [], ST + '[data-stat]', 'lock'],
+    ['r_sys', 'تغيير نظام الحضور (6 / 3 أيام)', 'أزرار صف الطالب', [], ST + 'select[data-fsys]', 'lock'],
+    ['r_abs', 'فتح سجل الغياب (رقم «غياب الشهر»)', 'أزرار صف الطالب', [T, S, P], ST + '[data-abs-log]', 'lock'],
+    ['m_msg', 'تبويب «رسالة للطالب»', 'نافذة الرسالة', ALL, '[data-msgtab="msg"]', 'hide'],
+    ['m_rem', 'تبويب «تذكير بالاشتراك»', 'نافذة الرسالة', [T, A, P], '[data-msgtab="rem"]', 'hide'],
+    ['a_hal', 'قائمة «الحلقة — المكان»', 'نافذة الحضور', [S, P], W + '.qatt-hw', 'lock'],
+    ['a_date', 'تغيير تاريخ الحضور', 'نافذة الحضور', [S, P], W + 'input[data-change="date"]', 'lock'],
+    ['a_tabs', 'تبويبا «منتظم / منقطع»', 'نافذة الحضور', [T, S, P], W + '.mtabs', 'hide'],
+    ['a_search', 'البحث باسم الطالب', 'نافذة الحضور', [T, S, P], W + 'input[data-mq]', 'hide'],
+    ['a_zoom', 'حجم الخط', 'نافذة الحضور', [T, S, P], W + '.qzoom', 'hide'],
+    ['a_all', 'إشعار للطلاب (جماعي)', 'نافذة الحضور', [T, S, P], W + '[data-mnote="*"]', 'hide'],
+    ['a_add', 'إضافة طالب', 'نافذة الحضور', [], W + '[data-attadd]', 'hide'],
+    ['a_mark', 'تسجيل الحضور (حاضر / غائب / متأخر)', 'نافذة الحضور', [T, S, P], W + '[data-act="att"]', 'lock'],
+    ['a_rec', 'تسجيل التسميع', 'نافذة الحضور', [T, S, P], W + '[data-act="rec"]', 'hide'],
+    ['a_hist', 'السجل', 'نافذة الحضور', [T, S, P], W + 'td [data-act="hist"]', 'hide'],
+    ['a_msg', 'رسالة', 'نافذة الحضور', [T, S, P], W + 'td [data-mnote]:not([data-mnote="*"])', 'hide'],
+    ['a_move', 'نقل الطالب إلى حلقة أخرى', 'نافذة الحضور', [S, P], W + '[data-move]', 'hide'],
+    ['a_stat', 'تغيير الحالة (منتظم / منقطع)', 'نافذة الحضور', [], W + '[data-stat]', 'lock']
   ];
   const PK = k => 'ui.stu.' + k, SET = 'ui.stu._set';
   const conf = () => (db.settings.priv_perms = db.settings.priv_perms || {}, db.settings.priv_perms.roles = db.settings.priv_perms.roles || {}, db.settings.priv_perms);
