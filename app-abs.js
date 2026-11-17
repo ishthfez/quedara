@@ -271,6 +271,8 @@ try {
       toolbar += remindBtn;
       if (list.length !== _stN) { _stN = list.length; _stAll = false; }
       var cap = _stAll ? Infinity : (matchMedia('(max-width:860px)').matches ? 60 : 200);
+      /* نافذة «الحضور» مفتوحة فوق الجدول (attwin.js): يكفي أوله خلفها، فكل تسجيل حضور يعيد رسمه */
+      if (window.QLStuLite) cap = Math.min(cap, 20);
       var rows = list.map(function(st, i) {
         if (i >= cap) return '<tr></tr>';
         var off = stOff(st);
