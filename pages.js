@@ -84,14 +84,21 @@
     const head = m.querySelector(':scope > .mhead') || m.querySelector(':scope > h2');
     if (head) head.insertAdjacentHTML('afterend', bar); else m.insertAdjacentHTML('afterbegin', bar);
   }
-  /* التبديل: تُغلق النافذة الحالية وتُفتح الأخرى للطالب نفسه (بزر مؤقت في الصفحة يلتقطه معالجه الأصلي) */
+  /* التبديل: تُغلق النافذة الحالية وتُفتح الأخرى للطالب نفسه (بزر مؤقت في الصفحة يلتقطه معالجه الأصلي).
+     الإغلاق يرجع خطوة في سجل التنقل (nav.js) بعد لحظة؛ فتُفتح الأخرى بعد تمام الرجوع، وإلا محا الرجوعُ خطوتها
+     فصار زر الرجوع في الهاتف يغلق نافذتين معًا ويخرج من التطبيق أسرع. */
   document.addEventListener('click', e => {
     const b = e.target.closest?.('[data-msgtab]'); if (!b || b.classList.contains('on')) return;
     const ov = b.closest('.overlay'), sid = ov?._msgSid, main = document.querySelector('main'); if (!sid || !main) return;
+    const openOther = () => {
+      const t = document.createElement('button'); t.type = 'button'; t.hidden = true;
+      if (b.dataset.msgtab === 'rem') t.dataset.remind = sid; else t.dataset.mnote = sid;
+      (document.querySelector('main') || main).appendChild(t); t.click(); t.remove();
+    };
+    let done = false; const go = () => { if (done) return; done = true; window.removeEventListener('popstate', go); setTimeout(openOther, 0); };
+    window.addEventListener('popstate', go);
+    setTimeout(go, 400);
     const c = ov.querySelector('[data-close]'); if (c) c.click(); else ov.remove();
-    const t = document.createElement('button'); t.type = 'button'; t.hidden = true;
-    if (b.dataset.msgtab === 'rem') t.dataset.remind = sid; else t.dataset.mnote = sid;
-    main.appendChild(t); t.click(); t.remove();
   });
   const rcss = document.createElement('style');
   rcss.textContent = 'main .tbl td [data-remind]{display:none!important}';
