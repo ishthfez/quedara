@@ -9,7 +9,8 @@
    أول صف «عرض صفحة الطلاب» يقرر هل تظهر الصفحة للفئة أصلًا (stuview.js)، وهو مطفأ لكل الفئات حتى يفعّله المدير.
    العناصر كلها، كل عداد وكل زر وكل تبويب على حدة، في الصفحة ونافذة الحضور ونافذة الرسالة؛ وأزرار صف الطالب في جدول الصفحة
    (main > .card) منفصلة عن أزرار صفه في نافذة الحضور (.qatt).
-   ملف الطالب: أقسامه (تُعلَّم بـ data-sk من عناوينها) وأزراره، أينما فُتح (من الجدول أو نافذة الحضور). */
+   ملف الطالب: أقسامه (تُعلَّم بـ data-sk من عناوينها) وأزراره، أينما فُتح (من الجدول أو نافذة الحضور).
+   مكانه: تبويب «الصلاحيات» نفسه، بقسمين متلاصقين أعلاه: «مهام التطبيق والأفراد» (perms.js كما هو) و«صفحة الطلاب» (هذا الجدول). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./stuperm.js')) VFILES.push('./stuperm.js'); } catch (e) { /* ignore */ } });
   const ROLES4 = [['teacher', 'المعلمون'], ['supervisor', 'المشرفون'], ['accountant', 'المحاسبون'], ['placeadmin', 'الإداريون']];
@@ -134,9 +135,20 @@
     const allRow = `<tr><td class="qnm muted">لكل الفئة</td>${ROLES4.map(([r]) => { const k = state(r); return `<td><button type="button" class="btn sm${k === 'all' ? ' primary' : ''}" data-supall="${r}|1" aria-pressed="${k === 'all'}">الكل</button> <button type="button" class="btn sm${k === 'none' ? ' primary' : ''}" data-supall="${r}|0" aria-pressed="${k === 'none'}">لا شيء</button></td>`; }).join('')}</tr>`;
     return `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">صلاحيات صفحة «الطلاب»</h2><button type="button" class="btn" data-supreset>الاختيارات الافتراضية</button></div>
       <p class="muted" style="font-size:.85rem;margin:0 0 .6rem">ما يظهر لكل فئة من العاملين في صفحة «الطلاب» ونافذة الحضور. المدير يرى كل شيء دائمًا. الإخفاء هنا للعرض فقط: ما يغيّر البيانات يتحقق منه الخادم بصلاحيته في «الصلاحيات».</p>
-      <div class="tbl"><table><tr><th class="qnm">العنصر</th>${colAll}</tr>${allRow}${rows}</table></div></div>`;
+      <div class="qsuptbl"><table><tr><th class="qnm">العنصر</th>${colAll}</tr>${allRow}${rows}</table></div></div>`;
   }
-  (window.QLSetTabs = window.QLSetTabs || []).push({ key: 'stuperm', label: 'صلاحيات صفحة الطلاب', after: 'الصلاحيات', view });
+  /* ===== قسما تبويب «الصلاحيات» ===== */
+  const SEGK = 'qpermseg';
+  let seg = 'app'; try { seg = sessionStorage.getItem(SEGK) || 'app'; } catch (e) { /* ignore */ }
+  const baseSet = adminViews.settings;
+  adminViews.settings = function () {
+    const html = baseSet.apply(this, arguments);
+    if (session?.role !== 'admin' || !/class="btn on" data-subtab="perms"/.test(html)) return html;
+    const i = html.indexOf('<div class="card subnav">'), e = i < 0 ? -1 : html.indexOf('</div></div>', i); if (e < 0) return html;
+    const bar = `<div class="qseg" role="tablist" style="margin:0 0 1rem"><button type="button" data-permseg="app" class="${seg === 'app' ? 'on' : ''}" aria-selected="${seg === 'app'}">مهام التطبيق والأفراد</button><button type="button" data-permseg="stu" class="${seg === 'stu' ? 'on' : ''}" aria-selected="${seg === 'stu'}">صفحة الطلاب</button></div>`;
+    return html.slice(0, e + 12) + bar + (seg === 'stu' ? view() : html.slice(e + 12));
+  };
+  document.addEventListener('click', ev => { const b = ev.target.closest?.('[data-permseg]'); if (!b) return; seg = b.dataset.permseg; try { sessionStorage.setItem(SEGK, seg); } catch (e) { /* ignore */ } render(); });
 
   document.addEventListener('change', e => {
     const t = e.target; if (!t.matches?.('[data-sup]') || session?.role !== 'admin') return;
@@ -166,6 +178,11 @@
     return mp.includes(SET) ? mp.includes(PK(it[0])) : it[3].includes(session.role);
   };
   const css = document.createElement('style'); document.head.appendChild(css);
+  /* الجدول بلا غلاف .tbl: فلا يقطعه «عرض المزيد» عند الخمسين صفًا (pager.js) ولا تُضاف إليه أدوات الطباعة والحفظ */
+  const css0 = document.createElement('style');
+  css0.textContent = `.qsuptbl{overflow-x:auto;max-width:100%}.qsuptbl table{width:auto;min-width:0}
+    .qsuptbl th,.qsuptbl td{text-align:center;white-space:nowrap}.qsuptbl .qnm{text-align:right;white-space:normal}`;
+  document.head.appendChild(css0);
   let lastSig = '';
   function apply() {
     document.querySelectorAll('.overlay .scard').forEach(markCard);
