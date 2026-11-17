@@ -1,5 +1,5 @@
-/* Service Worker v5 */
-const CACHE = 'halaqat-v5';
+/* Service Worker v6 */
+const CACHE = 'halaqat-v6';
 const CORE = ['./', './style.css', './app.js', './app-forms.js', './app-actions.js', './payroll.js', './fees.js', './app-abs.js', './app-import.js', './fee-setup.js', './disc-setup.js', './perms.js', './accountant.js', './collect.js', './tables.js', './backup.js', './session.js', './dups.js', './selects.js', './links.js', './distribute.js', './split.js', './cleanup.js', './unassigned.js', './cascade.js', './places.js', './notes.js', './roles.js', './mine.js', './staff.js', './preview.js', './nav.js', './people.js', './notify.js', './receipt.js', './importx.js', './feesimport.js', './actas.js', './feeedit.js', './demo.js', './fixpay.js', './dupsall.js', './pager.js', './toolbar.js', './uniqname.js', './cloud.js', './logo.png', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {
@@ -19,6 +19,15 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  /* الصور (الشعار وغيره): من المحفوظ فورًا، وتُحدَّث في الخلفية — فلا يُرسم الشعار تدريجيًا في شاشة التحميل كل مرة */
+  if (/\.(png|jpe?g|webp|svg|ico|gif)$/i.test(url.pathname)) {
+    e.respondWith(caches.open(CACHE).then(c => c.match(req, { ignoreSearch: true }).then(hit => {
+      const net = fetch(req).then(res => { if (res.ok && res.type === 'basic') c.put(req, res.clone()); return res; }).catch(() => hit || Response.error());
+      if (hit) { e.waitUntil(net); return hit; }
+      return net;
+    })));
+    return;
+  }
   e.respondWith(
     timeout(fetch(req), 4000)
       .then(res => {

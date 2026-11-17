@@ -31,11 +31,19 @@
     try {
       if (typeof session === 'undefined' || !session || typeof ui === 'undefined' || ui.tab !== 'students') return;
       document.querySelectorAll('main .tbl table').forEach(function (tbl) {
-        if (!tbl.rows.length) return;
+        if (!tbl.rows.length || tbl.__fsc === tbl.rows.length) return;   /* عولج بعدد صفوفه الحالي: لا يُعاد الفحص مع كل تغيير في الصفحة */
         var H = [].map.call(tbl.rows[0].cells, function (c) { return c.textContent.trim(); });
         if (!tbl.querySelector('[data-act="studentCard"],[data-stat]')) return;   /* ليس جدول طلاب */
         cleanHal(tbl, H);
-        if (H.indexOf('الحضور') >= 0) return;                 /* مضاف من قبل: لا تكرار */
+        var iAtt = H.indexOf('الحضور');
+        if (iAtt >= 0) {   /* مضاف من قبل: لا تكرار، إلا لصفوف أُضيفت إلى الجدول بعده فتنقصها الخانة */
+          var nH = tbl.rows[0].cells.length;
+          [].forEach.call(tbl.rows, function (r, ri) {
+            if (!ri || r.cells.length >= nH || !r.cells[iAtt - 1]) return;
+            var s = byId(db.students, sidOf(r)); r.cells[iAtt - 1].insertAdjacentHTML('afterend', '<td>' + (s ? sel(s) : '') + '</td>');
+          });
+          tbl.__fsc = tbl.rows.length; return;
+        }
         var iAge = H.indexOf('السن'); if (iAge < 0) return;
         [].forEach.call(tbl.rows, function (r, ri) {
           var c = r.cells[iAge]; if (!c) return;
@@ -43,6 +51,7 @@
           var id = sidOf(r), s = id && byId(db.students, id);
           c.insertAdjacentHTML('afterend', '<td>' + (s ? sel(s) : '') + '</td>');
         });
+        tbl.__fsc = tbl.rows.length;
       });
     } catch (e) { console.error('feesys-col:', e); }
   }
