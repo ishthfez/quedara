@@ -6,7 +6,9 @@
    النافذة داخل <main> (لتعمل فيها معالجات الصفحة كما كانت في التبويب)، وتُغلق بسهم الرجوع أو Esc أو زر رجوع الهاتف.
    ترتيبها: قائمة واحدة «الحلقة — المكان» (بدل قائمتي المكان والحلقة؛ وإن كانت حلقة واحدة يظهر اسمها ومكانها نصًا) و«اليوم»،
    ثم البحث باسم الطالب وتبويبا المنتظمين والمنقطعين في صف، ثم زر «إشعار للطلاب» أيقونةً وحجم الخط، ثم الجدول.
-   (بلا سطر المكان والوقت ولا العدد ولا عنوان الحلقة، وبلا الطباعة والحفظ) */
+   (بلا سطر المكان والوقت ولا العدد ولا عنوان الحلقة، وبلا الطباعة والحفظ)
+   «متأخر»: الضغط عليه وهو مفعّل كان يحفظ حالة فارغة يرفضها الخادم (الحالات المقبولة: حاضر/متأخر/معتذر/غائب)، فيعود «متأخر».
+   صار يعيد الحالة التي كانت قبل «متأخر» (وإلا «حاضر»)، وما حُفظ فارغًا من قبل يُصحَّح إلى «غائب» (كما كان يظهر). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./attwin.js')) VFILES.push('./attwin.js'); } catch (e) { /* ignore */ } });
   const css = document.createElement('style');
@@ -145,4 +147,24 @@
     open = false; top = 0; document.querySelector('main > .qatt')?.remove();
     render();   /* جدول الطلاب كاملًا من جديد بعد أن كان مختصرًا خلف النافذة */
   }, true);
+
+  /* ===== «متأخر» يلغى تفعيله (A.att في app-actions.js؛ زرّاه من nav.js) ===== */
+  const VALID = ['present', 'late', 'excused', 'absent'];
+  const fixBad = () => { let n = 0; (db.attendance || []).forEach(a => { if (!VALID.includes(a.status)) { a.status = 'absent'; n++; } }); return n; };
+  document.addEventListener('DOMContentLoaded', () => {
+    try { if (fixBad()) save(); } catch (e) { /* ignore */ }
+    if (typeof A === 'undefined' || typeof A.att !== 'function') return;
+    const base = A.att;
+    A.att = d => {
+      fixBad();
+      const ex = db.attendance.find(a => a.studentId === d.sid && a.date === ui.date);
+      let st = d.st;
+      if (!VALID.includes(st)) st = ex && VALID.includes(ex._pre) && ex._pre !== 'late' ? ex._pre : 'present';
+      const prev = ex ? ex.status : 'absent';
+      const r = base({ ...d, st });
+      /* الحالة قبل «متأخر» تُذكر محليًا (لا تُرسل للخادم) ليعود إليها الإلغاء */
+      if (st === 'late' && prev !== 'late') { const rec = db.attendance.find(a => a.studentId === d.sid && a.date === ui.date); if (rec) rec._pre = prev; }
+      return r;
+    };
+  });
 })();
