@@ -118,8 +118,13 @@
       fees.push({ id: id('f'), studentId: s.id, y, m, amount: amt, date: `${y}-${pad(m)}-${pad(day)}`, by: accountants[0].name, byMember: accountants[0].id, note: '' });
     });
   }
+  /* مدير عام: مشرف نطاقه «الكل» يرى كل الحلقات والأماكن (roles.js)، ولا تُسند إليه حلقات بعينها.
+     باسم ثابت (لا يستهلك من المولّد العشوائي) فتبقى بقية الأسماء والمبالغ كما كانت */
+  const GMN = 'عبد الرحمن سعيد الشافعي';
+  const gm = { id: id('s'), name: used.has(GMN) ? GMN + ' (مدير عام)' : GMN, phone: '', pin: '000000', extra: {}, info: { scope: 'all' } };
+  supervisors.push(gm);
   /* المرتبات: موظفون من المعلمين والمشرفين وموظف إداري */
-  const employees = [...teachers, ...supervisors].map((t, i) => ({ id: id('e'), code: 'م' + String(i + 1).padStart(3, '0'), name: t.name, role: i < teachers.length ? 'معلم' : 'مشرف', sys: rnd() < 0.3 ? '(3) أيام' : '(6) أيام', status: 'نشط', basic: 2400 + Math.floor(rnd() * 8) * 100, rate: 26, incentive: 200 + Math.floor(rnd() * 5) * 50, transport: 150 + Math.floor(rnd() * 3) * 50, hours: 26, place: '', note: '' }));
+  const employees = [...teachers, ...supervisors].map((t, i) => ({ id: id('e'), code: 'م' + String(i + 1).padStart(3, '0'), name: t.name, role: i < teachers.length ? 'معلم' : t === gm ? 'مدير عام' : 'مشرف', sys: rnd() < 0.3 ? '(3) أيام' : '(6) أيام', status: 'نشط', basic: 2400 + Math.floor(rnd() * 8) * 100, rate: 26, incentive: 200 + Math.floor(rnd() * 5) * 50, transport: 150 + Math.floor(rnd() * 3) * 50, hours: 26, place: '', note: '' }));
   const cls = {}; employees.forEach((e, i) => { const t = i < teachers.length ? teachers[i] : supervisors[i - teachers.length]; cls[e.id] = { kind: i < teachers.length ? 'teacher' : 'supervisor', memberId: t.id }; });
   const news = [
     { id: id('n'), text: 'يبدأ الاختبار الشهري للحلقات يوم السبت القادم بإذن الله، ويُرجى من المعلمين تجهيز كشوف الحفظ.', audience: 'all', date: iso(new Date(now - 3 * 864e5)), author: 'مدير العرض', authorId: admins[0].id },
@@ -135,14 +140,17 @@
   SS.setItem('halaqat_session', JSON.stringify({ role: 'admin', id: admins[0].id }));
 
   /* ===== الواجهة: شريط ثابت، واختيار الفئة ===== */
-  const ROLES = [['admin', 'المدير', 'admins'], ['accountant', 'المحاسب', 'accountants'], ['teacher', 'المعلم', 'teachers'], ['supervisor', 'المشرف', 'supervisors'], ['placeadmin', 'الإداري', 'placeadmins'], ['student', 'الطالب', 'students']];
+  const ROLES = [['admin', 'المدير', 'admins'], ['accountant', 'المحاسب', 'accountants'], ['teacher', 'المعلم', 'teachers'], ['gmanager', 'المدير العام', 'supervisors'], ['supervisor', 'المشرف', 'supervisors'], ['placeadmin', 'الإداري', 'placeadmins'], ['student', 'الطالب', 'students']];
   const pickMember = role => {
     if (role === 'teacher') return teachers[0].id;            // معلم له حلقتان
     if (role === 'student') return active[0].id;
+    if (role === 'gmanager') return gm.id;
     return (window.db || db)[ROLES.find(r => r[0] === role)[2]][0]?.id;
   };
+  /* الواجهة المعروضة الآن: «المدير العام» مشرف نطاقه «الكل» */
+  const curView = () => (session?.role === 'supervisor' && session.id === gm.id ? 'gmanager' : session?.role);
   const go = role => {
-    session = { role, id: pickMember(role) };
+    session = { role: role === 'gmanager' ? 'supervisor' : role, id: pickMember(role) };
     SS.setItem('halaqat_session', JSON.stringify(session));
     ui.tab = null; ui.hid = ''; ui.nav = false;
     document.querySelectorAll('.overlay').forEach(o => o.remove());
@@ -164,13 +172,13 @@
     let b = document.getElementById('demobar');
     if (!b) { b = document.createElement('div'); b.id = 'demobar'; document.body.appendChild(b); document.documentElement.classList.add('demo'); }
     b.innerHTML = `<span><b>نسخة عرض</b> — البيانات وهمية، وما تجرّبه لا يُحفظ</span>
-      <label style="margin:0;display:flex;gap:.4rem;align-items:center;color:#fff">الواجهة<select data-demorole aria-label="الواجهة المعروضة">${ROLES.map(([k, l]) => `<option value="${k}" ${session?.role === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label style="margin:0;display:flex;gap:.4rem;align-items:center;color:#fff">الواجهة<select data-demorole aria-label="الواجهة المعروضة">${ROLES.map(([k, l]) => `<option value="${k}" ${curView() === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <button type="button" class="btn sm" data-demoreset>البدء من جديد</button>`;
     requestAnimationFrame(() => document.documentElement.style.setProperty('--demo-h', b.offsetHeight + 'px'));
   }
   function chooser() {
     const ov = document.createElement('div'); ov.className = 'overlay';
-    const DESC = { admin: 'اللوحة كاملة', accountant: 'الاشتراكات والتحصيل', teacher: 'الحضور والتسميع', supervisor: 'متابعة الحلقات', placeadmin: 'حلقات مكانه', student: 'حفظه وحضوره' };
+    const DESC = { admin: 'اللوحة كاملة', accountant: 'الاشتراكات والتحصيل', teacher: 'الحضور والتسميع', gmanager: 'كل الحلقات والأماكن', supervisor: 'متابعة حلقاته', placeadmin: 'حلقات مكانه', student: 'حفظه وحضوره' };
     ov.innerHTML = `<div class="modal"><h2>مرحبًا بك في نسخة العرض</h2>
       <div class="demo-intro muted"><p style="margin:0 0 .3rem">تصفّح التطبيق كما يعمل فعلًا في جمعية افتراضية، <b>بأسماء ومبالغ وهمية</b>.</p>
         <ul style="margin:0;padding-inline-start:1.2rem"><li>جرّب ما تشاء: سجّل حضورًا، أو حصّل اشتراكًا، أو اطبع إيصالًا.</li><li>لا يُحفظ شيء، ولا يتصل هذا العرض بأي خادم.</li><li>اختر الواجهة الآن، وبدّل بينها متى شئت من الشريط أعلى الشاشة.</li></ul></div>
