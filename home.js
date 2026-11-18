@@ -8,7 +8,8 @@
      ويبقى في «الإعلانات» عند المدير بعلامة «انتهى»، وله فيها «تعديل» لكل إعلان (النص والجمهور والأهمية والمدة).
    - الحفظ على الخادم: عمودا prio و until (supabase/news_ext.sql)؛ وقبل تنفيذه يعمل الإعلان كما كان بلا أهمية ولا مدة.
    - تحت الإعلانات عدّادات بحسب اختصاص كل فئة (بطاقة «الحلقات والطلاب» نفسها التي عند المدير)، كلٌّ في نطاقه:
-     المعلم حلقاته، والمشرف حلقاته، والإداري حلقات أماكنه، والمحاسب الطلاب و«الاشتراكات»، والطالب حضوره وتسميعه. */
+     المعلم حلقاته، والمشرف حلقاته، والإداري حلقات أماكنه، والمحاسب الطلاب و«الاشتراكات»، والطالب حضوره وتسميعه.
+     الطلاب في العدّادات كلها المنتظمون وحدهم، والمعلمون العاملون وحدهم (لا الموقوفون)، عند المدير وغيره. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./home.js')) VFILES.push('./home.js'); } catch (e) { /* ignore */ } });
   const PR = { '': ['عادي', 'qn-n'], imp: ['مهم', 'qn-imp'], urgent: ['عاجل', 'qn-urg'] };
@@ -136,23 +137,23 @@
       const on = db.students.filter(s => !stOff(s)).length;
       inbox();
       let fee = ''; try { fee = window.QLFeeSummary ? window.QLFeeSummary(db.students) : ''; } catch (e) { fee = ''; }
-      return card('الطلاب', [row('fr-plain', 'الطلاب', on), row('fr-no', 'منقطع', db.students.length - on),
+      return card('الطلاب', [row('fr-plain', 'الطلاب المنتظمون', on),
         ...(window.QLStuPerm?.can?.('accbtn') === false ? [] : [row(INB.n ? 'fr-no' : 'fr-ok', 'إخطارات بانتظار المراجعة', INB.n == null ? '…' : INB.n)])]) + fee;
     }
     const d = scopeData(), T = trs(), wait = T.filter(x => x.canDecide).length;
     const att = d.on.length ? pctRow('حضور اليوم', d.pct) : row('fr-plain', 'حضور اليوم', '—');
     if (r === 'teacher') {
-      return card('حلقاتي', [row('fr-plain', 'الطلاب', d.on.length), row('fr-no', 'منقطع', d.S.length - d.on.length), att, row(d.notYet ? 'fr-no' : 'fr-ok', 'لم يُسجَّل حضورهم اليوم', d.notYet)],
+      return card('حلقاتي', [row('fr-plain', 'الطلاب المنتظمون', d.on.length), att, row(d.notYet ? 'fr-no' : 'fr-ok', 'لم يُسجَّل حضورهم اليوم', d.notYet)],
         [row('fr-info', 'تسميع اليوم', d.recT), row('fr-plain', 'غياب هذا الشهر', d.absM), ...(T.length ? [row('fr-info', 'بانتظار موافقة النقل', T.length)] : [])]);
     }
     if (r === 'supervisor') {
       const ab = ((db.payroll || {}).absences || []).filter(a => String(a.date || '').startsWith(d.mon)).length;
-      return card('حلقاتي', [row('fr-plain', 'الحلقات', d.H.length), row('fr-plain', 'الطلاب', d.on.length), row('fr-no', 'منقطع', d.S.length - d.on.length), att],
+      return card('حلقاتي', [row('fr-plain', 'الحلقات', d.H.length), row('fr-plain', 'الطلاب المنتظمون', d.on.length), att],
         [row(d.halDone < d.H.length ? 'fr-no' : 'fr-ok', 'حلقات سُجّل حضورها اليوم', `${d.halDone} من ${d.H.length}`), row('fr-info', 'تسميع اليوم', d.recT), row('fr-plain', 'غياب المعلمين هذا الشهر', ab), row(wait ? 'fr-no' : 'fr-ok', 'طلبات نقل بانتظار موافقتك', wait)]);
     }
     /* الإداري */
     const pl = new Set(d.H.map(h => h.placeId).filter(Boolean)).size;
-    return card('نطاقي', [row('fr-plain', 'الأماكن', pl), row('fr-plain', 'الحلقات', d.H.length), row('fr-plain', 'الطلاب', d.on.length), row('fr-no', 'منقطع', d.S.length - d.on.length)],
+    return card('نطاقي', [row('fr-plain', 'الأماكن', pl), row('fr-plain', 'الحلقات', d.H.length), row('fr-plain', 'الطلاب المنتظمون', d.on.length)],
       [att, row(d.halDone < d.H.length ? 'fr-no' : 'fr-ok', 'حلقات سُجّل حضورها اليوم', `${d.halDone} من ${d.H.length}`), row('fr-info', 'تسميع اليوم', d.recT), ...(T.length ? [row(wait ? 'fr-no' : 'fr-info', 'طلبات النقل', T.length)] : [])]);
   }
 
@@ -171,6 +172,9 @@
       if (typeof h !== 'string') return h;
       const t = document.createElement('template'); t.innerHTML = h;
       [...t.content.children].filter(c => c.classList.contains('card') && !c.classList.contains('qnhome') && [...c.children].some(x => x.tagName === 'H2' && x.textContent.trim() === 'الإعلانات')).forEach(c => c.remove());
+      /* «الحلقات والطلاب»: الطلاب المنتظمون وحدهم، والمعلمون العاملون وحدهم */
+      const SET = { 'المعلمون': ['المعلمون العاملون', (db.teachers || []).filter(x => (x.admin || {}).status !== 'موقوف').length], 'الطلاب': ['الطلاب المنتظمون', db.students.filter(x => !stOff(x)).length] };
+      t.content.querySelectorAll('.qdashcard .feerow').forEach(f => { const sp = f.querySelector('span'), b = f.querySelector('b'), v = sp && SET[sp.textContent.trim()]; if (v && b) { sp.textContent = v[0]; b.textContent = v[1]; } });
       return box('admin') + t.innerHTML;
     };
   });
