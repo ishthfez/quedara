@@ -12,6 +12,8 @@
    أزرارها كلها في تبويب «الاستيراد».
    «تعديل الخصومات» (disc-setup.js) و«مطابقة الاشتراكات مع كشف الإيراد» (fee-match.js) ليسا استيرادًا: يُخفيان من بطاقة الاستيراد
    ويظهران في تبويب «الاشتراكات» في بطاقة «أدوات الاشتراكات» (معالجاهما الأصليان يعملان من أي مكان).
+   نافذة «إعدادات الاشتراك» (fees.js): جدول الخصومات العريض يصير صفوفًا مختصرة، لكل خصم بطاقة: الاسم وزر الحذف، ثم النوع
+   والقيمة بوحدتها (% أو جنيه) و«لكل طالب». تُنقل خانات الجدول نفسها (لا نسخ منها) فيبقى الحفظ والحذف في fees.js كما هما.
    ملف الطالب (قسم «الاشتراك» الذي يضيفه app-abs.js): المستحق بعد الخصم وبجانبه قبله مشطوبًا، وصف «الخصم» بقائمة تعيّنه مباشرة
    (معالج data-fdisc في fees.js)، وزر «سجل الدفعات» (من حصّلها وملاحظتها والحذف، log في fees.js) بجانب «سجل الاشتراكات». */
 (() => {
@@ -28,7 +30,14 @@
   css.textContent = `html.qfs-adm main [data-fee-cfg]:not(.qkeep),html.qfs-adm main [data-fee-bulk]:not(.qkeep){display:none!important}
     .qfs .bar{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.3rem 0 .6rem}
     .qfs .bar select{width:auto;max-width:18rem;margin:0}
-    .qimp [data-disc-setup],.qimp [data-fee-match]{display:none!important}`;
+    .qimp [data-disc-setup],.qimp [data-fee-match]{display:none!important}
+    .qdiscs{display:flex;flex-direction:column;gap:.5rem}
+    .qdisc{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem .9rem;padding:.55rem .65rem;border:1px solid var(--line,#e6dfcf);border-radius:10px;background:var(--card,#fff)}
+    .qdisc .qd1{display:flex;align-items:center;gap:.5rem;flex:1 1 15rem;min-width:0}.qdisc .qd1 input{flex:1 1 auto;min-width:0;width:auto!important;margin:0}
+    .qdisc .qd2{display:flex;align-items:center;gap:.5rem .8rem;flex-wrap:wrap}.qdisc select{width:auto;margin:0}
+    .qdisc .qdv{display:inline-flex;align-items:center;gap:.3rem}.qdisc .qdv input{width:6rem!important;margin:0}
+    .qdisc .qdeach{display:inline-flex;align-items:center;gap:.3rem;margin:0;font-size:.9rem;white-space:nowrap;cursor:pointer}.qdisc .qdeach input{width:auto;margin:0}
+    @media (min-width:601px){.qdisc .qd1{display:contents}.qdisc .qd1 input{flex:1 1 12rem}.qdisc .qd2{order:2}.qdisc [data-ddel]{order:3;margin-inline-start:auto}}`;
   document.head.appendChild(css);
   new MutationObserver(() => document.documentElement.classList.toggle('qfs-adm', isAdm())).observe(document.getElementById('app') || document.body, { childList: true });
 
@@ -103,6 +112,33 @@
     else return;
     render();
   });
+
+  /* ===== «إعدادات الاشتراك»: الخصومات صفوف مختصرة بدل الجدول ===== */
+  const unitOf = sel => (sel?.value === 'amt' ? 'جنيه' : '%');
+  function compactDiscs(root) {
+    root.querySelectorAll('table').forEach(tbl => {
+      const head = [...(tbl.rows[0]?.cells || [])].map(c => c.textContent.trim()).join('|');
+      if (head !== 'الاسم|النوع|القيمة|لكل طالب|') return;
+      const box = document.createElement('div'); box.className = 'qdiscs';
+      [...tbl.rows].slice(1).forEach(tr => {
+        const name = tr.querySelector('[data-d="name"]');
+        if (!name) { const p = document.createElement('p'); p.className = 'muted'; p.style.margin = '0'; p.textContent = tr.textContent.trim(); box.appendChild(p); return; }
+        const type = tr.querySelector('[data-d="type"]'), val = tr.querySelector('[data-d="value"]'), each = tr.querySelector('[data-each]'), del = tr.querySelector('[data-ddel]');
+        [...type.options].forEach(o => { o.textContent = o.value === 'amt' ? 'مبلغ ثابت' : 'نسبة'; });
+        name.placeholder = 'اسم الخصم'; name.setAttribute('aria-label', 'اسم الخصم'); type.setAttribute('aria-label', 'نوع الخصم'); val.setAttribute('aria-label', 'قيمة الخصم');
+        const row = document.createElement('div'); row.className = 'qdisc';
+        const d1 = document.createElement('div'); d1.className = 'qd1'; d1.append(name, del);
+        const d2 = document.createElement('div'); d2.className = 'qd2';
+        const v = document.createElement('span'); v.className = 'qdv'; const u = document.createElement('span'); u.className = 'muted'; u.textContent = unitOf(type); v.append(val, u);
+        const lab = document.createElement('label'); lab.className = 'qdeach'; lab.append(each, ' لكل طالب'); each.removeAttribute('aria-label');
+        d2.append(type, v, lab); row.append(d1, d2); box.appendChild(row);
+      });
+      (tbl.closest('.tbl') || tbl).replaceWith(box);
+    });
+  }
+  new MutationObserver(ms => { if (ms.some(m => m.addedNodes.length)) document.querySelectorAll('body > .overlay').forEach(ov => { try { compactDiscs(ov); } catch (e) { console.error('discs:', e); } }); })
+    .observe(document.body, { childList: true, subtree: true });
+  document.addEventListener('change', e => { const t = e.target; if (t.matches?.('.qdisc [data-d="type"]')) { const u = t.closest('.qdisc').querySelector('.qdv .muted'); if (u) u.textContent = unitOf(t); } });
 
   /* ===== ملف الطالب: الخصم والمستحق قبل الخصم وسجل الدفعات ===== */
   let cardSid = null;
