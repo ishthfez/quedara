@@ -21,8 +21,7 @@
   const ST = 'main > .card .tbl td ', W = '.qatt ';
   const ITEMS = [
     ['page', 'عرض صفحة «الطلاب» لهذه الفئة (بدل صفحاتها للطلاب والحضور)', 'الصفحة', [], '', 'flag'],
-    ['subnav', 'شريط تبويبات الصفحة (الطلاب / الاشتراكات / تحصيل المعلمين)', 'الصفحة', [A], 'main .subnav', 'hide'],
-    ['tfees', 'تبويب «الاشتراكات»', 'الصفحة', [A], 'main .subnav [data-svw="fees"]', 'hide'],
+    ['subnav', 'شريط تبويبات الصفحة (الطلاب / الحضور / تحصيل المعلمين)', 'الصفحة', [A], 'main .subnav', 'hide'],
     ['tcol', 'تبويب «تحصيل المعلمين»', 'الصفحة', [A], 'main .subnav [data-svw="tcollect"]', 'hide'],
     ['sum', 'بطاقة الاشتراكات كلها', 'بطاقة الاشتراكات', [A], 'main .feecard', 'hide'],
     ['month', 'اختيار شهر الاشتراكات', 'بطاقة الاشتراكات', [A], 'main .feecard [data-fmonth]', 'hide'],
@@ -272,5 +271,15 @@
   }
   let raf = 0;
   new MutationObserver(() => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; try { apply(); } catch (e) { /* ignore */ } }); }).observe(document.body, { childList: true, subtree: true });
+  /* تبويب «الاشتراكات» في «الطلاب» (للمدير) حُذف: محتواه في الرئيسية وعمود المستحق وملف الطالب والإعدادات */
+  /* يُركَّب بعد DOMContentLoaded: nav.js يعرّف adminViews.students عنده */
+  document.addEventListener('DOMContentLoaded', () => {
+    const baseStu = adminViews.students; if (!baseStu) return;
+    adminViews.students = function () {
+      if (ui.svw === 'fees') ui.svw = 'list';
+      const h = baseStu.apply(this, arguments);
+      return typeof h === 'string' ? h.replace(/<button[^>]*data-svw="fees"[^>]*>[^<]*<\/button>/, '') : h;
+    };
+  });
   window.QLStuPerm = { ITEMS, can: k => { const it = ITEMS.find(i => i[0] === k); return it ? myOn(it) : true; } };
 })();
