@@ -39,7 +39,9 @@
     const places = {};
     Object.entries(c?.places && typeof c.places === 'object' ? c.places : {}).forEach(([k, v]) => {
       const g = isNum(v?.general) ? +v.general : null, g3 = isNum(v?.general3) ? +v.general3 : null;
-      if (g != null || g3 != null) places[k] = { general: g, general3: g3 };
+      /* مبالغ فئات المكان { معرف الفئة: المبلغ } (من «اشتراك المكان» في «الأماكن والحلقات») */
+      const cats = {}; Object.entries(v?.cats && typeof v.cats === 'object' ? v.cats : {}).forEach(([id, a]) => { if (isNum(a)) cats[id] = +a; });
+      if (g != null || g3 != null || Object.keys(cats).length) places[k] = { general: g, general3: g3, ...(Object.keys(cats).length ? { cats } : {}) };
     });
     return { cats: Array.isArray(c?.cats) ? c.cats : [], general: isNum(c?.general) ? +c.general : null, general3: isNum(c?.general3) ? +c.general3 : null, places };
   };
@@ -65,7 +67,9 @@
     }
     /* الاشتراك العام بنظامي الحضور: general = نظام 6 أيام (الافتراضي)، general3 = نظام 3 أيام */
     /* places: مبالغ تختلف حسب المكان { معرف المكان: { general, general3 } }، والفارغ يأخذ العام */
-    return { ...amountsOf(c), discs };
+    /* placeDiscs: قيم خصومات تختلف حسب المكان { معرف المكان: { معرف الخصم: القيمة } }، والفارغ يأخذ قيمة الخصم العامة */
+    const placeDiscs = c.placeDiscs && typeof c.placeDiscs === 'object' ? c.placeDiscs : {};
+    return { ...amountsOf(c), discs, placeDiscs };
   };
   const discTxt = (d, v, t) => ((t || d.type) === 'amt' ? money(v) + ' جنيه' : v + '%');
   const discLabel = d => (d.each ? `${d.name} (يُحدَّد لكل طالب)` : `${d.name} (${discTxt(d, d.value)})`);
@@ -73,13 +77,14 @@
   function dueOf(s, y, m) {
     const I = s?.info || {}, C = y == null ? cfg(st.y, st.m) : cfg(+y, m ?? defM(+y));
     let base = null, src = '';
+    const pid = halOf(s)?.placeId, P = (pid && C.places[pid]) || {}, PD = (pid && C.placeDiscs?.[pid]) || {};
     if (isNum(I.fee) && +I.fee > 0) { base = +I.fee; src = 'مبلغ خاص'; }
     else {
       const c = C.cats.find(x => x.id === I.feeCat) || C.cats.find(x => x.def === (s.cat === 'adult' ? 'adult' : 'child'));
-      if (c) { base = +c.amount || 0; src = c.name; }
+      /* مبلغ الفئة: مبلغ مكان الطالب لها إن حُدّد، وإلا مبلغها العام */
+      if (c) { const own = isNum(P.cats?.[c.id]); base = own ? +P.cats[c.id] : (+c.amount || 0); src = c.name + (own ? ` (${placeName(halOf(s)) || 'المكان'})` : ''); }
       else {
         /* الاشتراك العام: مبلغ مكان الطالب إن حُدّد له مبلغ خاص، وإلا المبلغ العام */
-        const pid = halOf(s)?.placeId, P = (pid && C.places[pid]) || {};
         const g6 = P.general ?? C.general, g3 = P.general3 ?? C.general3, three = I.feeSys === '3';
         if (g6 != null || g3 != null) {
           base = three ? (g3 ?? g6) : g6;
@@ -92,7 +97,8 @@
     const d = C.discs.find(x => x.id === I.feeDisc);
     let off = 0, dl = '';
     if (d) {
-      const own = isNum(I.feeDiscVal), v = own ? +I.feeDiscVal : (d.each ? 0 : +d.value || 0), t = own ? (I.feeDiscType || d.type) : d.type;
+      /* القيمة: الخاصة بالطالب، وإلا قيمة المكان لهذا الخصم، وإلا القيمة العامة («لكل طالب» لا قيمة عامة له) */
+      const own = isNum(I.feeDiscVal), v = own ? +I.feeDiscVal : (d.each ? 0 : isNum(PD[d.id]) ? +PD[d.id] : +d.value || 0), t = own ? (I.feeDiscType || d.type) : d.type;
       off = Math.min(base, Math.max(0, t === 'amt' ? v : base * v / 100));
       dl = d.each && !own ? `${d.name} (لم تُحدَّد قيمته)` : `${d.name} (${discTxt(d, v, t)})`;
     }
@@ -340,11 +346,11 @@
       const g = ov.querySelector('[data-general]'); if (g) C.general = g.value === '' ? null : +g.value;
       const g3 = ov.querySelector('[data-general3]'); if (g3) C.general3 = g3.value === '' ? null : +g3.value;
       if (ov.querySelector('[data-pg]')) {
-        C.places = {};
+        const prev = C.places || {}; C.places = {};
         ov.querySelectorAll('[data-pg]').forEach(x => {
-          const id = x.dataset.pg, y = ov.querySelector(`[data-pg3="${id}"]`);
+          const id = x.dataset.pg, y = ov.querySelector(`[data-pg3="${id}"]`), pc = prev[id]?.cats;   // مبالغ فئات المكان تبقى كما هي
           const a = x.value === '' ? null : +x.value, b = !y || y.value === '' ? null : +y.value;
-          if (a != null || b != null) C.places[id] = { general: a, general3: b };
+          if (a != null || b != null || pc) C.places[id] = { general: a, general3: b, ...(pc ? { cats: pc } : {}) };
         });
       }
       ov.querySelectorAll('[data-c]').forEach(x => { C.cats[+x.dataset.i][x.dataset.c] = x.dataset.c === 'amount' ? (x.value === '' ? '' : +x.value) : x.value.trim(); });
@@ -402,11 +408,80 @@
         Object.entries(stash).filter(([k]) => !dropped.has(k)).forEach(([y, V]) => { years[y] = { general: V.general, general3: V.general3, places: V.places || {}, cats: (V.cats || []).map(c => ({ ...c, amount: +c.amount })) }; });
         if (!pKeys(years).length) years[yNow] = baseNow;
         const cur = amountsOf(pickYear(years, yNow, mNow) || {});
-        db.settings.priv_fees = { v: 3, general: cur.general, general3: cur.general3, places: cur.places, cats: cur.cats, years, discs: C.discs.map(d => ({ ...d, value: d.each ? 0 : +d.value, each: !!d.each })) };
+        const keepPD = (db.settings.priv_fees || {}).placeDiscs;   // قيم خصومات الأماكن («اشتراك المكان»)
+        db.settings.priv_fees = { v: 3, general: cur.general, general3: cur.general3, places: cur.places, cats: cur.cats, years, discs: C.discs.map(d => ({ ...d, value: d.each ? 0 : +d.value, each: !!d.each })), ...(keepPD ? { placeDiscs: keepPD } : {}) };
         ov.remove(); save(); render(); toast('حُفظت إعدادات الاشتراك');
       }
     });
   }
+  /* ===== «اشتراك المكان» (من المكان في «الأماكن والحلقات»): مبالغ المكان لكل الفئات وقيم الخصومات =====
+     القائمة نفسها لكل الأماكن (الاشتراك العام بنظاميه، والفئات، والخصومات)، ولكل مكان مبلغه أو قيمته، والفارغ يأخذ العام.
+     المبالغ لكل فترة (تغيير المبلغ ابتداءً من شهر، كما في «إعدادات الاشتراك»)، وقيم الخصومات واحدة لكل الفترات. */
+  function placeDialog(pid) {
+    const pl = byId(db.places, pid); if (!pl) return;
+    const yNow = +today().slice(0, 4), mNow = +today().slice(5, 7);
+    const F0 = db.settings.priv_fees || {}, years0 = JSON.parse(JSON.stringify(yearsOf())), baseNow = JSON.parse(JSON.stringify(amountsOf(F0)));
+    const live = () => (pKeys(years0).length ? years0 : { [String(yNow)]: baseNow });
+    const keys = pKeys(live());
+    let curK = pickKey(live(), yNow, mNow) || keys[0];
+    const stash = {};   // مبالغ المكان لكل فترة عُدّلت هنا
+    const discs = cfgBase().discs.filter(d => !d.each);
+    const PD = { ...((F0.placeDiscs || {})[pid] || {}) };
+    const per = k => amountsOf(live()[k] || {});
+    const mine = k => { if (stash[k]) return stash[k]; const P = per(k).places[pid] || {}; return { general: P.general ?? null, general3: P.general3 ?? null, cats: { ...(P.cats || {}) } }; };
+    const num = v => (v == null || v === '' ? '' : esc(v));
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    const draw = () => {
+      const A = per(curK), M = mine(curK);
+      ov.innerHTML = `<div class="modal wide"><h2>اشتراك المكان: ${esc(pl.name)}</h2>
+        <p class="muted" style="font-size:.85rem;margin:0 0 .6rem">اكتب ما يختلف في هذا المكان فقط، واترك الباقي فارغًا فيأخذ المبلغ أو القيمة العامة (الظاهرة باهتة في الخانة). ينطبق على كل طلاب حلقات المكان، ومبلغ الطالب الخاص أو قيمة خصمه الخاصة تتقدّم عليه.</p>
+        ${keys.length > 1 ? `<label style="max-width:20rem">المبالغ<select data-plpk>${keys.map(k => `<option value="${k}" ${k === curK ? 'selected' : ''}>${pLabel(k)}</option>`).join('')}</select></label>` : ''}
+        <h3 style="font-size:1rem;margin:.4rem 0">الاشتراك العام ${keys.length > 1 ? pLabel(curK) : ''}</h3>
+        <div class="two" style="max-width:30rem"><label style="margin:0 0 .3rem">نظام 6 أيام (جنيه)<input type="number" min="0" step="any" data-plg value="${num(M.general)}" placeholder="${num(A.general)}"></label>
+          <label style="margin:0 0 .3rem">نظام 3 أيام (جنيه)<input type="number" min="0" step="any" data-plg3 value="${num(M.general3)}" placeholder="${num(A.general3)}"></label></div>
+        ${A.cats.length ? `<h3 style="font-size:1rem;margin:.8rem 0 .4rem">الفئات</h3><div class="tbl"><table><tr><th class="qnm">الفئة</th><th>العام</th><th>لهذا المكان (جنيه)</th></tr>
+          ${A.cats.map(c => `<tr><td class="qnm">${esc(c.name)}</td><td>${money(c.amount)}</td><td><input type="number" min="0" step="any" data-plc="${esc(c.id)}" value="${num(M.cats[c.id])}" placeholder="${num(c.amount)}" style="width:7rem"></td></tr>`).join('')}</table></div>` : ''}
+        ${discs.length ? `<h3 style="font-size:1rem;margin:.8rem 0 .4rem">الخصومات والإعفاءات</h3><div class="tbl"><table><tr><th class="qnm">الخصم</th><th>العام</th><th>لهذا المكان</th></tr>
+          ${discs.map(d => `<tr><td class="qnm">${esc(d.name)}</td><td>${discTxt(d, d.value)}</td><td><input type="number" min="0" step="any" data-pld="${esc(d.id)}" value="${num(PD[d.id])}" placeholder="${num(d.value)}" style="width:6rem"> ${d.type === 'amt' ? 'جنيه' : '%'}</td></tr>`).join('')}</table></div>
+          <p class="muted" style="font-size:.82rem;margin:.3rem 0 0">قيم الخصومات واحدة لكل الفترات. الخصم الذي «يُحدَّد لكل طالب» لا يظهر هنا.</p>` : ''}
+        <p class="muted" style="font-size:.82rem;margin:.6rem 0 0">لتغيير المبالغ ابتداءً من شهر بعينه: «إعدادات الاشتراك» ← «+ تغيير المبلغ ابتداءً من شهر…»، ثم تعود هنا لمبالغ المكان في الفترة الجديدة.</p>
+        <div class="row"><button type="button" class="btn primary" data-plsave>حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
+    };
+    const val = x => (x.value === '' ? null : +x.value);
+    const read = () => {
+      const M = { general: val(ov.querySelector('[data-plg]')), general3: val(ov.querySelector('[data-plg3]')), cats: {} };
+      ov.querySelectorAll('[data-plc]').forEach(x => { if (x.value !== '') M.cats[x.dataset.plc] = +x.value; });
+      stash[curK] = M;
+      ov.querySelectorAll('[data-pld]').forEach(x => { if (x.value === '') delete PD[x.dataset.pld]; else PD[x.dataset.pld] = +x.value; });
+    };
+    draw(); document.body.appendChild(ov);
+    ov.addEventListener('change', e => { if (e.target.matches('[data-plpk]')) { read(); curK = e.target.value; draw(); } });
+    ov.addEventListener('click', e => {
+      if (e.target.closest('[data-close]')) { ov.remove(); return; }
+      if (!e.target.closest('[data-plsave]')) return;
+      read();
+      const bad = x => x != null && (!isNum(x) || x < 0);
+      for (const [k, M] of Object.entries(stash)) if ([M.general, M.general3, ...Object.values(M.cats)].some(bad)) { toast(`مبلغ غير صحيح (${pLabel(k)})`); return; }
+      if (Object.values(PD).some(bad)) { toast('قيمة خصم غير صحيحة'); return; }
+      if (discs.some(d => d.type !== 'amt' && +PD[d.id] > 100)) { toast('نسبة الخصم لا تزيد على 100%'); return; }
+      /* المبالغ في كل فترة عُدّلت؛ وأول مرة تُثبَّت مبالغ هذه السنة كما كانت حتى لا تتغير مستحقاتها */
+      const years = JSON.parse(JSON.stringify(live()));
+      Object.entries(stash).forEach(([k, M]) => {
+        const Y = years[k] = years[k] || {}; Y.places = Y.places && typeof Y.places === 'object' ? Y.places : {};
+        const has = M.general != null || M.general3 != null || Object.keys(M.cats).length;
+        if (has) Y.places[pid] = { general: M.general, general3: M.general3, ...(Object.keys(M.cats).length ? { cats: M.cats } : {}) }; else delete Y.places[pid];
+      });
+      const cur = amountsOf(pickYear(years, yNow, mNow) || {});
+      const pds = { ...(F0.placeDiscs || {}) }; if (Object.keys(PD).length) pds[pid] = PD; else delete pds[pid];
+      db.settings.priv_fees = { ...F0, v: 3, general: cur.general, general3: cur.general3, places: cur.places, cats: cur.cats, years, placeDiscs: pds };
+      ov.remove(); save(); render(); toast(`حُفظ اشتراك «${pl.name}»`);
+    });
+  }
+  /* هل للمكان مبالغ أو قيم خاصة (في الفترة السارية الآن أو أي فترة) */
+  const placeHas = pid => { const F = db.settings.priv_fees || {}; return !!(F.placeDiscs?.[pid] && Object.keys(F.placeDiscs[pid]).length) || Object.values(yearsOf()).some(Y => Y?.places?.[pid]) || !!F.places?.[pid]; };
+  window.QLFeePlace = { open: placeDialog, has: placeHas, can: () => can('fees.amount') };
+  document.addEventListener('click', e => { const b = e.target.closest('[data-fee-place]'); if (b && can('fees.amount')) placeDialog(b.dataset.feePlace); });
+
   /* ===== تعيين الفئة والخصم لطالب أو لكل نتائج البحث ===== */
   function assignDialog(list) {
     if (!list.length) { toast('لا يوجد طلاب في النتائج'); return; }

@@ -6,6 +6,8 @@
 --   - fee_due_ym(طالب، سنة، شهر): المستحق عن شهر بعينه.
 --   - fee_due_y(طالب، سنة) كما كانت لمن يستدعيها: شهر السنة الحالية الجاري، وديسمبر لما قبلها، ويناير لما بعدها.
 --   - staff_fees(سنة، شهر): مستحقات طلاب حلقات العامل عن الشهر المختار (stuview.js).
+--   - مبالغ المكان (places في كل فترة): الاشتراك العام بنظاميه، ومبلغ كل فئة (cats داخل المكان)؛
+--     وقيم خصومات المكان (placeDiscs: { المكان: { الخصم: القيمة } }) واحدة لكل الفترات. الفارغ يأخذ العام.
 --  يُنفَّذ بعد fees_staff.sql، مرة واحدة في Supabase ← SQL Editor ← Run. آمن للتكرار.
 -- =====================================================================
 
@@ -19,7 +21,7 @@ $$;
 create or replace function public.fee_due_ym(s public.members, yy int, mm int) returns numeric
 language plpgsql stable security definer set search_path = public as $$
 declare cfg jsonb := coalesce((select value from settings where key = 'priv_fees'), '{}'); i jsonb := coalesce(s.info, '{}');
-        yc jsonb; base numeric; c jsonb; d jsonb; v numeric; t text; off numeric := 0; g text; p jsonb; o int;
+        yc jsonb; base numeric; c jsonb; d jsonb; v numeric; t text; off numeric := 0; g text; p jsonb; o int; pid text;
 begin
   yy := coalesce(yy, extract(year from current_date)::int);
   mm := least(12, greatest(1, coalesce(mm, extract(month from current_date)::int)));
@@ -30,13 +32,17 @@ begin
     if yc is null then select value into yc from jsonb_each(cfg->'years') where public.fee_period_ord(key) is not null order by public.fee_period_ord(key) limit 1; end if;
   end if;
   yc := coalesce(yc, cfg);
+  pid := (select h.place_id::text from halaqat h where h.id = s.halaqa_id);
+  p := yc -> 'places' -> pid;
   if coalesce(i->>'fee', '') ~ '^[0-9]+(\.[0-9]+)?$' and (i->>'fee')::numeric > 0 then base := (i->>'fee')::numeric;
   else
     select x into c from jsonb_array_elements(coalesce(yc->'cats', '[]')) x where x->>'id' = i->>'feeCat' limit 1;
     if c is null then select x into c from jsonb_array_elements(coalesce(yc->'cats', '[]')) x where x->>'def' = (case when s.cat = 'adult' then 'adult' else 'child' end) limit 1; end if;
-    if c is not null then base := coalesce(nullif(c->>'amount', '')::numeric, 0);
+    /* مبلغ الفئة: مبلغ مكان الطالب لها إن حُدّد، وإلا مبلغها العام */
+    if c is not null then
+      if coalesce(p->'cats'->>(c->>'id'), '') ~ '^[0-9]+(\.[0-9]+)?$' then base := (p->'cats'->>(c->>'id'))::numeric;
+      else base := coalesce(nullif(c->>'amount', '')::numeric, 0); end if;
     else
-      p := yc -> 'places' -> (select h.place_id::text from halaqat h where h.id = s.halaqa_id);
       g := case when i->>'feeSys' = '3'
                 then coalesce(p->>'general3', yc->>'general3', p->>'general', yc->>'general')
                 else coalesce(p->>'general', yc->>'general') end;
@@ -47,7 +53,10 @@ begin
   select x into d from jsonb_array_elements(coalesce(cfg->'discs', '[]')) x where x->>'id' = i->>'feeDisc' limit 1;
   if d is not null then
     if coalesce(i->>'feeDiscVal', '') ~ '^[0-9]+(\.[0-9]+)?$' then v := (i->>'feeDiscVal')::numeric; t := coalesce(nullif(i->>'feeDiscType', ''), d->>'type');
-    else v := case when coalesce((d->>'each')::boolean, false) then 0 else coalesce(nullif(d->>'value', '')::numeric, 0) end; t := d->>'type'; end if;
+    /* القيمة: الخاصة بالطالب، وإلا قيمة المكان لهذا الخصم، وإلا القيمة العامة */
+    elsif coalesce((d->>'each')::boolean, false) then v := 0; t := d->>'type';
+    elsif coalesce(cfg->'placeDiscs'->pid->>(d->>'id'), '') ~ '^[0-9]+(\.[0-9]+)?$' then v := (cfg->'placeDiscs'->pid->>(d->>'id'))::numeric; t := d->>'type';
+    else v := coalesce(nullif(d->>'value', '')::numeric, 0); t := d->>'type'; end if;
     off := least(base, greatest(0, case when t = 'amt' then v else base * v / 100 end));
   end if;
   return round(base - off, 2);

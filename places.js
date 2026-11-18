@@ -5,6 +5,7 @@
    - التعديل الجماعي في «كل الحلقات»: تحديد عدة حلقات ثم تعيين مشرف لها، أو نسخ وقت حلقة إليها.
    - أدوات (تنظيف الحلقات، تقسيم بملف، توزيع بالنص) في زر واحد «أدوات».
    - للمدير فقط؛ قسم المحاسب المبني على هذه الصفحة يبقى كما كان.
+   - «اشتراك المكان» بجانب «تعديل المكان»: مبالغ المكان لكل الفئات وقيم الخصومات (النافذة في fees.js، والعلامة «خاص» إن كان له شيء منها).
    يُحمَّل بعد ملفات الأدوات (links، cleanup، distribute، split) وقبل nav.js و app-actions.js. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./places.js')) VFILES.push('./places.js'); } catch (e) { /* ignore */ } });
@@ -60,7 +61,7 @@
           <div style="flex:1;min-width:0"><b>${esc(p ? p.name : 'حلقات لم يُحدَّد مكانها')}</b> ${p ? `<span class="tag">${esc(p.type)}</span>` : ''}${bad ? ` <span class="tag tag-no">${bad} تحتاج إجراء</span>` : ''}
             <div class="muted" style="font-size:.85rem">${all.length} حلقة · ${all.reduce((a, h) => a + stuN(h), 0)} طالب · ${esc(sups.join('، ') || 'بلا مشرف')}</div></div>
           <span class="plchev" aria-hidden="true">${isOpen ? '▴' : '▾'}</span></div>
-        ${isOpen ? `${p ? `<div class="bar" style="margin:.6rem 0">${p.address ? `<span class="muted grow">${esc(p.address)}</span>` : '<span class="grow"></span>'}<button class="btn sm primary" data-act="addHalaqa" data-p="${p.id}">+ حلقة هنا</button><button class="btn sm" data-act="editPlace" data-id="${p.id}">تعديل المكان</button><button class="btn sm danger" data-act="delPlace" data-id="${p.id}">حذف المكان</button></div>` : ''}
+        ${isOpen ? `${p ? `<div class="bar" style="margin:.6rem 0">${p.address ? `<span class="muted grow">${esc(p.address)}</span>` : '<span class="grow"></span>'}<button class="btn sm primary" data-act="addHalaqa" data-p="${p.id}">+ حلقة هنا</button><button class="btn sm" data-act="editPlace" data-id="${p.id}">تعديل المكان</button>${window.QLFeePlace?.can() ? `<button class="btn sm" data-fee-place="${p.id}">اشتراك المكان${window.QLFeePlace.has(p.id) ? ' <span class="tag tag-ok">خاص</span>' : ''}</button>` : ''}<button class="btn sm danger" data-act="delPlace" data-id="${p.id}">حذف المكان</button></div>` : ''}
           ${list.length ? table(list, [C.name, C.sup, C.time, C.n]) : empty('لا توجد حلقات في هذا المكان بعد.')}` : ''}</div>`;
     }).join('');
     return out || `<div class="card">${empty('لا توجد حلقات تطابق البحث.')}</div>`;
