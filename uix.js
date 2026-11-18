@@ -4,7 +4,8 @@
    2) قوائم الأشهر (كل قائمة خياراتها «سنة-شهر»، أينما كانت): تبدأ من أول شهر فيه بيانات، وما قبله لا يُعرض.
    3) «عدادات الرئيسية» (في «الإعدادات»، للمدير): يختار لكل فئة العدادات التي تظهر لها في «الرئيسية».
       يُحفظ مع الصلاحيات (priv_perms.roles[الفئة]['ui.home.hide.اسم العداد'] = true)، فيصل كل مستخدم ما يخصه من الخادم
-      عبر my_perms كبقية الصلاحيات، بلا تعديل على الخادم. للعرض فقط. */
+      عبر my_perms كبقية الصلاحيات، بلا تعديل على الخادم. للعرض فقط.
+   4) جدول «الطلاب» على الهاتف: بطاقة لكل طالب (الاسم والأزرار، ثم الحلقة والحالة، ثم آخر حفظ). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./uix.js')) VFILES.push('./uix.js'); } catch (e) { /* ignore */ } });
 
@@ -110,17 +111,78 @@
     };
   });
 
+  /* ===== 4) جدول «الطلاب» على الهاتف: بطاقة لكل طالب =====
+     السطر الأول: الاسم وأزرار الصف بجانبه، ثم «الحلقة · الحالة»، ثم «آخر حفظ».
+     تُبنى من صفوف الجدول نفسه بعد تطبيق «صلاحيات صفحة الطلاب» (stuperm.js): العمود المخفي لا يظهر، والزر المخفي لا يُنسخ،
+     و«يظهر بلا ضغط» يبقى كذلك. الجدول يبقى للحاسوب وللطباعة والتنزيل. */
+  const NARROW = () => window.matchMedia('(max-width:640px)').matches;
+  const hidden = el => !el || getComputedStyle(el).display === 'none' || el.style.display === 'none';
+  const cloneLive = el => {   // نسخة تحمل حالة «يظهر بلا ضغط» كما هي في الجدول
+    const c = el.cloneNode(true), cs = getComputedStyle(el);
+    if (cs.pointerEvents === 'none') c.style.cssText += ';pointer-events:none;cursor:not-allowed;opacity:' + cs.opacity + ';filter:' + cs.filter;
+    return c;
+  };
+  function stuCards() {
+    if (!session || ui.tab !== 'students') return;
+    document.querySelectorAll('main .card .tbl > table').forEach(tbl => {
+      const head = tbl.rows[0]; if (!head) return;
+      const H = [...head.cells].map(c => c.textContent.trim()), ix = n => H.indexOf(n);
+      if (ix('الاسم') < 0 || (ix('الحلقة') < 0 && ix('الحالة') < 0)) return;
+      /* بصمة الجدول: تتغير متى أُضيف صف أو زر (بعض الملفات تحوّل الأزرار إلى أيقونات بعد العرض)، أو أُخفي عمود أو زر بالصلاحيات */
+      const r1 = tbl.rows[1], rN = tbl.rows[tbl.rows.length - 1];
+      const vis = r => (r ? [...r.querySelectorAll('td, td > *, button, select')].map(e => (hidden(e) ? 0 : 1)).join('') : '');
+      const wrap = tbl.parentElement, sig = [tbl.rows.length, H.join(','), r1?.innerHTML.length, rN?.innerHTML.length, vis(r1), (r1?.textContent || '').slice(0, 30)].join('|');
+      let box = wrap.nextElementSibling?.classList?.contains('qscards') ? wrap.nextElementSibling : null;
+      if (box && box.dataset.sig === sig) return;
+      if (!box) { box = document.createElement('div'); box.className = 'qscards'; wrap.after(box); }
+      box.dataset.sig = sig;
+      const cell = (r, n) => { const i = ix(n); const c = i > -1 ? r.cells[i] : null; return c && !hidden(c) ? c : null; };
+      const act = H.length - 1;   // عمود الأزرار بلا عنوان في آخر الصف
+      box.innerHTML = '';
+      [...tbl.rows].slice(1).forEach(r => {
+        if (!r.cells.length || r.classList.contains('sum')) return;
+        const nm = cell(r, 'الاسم'); if (!nm) return;
+        const card = document.createElement('div'); card.className = 'qsc';
+        const top = document.createElement('div'); top.className = 'qsc-t';
+        const name = document.createElement('div'); name.className = 'qsc-n'; [...nm.childNodes].forEach(n => name.appendChild(n.nodeType === 1 ? cloneLive(n) : n.cloneNode(true)));
+        const btns = document.createElement('div'); btns.className = 'qsc-a';
+        if (H[act] === '' && r.cells[act] && !hidden(r.cells[act])) [...r.cells[act].children].forEach(b => { if (!hidden(b)) btns.appendChild(cloneLive(b)); });
+        top.append(name, btns); card.appendChild(top);
+        const l2 = document.createElement('div'); l2.className = 'qsc-m';
+        const hal = cell(r, 'الحلقة'), st = cell(r, 'الحالة');
+        if (hal && hal.textContent.trim()) l2.append(document.createTextNode('حلقة ' + hal.textContent.trim().replace(/^حلقة\s+/, '')));
+        if (st) { if (l2.childNodes.length) l2.append(document.createTextNode(' · ')); [...st.childNodes].forEach(n => { if (n.nodeType !== 1 || !hidden(n)) l2.appendChild(n.nodeType === 1 ? cloneLive(n) : n.cloneNode(true)); }); }
+        if (l2.childNodes.length) card.appendChild(l2);
+        const hf = cell(r, 'آخر حفظ');
+        if (hf && hf.textContent.trim() && hf.textContent.trim() !== '—') { const l3 = document.createElement('div'); l3.className = 'qsc-m'; l3.textContent = 'آخر حفظ: ' + hf.textContent.trim().replace(/^سورة\s+/, ''); card.appendChild(l3); }
+        box.appendChild(card);
+      });
+    });
+  }
+
   const css = document.createElement('style');
   css.textContent = `.content .top .ttl{display:flex;align-items:center;gap:.5rem}.qttlico{display:inline-flex;flex:none}.qttlico svg{width:22px;height:22px}
-    .qhcl{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.1rem .8rem}.qhcl label{margin:.15rem 0}`;
+    .qhcl{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.1rem .8rem}.qhcl label{margin:.15rem 0}
+    .qscards{display:none}
+    @media (max-width:640px){
+      main .card .tbl:has(+ .qscards){display:none!important}
+      .qscards{display:block}
+      .qsc{padding:.6rem .15rem;border-top:1px solid var(--line,#eee6d6)}.qscards .qsc:first-child{border-top:0}
+      .qsc-t{display:flex;align-items:flex-start;gap:.5rem}.qsc-n{flex:1;min-width:0;font-weight:700}.qsc-n .who{gap:.45rem}
+      .qsc-a{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.3rem;max-width:58%}.qsc-a .btn{padding:.22rem .55rem!important;min-height:0!important;font-size:.8rem;margin:0!important}
+      .qsc-a .btn.qri svg{width:17px;height:17px}
+      .qsc-m{font-size:.85rem;color:var(--muted);margin-top:.25rem;line-height:1.6}.qsc-m .btn{padding:.05rem .5rem!important;min-height:0!important;font-size:.78rem;margin:0!important}
+    }`;
   document.head.appendChild(css);
 
-  const after = () => { try { titleIcon(); applyHome(); trimMonths(); } catch (e) { /* ignore */ } };
+  const after = () => { try { titleIcon(); applyHome(); trimMonths(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
   const baseRender = render;
   render = function () { const r = baseRender.apply(this, arguments); after(); return r; };
   /* النوافذ والقوائم التي تُفتح بعد العرض (نموذج الدفعة، كشف التحصيل…) */
   let q = false;
-  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { trimMonths(); titleIcon(); applyHome(); } catch (e) { /* ignore */ } }); })
+  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { trimMonths(); titleIcon(); applyHome(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
     .observe(document.body, { childList: true, subtree: true });
-  window.QLUix = { firstMonth, hiddenFor, CATS };
+  /* تكبير الشاشة أو تدويرها إلى العرض الضيق */
+  window.matchMedia('(max-width:640px)').addEventListener?.('change', e => { if (e.matches) after(); });
+  window.QLUix = { firstMonth, hiddenFor, CATS, stuCards };
 })();
