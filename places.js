@@ -3,7 +3,7 @@
    - شريط «يحتاج إجراء»: حلقات بلا مشرف، وفارغة، وبلا وقت، وبلا مكان، وأماكن بلا حلقات؛ كل رقم يعرض ما يخصه وحده.
    - ثلاث طرق عرض: حسب المكان (قائمة مختصرة، يُفتح مكان واحد في كل مرة)، وحسب المشرف، وكل الحلقات (جدول واحد).
    - التعديل الجماعي في «كل الحلقات»: تحديد عدة حلقات ثم تعيين مشرف لها، أو نسخ وقت حلقة إليها.
-   - أدوات (تنظيف الحلقات، تقسيم بملف، توزيع بالنص) في زر واحد «أدوات».
+   - اسم القسم «الحلقات». وأدواته (تنظيف الحلقات، تقسيم بملف، توزيع بالنص) للمدير وحده في «الإعدادات ← أدوات الحلقات».
    - للمدير فقط؛ قسم المحاسب المبني على هذه الصفحة يبقى كما كان.
    - «اشتراك المكان» بجانب «تعديل المكان»: مبالغ المكان لكل الفئات وقيم الخصومات (النافذة في fees.js، والعلامة «خاص» إن كان له شيء منها).
    - تنظيم الصفحة: البطاقة العلوية صفّان (الأعداد و«يحتاج إجراء» والقائمتان «أدوات» و«+ إضافة»، ثم العرض والبحث و«فتح/طي الكل»). رأس المكان أعداد وعلامات
@@ -17,10 +17,11 @@
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./places.js')) VFILES.push('./places.js'); } catch (e) { /* ignore */ } });
   const st = { v: 'place', f: '', open: new Set(), q: '', sel: new Set(), sup: '', src: '' };
   /* صلاحية «الأماكن والحلقات»: للمحاسبين افتراضيًا، ويسحبها المدير أو يمنحها من «الصلاحيات» */
-  try { Perms.define({ key: 'halaqat.manage', label: 'الأماكن والحلقات', desc: 'إضافة الأماكن والحلقات وتعديلها وحذفها وأدواتها (التنظيف والتقسيم والتوزيع)', group: 'الحلقات والطلاب', defaults: ['accountant'] }); } catch (e) { /* ignore */ }
+  try { Perms.define({ key: 'halaqat.manage', label: 'الحلقات', desc: 'إضافة الأماكن والحلقات وتعديلها (وحذفها بطلب يوافق عليه المدير)', group: 'الحلقات والطلاب', defaults: ['accountant'] }); } catch (e) { /* ignore */ }
   const canManage = () => session?.role === 'admin' || (session?.role === 'accountant' && !!window.Perms?.can('halaqat.manage'));
-  /* المحاسب: «الأماكن والحلقات» في قائمته (تُضاف قبل أن ترتّب nav.js وstuview.js القوائم) */
-  try { if (TABS.accountant && !TABS.accountant.some(t => t[0] === 'halaqat')) TABS.accountant.push(['halaqat', 'الأماكن والحلقات']); } catch (e) { /* ignore */ }
+  /* اسم القسم «الحلقات» (للمدير وللمحاسب)، قبل أن ترتّب nav.js وstuview.js القوائم */
+  try { (TABS.admin || []).forEach(t => { if (t[0] === 'halaqat') t[1] = 'الحلقات'; }); } catch (e) { /* ignore */ }
+  try { if (TABS.accountant && !TABS.accountant.some(t => t[0] === 'halaqat')) TABS.accountant.push(['halaqat', 'الحلقات']); } catch (e) { /* ignore */ }
   document.addEventListener('DOMContentLoaded', () => {
     const ro = VIEWS.accountant?.halaqat;
     if (VIEWS.accountant) VIEWS.accountant.halaqat = function () { return canManage() ? adminViews.halaqat() : (ro ? ro.apply(this, arguments) : adminViews.halaqat()); };
@@ -61,7 +62,6 @@
     /* صفّان فقط: (الأعداد ثم «يحتاج إجراء» في سطرها، والأدوات والإضافة) ثم (طريقة العرض والبحث و«فتح/طي الكل») */
     const need = chips || emptyPlaces ? `<span class="plneed"><span class="muted">يحتاج إجراء:</span>${chips}${emptyPlaces ? `<span class="tag">${emptyPlaces} مكان بلا حلقات</span>` : ''}${st.f ? '<button type="button" class="btn sm" data-plf="">عرض الكل</button>' : ''}</span>` : '<span class="plneed muted">كل الحلقات لها مشرف ووقت وطلاب ✓</span>';
     return `<div class="card plhdr"><div class="plrow"><span class="plsum"><span class="muted">${db.places.length} مكان · ${hs.length} حلقة · ${nSt} طالب</span>${need}</span>
-        <details class="pltools"><summary class="btn">أدوات</summary><div class="pltmenu"><button class="btn" data-cuopen>تنظيف الحلقات</button><button class="btn" data-spopen>تقسيم بملف</button><button class="btn" data-dsopen>توزيع بالنص</button></div></details>
         <details class="pltools pladd"><summary class="btn primary">+ إضافة</summary><div class="pltmenu"><button class="btn" data-act="addHalaqa">حلقة</button><button class="btn" data-act="addPlace">مكان</button></div></details></div>
       <div class="plrow plctl"><div class="plseg">${[['place', 'حسب المكان'], ['sup', 'حسب المشرف'], ['all', 'كل الحلقات']].map(([k, l]) => `<button type="button" class="btn ${st.v === k ? 'on' : ''}" data-plv="${k}">${l}</button>`).join('')}</div>
         <input type="search" data-plq value="${esc(st.q)}" placeholder="ابحث بالمعلم أو المكان أو المشرف" aria-label="بحث في الحلقات">
@@ -120,9 +120,38 @@
     return i > -1 && j > i ? h.slice(i + 10, j) : '';
   }
   adminViews.halaqat = () => {
-    if (!canManage()) return base();
+    if (!canManage()) return base().replace('>الأماكن والحلقات</h2>', '>الحلقات</h2>');
     return header() + linksCard() + (st.v === 'sup' ? bySup() : st.v === 'all' ? all() : byPlace());
   };
+
+  /* ===== «أدوات الحلقات»: تبويب في «الإعدادات» للمدير (بعد «مكرر للمراجعة») ===== */
+  let toolsOn = false;
+  const TOOLS = [
+    ['data-cuopen', 'تنظيف الحلقات', 'يدمج الحلقات المكررة، وينقل طلاب الحلقات قليلة العدد، ويحذف الحلقات الفارغة والأماكن بلا حلقات. معاينة قبل التنفيذ، ولا يُحذف طالب أبدًا.'],
+    ['data-spopen', 'تقسيم بملف', 'ملف (Excel أو CSV) أعمدته: المعلم، المكان، الطالب؛ فيُوزَّع طلاب كل معلم على حلقاته بحسب أماكنهم. معاينة قبل التنفيذ.'],
+    ['data-dsopen', 'توزيع بالنص', 'نص ملصوق: المكان، ثم أسماء معلميه، ثم مشرفهم؛ فتُنشأ الحلقات وتُربط بمعلميها ومشرفها. معاينة قبل التنفيذ.']
+  ];
+  const toolsView = () => `<div class="card"><h2 style="margin-top:0">أدوات الحلقات</h2>
+    ${TOOLS.map(([a, l, d]) => `<div class="qtl"><div class="qtl-b"><b>${l}</b><div class="muted">${d}</div></div><button type="button" class="btn" ${a}>فتح</button></div>`).join('')}</div>`;
+  document.addEventListener('DOMContentLoaded', () => {
+    const baseSet = adminViews.settings;
+    if (typeof baseSet !== 'function') return;
+    adminViews.settings = function () {
+      const h = baseSet.apply(this, arguments);
+      if (session?.role !== 'admin' || typeof h !== 'string') return h;
+      const btn = `<button type="button" class="btn ${toolsOn ? 'on' : ''}" data-qtools>أدوات الحلقات</button>`;
+      let out = h.replace(/(<button type="button" class="btn[^"]*" data-subtab="perms")/, btn + '$1');
+      if (!out.includes('data-qtools')) out = out.replace(/(<div class="card subnav"><div class="bar" style="margin:0">[\s\S]*?)(<\/div><\/div>)/, `$1${btn}$2`);
+      if (!toolsOn) return out;
+      const i = out.indexOf('<div class="card subnav">'), e = i < 0 ? -1 : out.indexOf('</div></div>', i);
+      if (e < 0) return out;
+      return out.slice(0, e + 12).replace(/class="btn on" data-subtab/g, 'class="btn " data-subtab') + toolsView();
+    };
+  });
+  document.addEventListener('click', e => {
+    if (e.target.closest('[data-qtools]')) { toolsOn = true; render(); window.scrollTo(0, 0); }
+    else if (e.target.closest('[data-subtab]')) toolsOn = false;
+  }, true);
 
   const css = document.createElement('style');
   css.textContent = `.plseg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}.plseg .btn{border:0;border-radius:0;margin:0}.plseg .btn+.btn{border-inline-start:1px solid var(--line)}
@@ -139,6 +168,7 @@
     .plneed{display:inline-flex;flex-wrap:wrap;align-items:center;gap:.35rem;font-size:.9rem}
     .plctl{flex-wrap:nowrap}.plctl .plseg{flex:none}.plctl input[data-plq]{flex:1 1 auto;min-width:8rem;max-width:26rem;width:auto;margin:0}.plctl [data-plall2]{flex:none;margin-inline-start:auto}
     .plhl{display:none}
+    .qtl{display:flex;align-items:center;gap:.8rem;padding:.7rem 0;border-top:1px solid var(--line,#eee6d6)}.qtl:first-of-type{border-top:0}.qtl-b{flex:1;min-width:0;line-height:1.7}.qtl-b .muted{font-size:.88rem}
     @media (max-width:640px){
       main .card:has(.plhl) .tbl,main .card:has(.plhl) .tblprint .tzoom,main .card:has(.plhl) .tblprint .qzoom{display:none!important}
       .plhl{display:block}.plhi{display:flex;align-items:center;gap:.6rem;padding:.65rem .1rem;border-top:1px solid var(--line,#eee6d6)}
