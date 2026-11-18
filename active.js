@@ -121,8 +121,31 @@
       [...tbl.rows].forEach(r => idx.forEach(i => r.cells[i]?.classList.add('qnm')));
     });
   }
+  /* ===== جدولا «الطلاب» و«العاملون»: يظهر فيهما 11 صفًا قبل التمرير داخل الجدول =====
+     الارتفاع الثابت (style.css: تسعة أضعاف 3.4rem) يُظهر 6 صفوف طلاب و10 عاملين، لأن صف الطالب أعلى؛ فيُحسب هنا من الصفوف نفسها
+     (العنوان وأول 11 صفًا ظاهرًا)، ويتبع حجم الخط وما يُخفى بالبحث. جداول النوافذ والصفحات الأخرى كما هي. */
+  const ROWS = 11;
+  function fitRows() {
+    if (ui.tab !== 'students' && ui.tab !== 'teachers') return;
+    document.querySelectorAll('main .tbl').forEach(t => {
+      if (t.closest('.overlay')) return;
+      const tb = t.querySelector(':scope > table'); if (!tb || !tb.querySelector('[data-act="studentCard"], tr[data-stk]')) return;
+      const rows = [...tb.rows].filter(r => !r.hidden && r.offsetParent), head = rows.find(r => r.querySelector('th'));
+      const body = rows.filter(r => r !== head);
+      let h = 'none';
+      if (body.length > ROWS) h = Math.ceil((head ? head.getBoundingClientRect().height : 0) + body.slice(0, ROWS).reduce((n, r) => n + r.getBoundingClientRect().height, 0)) + 2 + 'px';
+      if (t.style.maxHeight !== h) t.style.maxHeight = h;
+    });
+  }
+  const fcss = document.createElement('style');
+  fcss.textContent = '@media print{main .tbl{max-height:none!important}}';
+  document.head.appendChild(fcss);
   let nmRaf = 0;
-  new MutationObserver(() => { if (!nmRaf) nmRaf = requestAnimationFrame(() => { nmRaf = 0; try { markNames(); } catch (e) { /* ignore */ } }); }).observe(document.body, { childList: true, subtree: true });
+  const later = () => { if (!nmRaf) nmRaf = requestAnimationFrame(() => { nmRaf = 0; try { markNames(); } catch (e) { /* ignore */ } try { fitRows(); } catch (e) { /* ignore */ } }); };
+  new MutationObserver(later).observe(document.body, { childList: true, subtree: true });
+  /* تغيير حجم الخط أو النافذة يغيّر ارتفاع الصفوف */
+  window.addEventListener('resize', later);
+  document.addEventListener('click', e => { if (e.target.closest('[data-qz],[data-tz],.qzoom,.tzoom')) setTimeout(later, 50); });
 
   /* ===== «تذكير بالسداد» إلى صف أدوات الجدول ===== */
   new MutationObserver(() => {
