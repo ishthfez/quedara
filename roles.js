@@ -19,9 +19,26 @@
   /* النطاق */
   const isGenSup = m => m?.info?.scope === 'all';
   const placesOf = m => (Array.isArray(m?.info?.places) ? m.info.places : []);
-  window.isGenSup = isGenSup; window.placesOf = placesOf;
+  /* حلقات الإداري: حلقات أماكنه، وإن اختيرت له في مكانٍ حلقاتٌ بعينها (info.halaqat) فتلك وحدها في ذلك المكان
+     (القاعدة نفسها في الخادم: place_scope_halaqat في supabase/place_halaqat.sql) */
+  const selHalOf = m => new Set(Array.isArray(m?.info?.halaqat) ? m.info.halaqat : []);
+  const placeHalaqatOf = m => {
+    const ps = new Set(placesOf(m)), sel = selHalOf(m), inP = db.halaqat.filter(h => ps.has(h.placeId));
+    const narrowed = new Set(inP.filter(h => sel.has(h.id)).map(h => h.placeId));
+    return inP.filter(h => !narrowed.has(h.placeId) || sel.has(h.id));
+  };
+  /* العدد مع «حلقة» بالعربية الصحيحة */
+  const hN = n => n === 1 ? 'حلقة واحدة' : n === 2 ? 'حلقتان' : `${n} ${n >= 3 && n <= 10 ? 'حلقات' : 'حلقة'}`;
+  const ofN = (n, all) => `${n} من ${all} ${all >= 3 && all <= 10 ? 'حلقات' : 'حلقة'}`;
+  /* وصف النطاق: «المكان» أو «المكان (3 من 5 حلقات)» */
+  const placeScopeTxt = m => {
+    const mine = new Set(placeHalaqatOf(m).map(h => h.id));
+    return placesOf(m).map(id => { const p = byId(db.places, id); if (!p) return ''; const all = db.halaqat.filter(h => h.placeId === id), n = all.filter(h => mine.has(h.id)).length;
+      return n < all.length ? `${p.name} (${ofN(n, all.length)})` : p.name; }).filter(Boolean).join('، ');
+  };
+  window.isGenSup = isGenSup; window.placesOf = placesOf; window.placeHalaqatOf = placeHalaqatOf; window.placeScopeTxt = placeScopeTxt;
   const myHal = () => {
-    if (session?.role === 'placeadmin') { const ps = new Set(placesOf(me())); return db.halaqat.filter(h => ps.has(h.placeId)); }
+    if (session?.role === 'placeadmin') return placeHalaqatOf(me());
     if (session?.role === 'supervisor' && isGenSup(me())) return db.halaqat.slice();
     return myHalaqat();
   };
@@ -58,7 +75,7 @@
       const picker = halaqaPicker(hs), h = byId(db.halaqat, ui.hid) || hs[0];
       const sts = db.students.filter(s => s.halaqaId === h.id).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
       const stats = [[ps.length, ps.length > 1 ? 'أماكن' : 'مكان'], [hs.length, 'حلقة'], [db.students.filter(s => hs.some(x => x.id === s.halaqaId)).length, 'طالب']];
-      return `<div class="card"><h2 style="margin-top:0">${esc(ps.map(p => p.name).join('، '))}</h2><div class="grid">${stats.map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('')}</div></div>
+      return `<div class="card"><h2 style="margin-top:0">${esc(placeScopeTxt(me()) || ps.map(p => p.name).join('، '))}</h2><div class="grid">${stats.map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('')}</div></div>
       <div class="card"><div class="bar">${picker}<span class="grow"></span><span class="muted">${esc(placeName(h))}${timeText(h) ? ' · ' + esc(timeText(h)) : ''}${h.supervisorId ? ' · المشرف: ' + esc(supName(h.supervisorId)) : ''}</span></div>
       ${sts.length ? `<div class="tbl"><table><tr><th>#</th><th>الطالب</th><th>آخر حفظ</th><th>الحضور</th><th></th></tr>${sts.map((s, i) => `<tr><td>${i + 1}</td><td>${esc(s.name)}${stOff(s) ? ' <span class="tag tag-no">منقطع</span>' : ''}</td><td>${esc(lastHifz(s.id))}</td><td>${attRate(s.id)}</td><td><button class="btn sm" data-act="hist" data-id="${s.id}">السجل</button><button class="btn sm" data-act="studentCard" data-id="${s.id}">الملف</button></td></tr>`).join('')}</table></div>` : empty('لا يوجد طلاب في هذه الحلقة.')}</div>`;
     },
@@ -81,7 +98,7 @@
   const STAFF_KINDS = [['admins', 'مدير'], ['supervisors', 'مشرف'], ['teachers', 'معلم'], ['accountants', 'محاسب'], ['placeadmins', 'إداري']];
   const empOfMember = id => { const c = clsRead(); const eid = Object.keys(c).find(k => c[k]?.memberId === id); return eid ? payEmps().find(e => e.id === eid) : null; };
   const typeOf = (k, l, m) => k === 'supervisors' && isGenSup(m) ? 'مشرف عام' : l;
-  const placeTxt = (k, m, emp) => k === 'placeadmins' ? (placesOf(m).map(id => byId(db.places, id)?.name).filter(Boolean).join('، ') || 'بلا مكان') : (emp?.place || '—');
+  const placeTxt = (k, m, emp) => k === 'placeadmins' ? (placeScopeTxt(m) || 'بلا مكان') : (emp?.place || '—');
   function staffList() {
     const out = [];
     /* حساب المدير حساب إداري للنظام وليس موظفًا: لا يظهر إلا إن رُبط بموظف في المرتبات (ويبقى في «المديرون») */
@@ -115,7 +132,7 @@
       const nb = `<button class="btn sm" data-act="editName" data-id="${m.id}" data-k="${kind}">`;
       h = h.split(nb).join(`<button class="btn sm" data-act="memScope" data-id="${m.id}" data-k="${kind}">النطاق</button>` + nb);
     });
-    const tip = kind === 'supervisors' ? 'حدّد حلقات كل مشرف من «الأماكن والحلقات» ← تعديل ← المشرف، أو اجعله «مشرفًا عامًا» يرى كل الحلقات من زر «النطاق».' : 'حدّد مكان كل إداري من زر «النطاق»: يطّلع على حلقات المكان وطلابها، ويجمع اشتراكاتهم ويرسلها للمحاسب.';
+    const tip = kind === 'supervisors' ? 'حدّد حلقات كل مشرف من «الأماكن والحلقات» ← تعديل ← المشرف، أو اجعله «مشرفًا عامًا» يرى كل الحلقات من زر «النطاق».' : 'حدّد مكان كل إداري من زر «النطاق» (وحلقات بعينها فيه إن شئت): يطّلع على حلقاته وطلابها، ويجمع اشتراكاتهم ويرسلها للمحاسب.';
     return h.replace('<div class="note">', `<div class="note">${tip} `);
   }
   const SEL = /<select class="msubsel"[\s\S]*?<\/select>/;
@@ -224,7 +241,7 @@
     };
     /* ============ نطاق الحساب ============
        المشرف: حلقات محددة (تُسند من تعديل الحلقة) أو «مشرف عام» يرى كل الحلقات والأماكن.
-       الإداري: مكان أو أكثر، يطّلع على حلقاتها وطلابها ويجمع اشتراكاتهم ويرسلها للمحاسب. */
+       الإداري: مكان أو أكثر (وفي المكان حلقات بعينها إن شاء المدير)، يطّلع على حلقاته وطلابها ويجمع اشتراكاتهم ويرسلها للمحاسب. */
     function scopeDialog(k, m) {
       if (!m) return;
       if (k === 'supervisors') {
@@ -237,20 +254,45 @@
         return;
       }
       if (k !== 'placeadmins') return;
-      const cur = new Set(placesOf(m)), list = (db.places || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-      const cnt = p => db.halaqat.filter(h => h.placeId === p.id).length;
+      /* المكان، ثم حلقاته تحته: كلها محددة حين يُختار المكان (يتابع المكان كله، وما يُضاف إليه من حلقات لاحقًا)،
+         وإلغاء بعضها يجعله يتابع المحددة وحدها. إلغاء كل حلقات المكان يلغي المكان نفسه. */
+      const cur = new Set(placesOf(m)), mine = new Set(placeHalaqatOf(m).map(h => h.id));
+      const list = (db.places || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+      const halsIn = p => db.halaqat.filter(h => h.placeId === p.id).sort((a, b) => halaqaLabel(a).localeCompare(halaqaLabel(b), 'ar'));
+      const hName = h => halaqaLabel(h).replace(/^\s*حلقة\s+/, '').split(' — ')[0].trim();
+      const nStu = h => db.students.filter(s => s.halaqaId === h.id && !stOff(s)).length;
       const ov = document.createElement('div'); ov.className = 'overlay';
-      ov.innerHTML = `<div class="modal"><h2>أماكن الإداري «${esc(m.name)}»</h2>
-        <p class="muted" style="margin-top:0">يطّلع على حلقات المكان المحدد وطلابها، ويجمع اشتراكاتهم ويرسلها للمحاسب.</p>
-        <div style="max-height:55vh;overflow:auto">${list.map(p => `<label class="chk"><input type="checkbox" value="${esc(p.id)}" ${cur.has(p.id) ? 'checked' : ''}> ${esc(p.name)} <span class="muted">(${cnt(p)} حلقة)</span></label>`).join('') || empty('لا توجد أماكن.')}</div>
+      ov.innerHTML = `<div class="modal"><h2>نطاق الإداري «${esc(m.name)}»</h2>
+        <p class="muted" style="margin-top:0">يطّلع على الحلقات المحددة وطلابها، ويجمع اشتراكاتهم ويرسلها للمحاسب. اختر المكان، ثم ألغِ من حلقاته ما لا يتابعه إن شئت.</p>
+        <div style="max-height:55vh;overflow:auto">${list.map(p => { const hs = halsIn(p), on = cur.has(p.id);
+          return `<div class="qpsc" data-qpsc="${esc(p.id)}" style="margin:0 0 .5rem"><label class="chk"><input type="checkbox" data-qpl value="${esc(p.id)}" ${on ? 'checked' : ''}> <b>${esc(p.name)}</b> <span class="muted" data-qpn>(${hs.length ? hN(hs.length) : 'بلا حلقات'})</span></label>
+            ${hs.length ? `<div data-qphs style="margin:.15rem 1.6rem 0 0;${on ? '' : 'display:none'}">${hs.map(h => `<label class="chk" style="font-size:.92rem"><input type="checkbox" data-qph value="${esc(h.id)}" ${!on || mine.has(h.id) ? 'checked' : ''}> ${esc(hName(h))} <span class="muted">(${nStu(h)} طالب)</span></label>`).join('')}</div>` : ''}</div>`; }).join('') || empty('لا توجد أماكن.')}</div>
         <div class="row"><button type="button" class="btn primary" data-save>حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
       document.body.appendChild(ov);
+      const paint = box => { const all = [...box.querySelectorAll('[data-qph]')], n = all.filter(x => x.checked).length, c = box.querySelector('[data-qpn]');
+        if (c) c.textContent = all.length ? (n < all.length ? `(${ofN(n, all.length)})` : `(${all.length === 1 ? 'حلقته الوحيدة' : 'كل حلقاته: ' + all.length})`) : '(بلا حلقات)'; };
+      ov.querySelectorAll('[data-qpsc]').forEach(b => { if (b.querySelector('[data-qpl]').checked) paint(b); });
+      ov.addEventListener('change', e => {
+        const box = e.target.closest('[data-qpsc]'); if (!box) return;
+        const pl = box.querySelector('[data-qpl]'), hs = box.querySelector('[data-qphs]'), all = [...box.querySelectorAll('[data-qph]')];
+        if (e.target.matches('[data-qpl]')) { if (hs) hs.style.display = pl.checked ? '' : 'none'; if (pl.checked) all.forEach(x => { x.checked = true; }); }
+        else if (e.target.matches('[data-qph]') && !all.some(x => x.checked)) { pl.checked = false; if (hs) hs.style.display = 'none'; all.forEach(x => { x.checked = true; }); }
+        if (pl.checked) paint(box); else { const c = box.querySelector('[data-qpn]'); if (c) c.textContent = `(${all.length ? hN(all.length) : 'بلا حلقات'})`; }
+      });
       ov.querySelector('[data-close]').onclick = () => ov.remove();
       ov.querySelector('[data-save]').onclick = () => {
-        const ids = [...ov.querySelectorAll('input[type=checkbox]:checked')].map(x => x.value);
-        m.info = { ...(m.info || {}), places: ids };
+        const ids = [], hal = [];
+        ov.querySelectorAll('[data-qpsc]').forEach(b => {
+          if (!b.querySelector('[data-qpl]').checked) return;
+          ids.push(b.dataset.qpsc);
+          const all = [...b.querySelectorAll('[data-qph]')], on = all.filter(x => x.checked);
+          if (on.length && on.length < all.length) on.forEach(x => hal.push(x.value));   // بعض حلقات المكان: تُحفظ بعينها
+        });
+        const info = { ...(m.info || {}), places: ids };
+        if (hal.length) info.halaqat = hal; else delete info.halaqat;
+        m.info = info;
         ov.remove(); save(); render();
-        toast(ids.length ? `«${m.name}»: ${ids.map(id => byId(db.places, id)?.name).join('، ')}` : `«${m.name}» بلا مكان`);
+        toast(ids.length ? `«${m.name}»: ${placeScopeTxt(m)}` : `«${m.name}» بلا مكان`);
       };
     }
 

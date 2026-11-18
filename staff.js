@@ -25,13 +25,13 @@
     if (!x.m) return [];
     if (x.k === 'teachers') return db.halaqat.filter(h => h.teacherId === x.m.id);
     if (x.k === 'supervisors') return gen(x.m) ? db.halaqat.slice() : db.halaqat.filter(h => h.supervisorId === x.m.id);
-    if (x.k === 'placeadmins') { const ps = new Set(plc(x.m)); return db.halaqat.filter(h => ps.has(h.placeId)); }
+    if (x.k === 'placeadmins') { if (window.placeHalaqatOf) return window.placeHalaqatOf(x.m); const ps = new Set(plc(x.m)); return db.halaqat.filter(h => ps.has(h.placeId)); }
     return [];
   }
   const stuIn = hs => { const s = new Set(hs.map(h => h.id)); return db.students.filter(x => s.has(x.halaqaId) && !stOff(x)).length; };
   function scopeTxt(x) {
     if (x.k === 'supervisors' && gen(x.m)) return 'كل الحلقات (مشرف عام)';
-    if (x.k === 'placeadmins') return plc(x.m).map(id => byId(db.places, id)?.name).filter(Boolean).join('، ') || 'بلا مكان';
+    if (x.k === 'placeadmins') return (window.placeScopeTxt ? window.placeScopeTxt(x.m) : plc(x.m).map(id => byId(db.places, id)?.name).filter(Boolean).join('، ')) || 'بلا مكان';
     const hs = halsOf(x);
     if (!hs.length) return x.k === 'teachers' || x.k === 'supervisors' ? 'بلا حلقة' : '—';
     if (x.k === 'teachers') return hs.map(h => placeName(h) || 'بلا مكان').join('، ');
@@ -97,7 +97,7 @@
     ]);
     let hal = '';
     if (x.k === 'teachers' || x.k === 'supervisors' || x.k === 'placeadmins') {
-      const title = x.k === 'teachers' ? 'حلقاته' : x.k === 'placeadmins' ? 'حلقات أماكنه' : gen(m) ? 'كل الحلقات (مشرف عام)' : 'الحلقات المسندة إليه';
+      const title = x.k === 'teachers' ? 'حلقاته' : x.k === 'placeadmins' ? 'حلقات نطاقه' : gen(m) ? 'كل الحلقات (مشرف عام)' : 'الحلقات المسندة إليه';
       hal = h3(`${title} (${hs.length}) — ${stuIn(hs)} طالب منتظم`) + (hs.length ? `<div class="tbl" style="margin-bottom:.8rem;max-height:40vh;overflow:auto"><table><tr><th>الحلقة</th><th>المكان</th><th>الوقت</th><th>${x.k === 'teachers' ? 'المشرف' : 'المعلم'}</th><th>الطلاب</th></tr>${hs.map(h => `<tr><td><button type="button" class="lnk" data-hstu="${h.id}">${esc(halaqaLabel(h))}</button></td><td>${esc(placeName(h) || '—')}</td><td>${esc(timeText(h) || '—')}</td><td>${esc(x.k === 'teachers' ? supName(h.supervisorId) : tName(h.teacherId))}</td><td>${stuIn([h])}</td></tr>`).join('')}</table></div>` : empty(x.k === 'placeadmins' ? 'لم يُحدَّد له مكان بعد (زر «النطاق»).' : 'لا توجد حلقات.'));
     }
     let pay = '';

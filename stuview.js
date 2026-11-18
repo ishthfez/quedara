@@ -4,7 +4,7 @@
    في أول قائمتها، بدل صفحاتها القديمة للطلاب والحضور (المعلم والمشرف: «الحضور» و«طلابي»؛ الإداري: «الطلاب»؛ المحاسب: «الطلاب»).
    «التحصيل» عند المعلم والإداري و«الاشتراكات» و«تحصيل المعلمين» عند المحاسب تبقى كما هي حتى يُبنى التحصيل الجديد في الصفحة.
    - ما يظهر فيها لكل فئة من الجدول نفسه (stuperm.js).
-   - الطلاب والحلقات: المعلم حلقاته، والمشرف حلقاته (والمشرف العام كلها)، والإداري حلقات أماكنه، والمحاسب الكل.
+   - الطلاب والحلقات: المعلم حلقاته، والمشرف حلقاته (والمشرف العام كلها)، والإداري حلقات نطاقه (أماكنه، أو حلقات بعينها فيها)، والمحاسب الكل.
      الخادم لا يرسل لكل حساب إلا ما يخصه أصلًا؛ والتضييق هنا على الجهاز أيضًا (لـ«العمل بصفة» حيث تصل المدير كل البيانات).
    - الاشتراكات لحلقاته فقط: المعلم والمشرف والإداري لا يصلهم جدول الدفعات ولا إعدادات الاشتراك، فتأتيهم مستحقات طلابهم
      ودفعاتهم من دالة الخادم staff_fees (supabase/fees_staff.sql) كل دقيقتين ومع تغيير سنة الشهر المختار. */
@@ -19,7 +19,7 @@
     const r = role(), m = typeof me === 'function' ? me() : null;
     if (!R4.includes(r) || r === 'accountant') return null;
     if (r === 'supervisor' && m?.info?.scope === 'all') return null;
-    if (r === 'placeadmin') { const P = new Set(Array.isArray(m?.info?.places) ? m.info.places : []); return db.halaqat.filter(h => P.has(h.placeId)); }
+    if (r === 'placeadmin') { if (window.placeHalaqatOf) return window.placeHalaqatOf(m); const P = new Set(Array.isArray(m?.info?.places) ? m.info.places : []); return db.halaqat.filter(h => P.has(h.placeId)); }
     return db.halaqat.filter(h => h.teacherId === session.id || h.supervisorId === session.id);
   }
 
