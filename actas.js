@@ -1,6 +1,6 @@
 'use strict';
 /* ============ «العمل بصفة»: المدير يعمل في التطبيق كأنه فئة أخرى ============
-   - يختار المدير الفئة (معلم، مشرف، محاسب، إداري، طالب) ثم الشخص، فيتحول التطبيق إلى واجهته كما يراها هو:
+   - يختار المدير الفئة (محاسب، معلم، مدير عام، مشرف، إداري، طالب) ثم الشخص، فيتحول التطبيق إلى واجهته كما يراها هو:
      قائمته وصفحة بدايته وأزراره وصلاحياته (المحددة له في «الصلاحيات»)، ويعمل أعماله كاملة.
    - الخادم يعرفه مديرًا فيقبل كل عمل؛ وكل ما يُسجَّل يُكتب باسم المدير لا باسم من يعمل بصفته
      (الدفعات وإيصالاتها، وغياب المعلمين، وقوائم التحصيل، والإشعارات)، حتى لا تختلط الأمور.
@@ -9,9 +9,13 @@
    يُحمَّل بعد perms.js و fees.js وقبل app-actions.js. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./actas.js')) VFILES.push('./actas.js'); } catch (e) { /* ignore */ } });
-  const ROLES = [['accountant', 'المحاسب', 'accountants'], ['teacher', 'المعلم', 'teachers'], ['supervisor', 'المشرف', 'supervisors'], ['placeadmin', 'الإداري', 'placeadmins'], ['student', 'الطالب', 'students']];
+  /* «المدير العام» فئة مستقلة في القائمة، وهو على الخادم مشرف نطاقه «الكل» (roles.js) فيعمل بواجهة المشرف وصلاحياته */
+  const ROLES = [['accountant', 'المحاسب', 'accountants'], ['teacher', 'المعلم', 'teachers'], ['gmanager', 'المدير العام', 'supervisors'], ['supervisor', 'المشرف', 'supervisors'], ['placeadmin', 'الإداري', 'placeadmins'], ['student', 'الطالب', 'students']];
   const roleL = r => (ROLES.find(x => x[0] === r) || [, r])[1];
-  let act = null;   // { role, id, name, adminId, adminName, feeIds, absIds }
+  const gen = m => !!window.isGenSup?.(m);
+  const people = k => { const c = ROLES.find(x => x[0] === k)?.[2], L = db[c] || []; return k === 'gmanager' ? L.filter(gen) : k === 'supervisor' ? L.filter(m => !gen(m)) : L; };
+  const sessRole = k => (k === 'gmanager' ? 'supervisor' : k);
+  let act = null;   // { role (فئة الجلسة), cat (الفئة المختارة في القائمة), id, name, adminId, adminName, feeIds, absIds }
   window.QLActAs = () => act;
 
   /* ===== الصلاحيات بصفة الشخص: استثناؤه ← اختيار فئته ← الافتراضي (كما يحسبها الخادم له) ===== */
@@ -28,17 +32,17 @@
   }
 
   /* ===== الدخول والخروج ===== */
-  function enter(role, id) {
-    const coll = ROLES.find(x => x[0] === role)?.[2], m = byId(db[coll] || [], id);
+  function enter(cat, id) {
+    const role = sessRole(cat), m = byId(people(cat), id);
     if (!m || session?.role !== 'admin') return;
     const admin = me();
-    act = { role, id, name: m.name, adminId: session.id, adminName: admin?.name || 'المدير',
+    act = { role, cat, id, name: m.name, adminId: session.id, adminName: admin?.name || 'المدير',
       feeIds: new Set((db.fees || []).map(f => f.id)), absIds: new Set((db.payroll?.absences || []).map(a => a.id)) };
     session = { role, id };
     ui.tab = null; ui.hid = ''; ui.nav = false;
     document.querySelectorAll('.overlay').forEach(o => o.remove());
     render(); bar(); window.scrollTo(0, 0);
-    toast(`تعمل الآن بصفة ${roleL(role)} «${m.name}»`);
+    toast(`تعمل الآن بصفة ${roleL(cat)} «${m.name}»`);
   }
   function exit() {
     if (!act) return;
@@ -52,7 +56,7 @@
   window.QLActExit = exit;
 
   /* ===== كل ما يُسجَّل أثناء العمل بصفة غيره يُكتب باسم المدير ===== */
-  const asLabel = () => `${/^المدير/.test(act.adminName) ? act.adminName : 'المدير ' + act.adminName} (بصفة ${roleL(act.role)})`;
+  const asLabel = () => `${/^المدير/.test(act.adminName) ? act.adminName : 'المدير ' + act.adminName} (بصفة ${roleL(act.cat)})`;
   function fixBy() {
     if (!act) return false;
     let n = 0;
@@ -101,29 +105,28 @@
     if (!act) { b?.remove(); return; }
     if (!b) { b = document.createElement('div'); b.id = 'actasbar'; document.body.appendChild(b); }
     /* التبديل من الشريط نفسه: الفئة ثم الشخص، فيتحول التطبيق إليه مباشرة دون الرجوع إلى المدير */
-    const coll = ROLES.find(x => x[0] === act.role)?.[2];
-    const ppl = (db[coll] || []).slice().sort((a, c) => a.name.localeCompare(c.name, 'ar'));
+    const ppl = people(act.cat).slice().sort((a, c) => a.name.localeCompare(c.name, 'ar'));
     b.innerHTML = `<span>تعمل الآن بصفة</span>
-      <select data-asbr aria-label="الفئة">${ROLES.map(([k, l, c]) => `<option value="${k}" ${k === act.role ? 'selected' : ''} ${(db[c] || []).length ? '' : 'disabled'}>${l}</option>`).join('')}</select>
+      <select data-asbr aria-label="الفئة">${ROLES.map(([k, l]) => `<option value="${k}" ${k === act.cat ? 'selected' : ''} ${people(k).length ? '' : 'disabled'}>${l}</option>`).join('')}</select>
       <select data-asbp aria-label="الشخص">${ppl.map(m => `<option value="${esc(m.id)}" ${m.id === act.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
       <small>كل ما تسجّله يُكتب باسمك</small><button type="button" class="btn sm" data-actas-exit>رجوع إلى المدير</button>`;
     requestAnimationFrame(() => document.documentElement.style.setProperty('--actas-h', b.offsetHeight + 'px'));
   }
   document.addEventListener('click', e => { if (e.target.closest('[data-actas-exit]')) exit(); });
   /* تبديل الشخص أو الفئة من الشريط: يُغلق العمل بصفة الحالي بهدوء ثم يبدأ بالجديد */
-  function swap(role, id) {
-    if (!act || !id || (role === act.role && id === act.id)) return;
+  function swap(cat, id) {
+    if (!act || !id || (cat === act.cat && id === act.id)) return;
     fixBy();
     session = { role: 'admin', id: act.adminId };
     act = null;
-    enter(role, id);
+    enter(cat, id);
   }
   document.addEventListener('change', e => {
     const t = e.target; if (!act || !t.closest?.('#actasbar')) return;
     if (t.matches('[data-asbr]')) {
-      const coll = ROLES.find(x => x[0] === t.value)?.[2], first = (db[coll] || []).slice().sort((a, c) => a.name.localeCompare(c.name, 'ar'))[0];
+      const first = people(t.value).slice().sort((a, c) => a.name.localeCompare(c.name, 'ar'))[0];
       if (first) swap(t.value, first.id);
-    } else if (t.matches('[data-asbp]')) swap(act.role, t.value);
+    } else if (t.matches('[data-asbp]')) swap(act.cat, t.value);
   });
 
   /* ===== زر «العمل بصفة…» في القائمة الجانبية للمدير ===== */
@@ -137,18 +140,17 @@
   function dialog() {
     let role = 'accountant';
     const ov = document.createElement('div'); ov.className = 'overlay';
-    const people = () => {
-      const coll = ROLES.find(x => x[0] === role)[2];
-      return (db[coll] || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ar')).map(m => {
-        const extra = role === 'student' ? hName(m.halaqaId) : role === 'teacher' || role === 'supervisor' ? db.halaqat.filter(h => (role === 'teacher' ? h.teacherId : h.supervisorId) === m.id).length + ' حلقة' : '';
+    const opts0 = () => {
+      return people(role).slice().sort((a, b) => a.name.localeCompare(b.name, 'ar')).map(m => {
+        const extra = role === 'student' ? hName(m.halaqaId) : role === 'gmanager' ? 'كل الحلقات' : role === 'teacher' || role === 'supervisor' ? db.halaqat.filter(h => (role === 'teacher' ? h.teacherId : h.supervisorId) === m.id).length + ' حلقة' : '';
         return `<option value="${esc(m.id)}">${esc(m.name)}${extra ? ' — ' + esc(extra) : ''}</option>`;
       }).join('');
     };
     const draw = () => {
-      const opts = people();
+      const opts = opts0();
       ov.innerHTML = `<div class="modal"><h2>العمل بصفة…</h2>
         <p class="muted" style="margin:0 0 .6rem;font-size:.88rem">يتحول التطبيق إلى واجهة من تختاره كما يراها هو، بصلاحياته، وتعمل أعماله كاملة. كل ما تسجّله يُكتب باسمك أنت لا باسمه، وترجع إلى حساب المدير من الشريط أعلى الشاشة.</p>
-        <label>الفئة<select data-asr>${ROLES.map(([k, l, c]) => `<option value="${k}" ${k === role ? 'selected' : ''}>${l} (${(db[c] || []).length})</option>`).join('')}</select></label>
+        <label>الفئة<select data-asr>${ROLES.map(([k, l]) => `<option value="${k}" ${k === role ? 'selected' : ''}>${l} (${people(k).length})</option>`).join('')}</select></label>
         <label>الشخص${opts ? `<select data-asp>${opts}</select>` : '<p class="muted">لا يوجد أحد في هذه الفئة.</p>'}</label>
         <div class="row"><button type="button" class="btn primary" data-asgo ${opts ? '' : 'disabled'}>ابدأ</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
     };
