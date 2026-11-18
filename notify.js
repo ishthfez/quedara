@@ -75,9 +75,31 @@
       try { h = b(); } finally { db.news = all; }
       const month = today().slice(0, 7), thisMonth = st.filter(n => String(n.date || '').startsWith(month));
       const pay = thisMonth.filter(n => /^تأكيد دفع/.test(n.text)).length, rem = thisMonth.filter(n => /^تذكير/.test(n.text)).length, msg = thisMonth.length - pay - rem;
-      const last = st.slice(-6).reverse().map(n => `<div class="news">${byLine(n)}<b>إلى ${esc(byId(db.students, n.audience.slice(2))?.name || '')}:</b> ${esc(n.text)}<br><small>${esc(n.date)}</small></div>`).join('');
+      const last = st.slice(-6).reverse().map(n => `<div class="news">${byLine(n)}<b>إلى ${esc(byId(db.students, n.audience.slice(2))?.name || '')}:</b> ${esc(n.text)}<br><small>${esc(n.date)}</small> <button type="button" class="btn sm danger" data-stmsg-del="${esc(n.id)}">حذف</button></div>`).join('');
       return h + `<div class="card"><div class="bar" style="margin:0"><h2 class="grow" style="margin:0">رسائل الطلاب</h2><span class="muted">هذا الشهر: ${pay} تأكيد دفع · ${rem} تذكير${msg ? ` · ${msg} إشعار` : ''}</span></div>
         <p class="muted" style="font-size:.85rem">تأكيدات الدفع والتذكيرات وإشعارات المعلمين: تصل كل طالب في «الإعلانات» على حسابه، ولا تظهر في القائمة أعلاه حتى لا تزدحم. آخرها:</p>${last}</div>`;
     };
   }
+
+  /* ===== حذف رسالة طالب نهائيًا (من حسابه أيضًا) بنافذة تأكيد صغيرة =====
+     .qinner لا .overlay: تلك تصير صفحة كاملة على الهاتف (pages.js)؛ وتنسيقها في tcollect.js */
+  function delStudentMsg(id) {
+    const n = (db.news || []).find(x => x.id === id); if (!n) return;
+    const name = byId(db.students, String(n.audience || '').slice(2))?.name || '';
+    const p = document.createElement('div'); p.className = 'qinner'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-modal', 'true');
+    p.innerHTML = `<div class="qinbox"><h3>حذف الرسالة إلى «${esc(name)}»؟</h3>
+      <p>${esc(n.text)}</p>
+      <p class="muted" style="font-size:.85rem">تُحذف من حساب الطالب أيضًا، ولا يمكن استرجاعها.</p>
+      <div class="row"><button type="button" class="btn danger" data-stmsg-ok>حذف</button><button type="button" class="btn" data-close>رجوع</button></div></div>`;
+    document.body.appendChild(p);
+    const close = () => { p.remove(); document.removeEventListener('keydown', esc1, true); };
+    const esc1 = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', esc1, true);
+    p.addEventListener('click', e => { if (e.target === p || e.target.closest('[data-close]')) close(); });
+    p.querySelector('[data-close]').focus({ preventScroll: true });
+    p.querySelector('[data-stmsg-ok]').onclick = () => {
+      db.news = db.news.filter(x => x.id !== id); save(); close(); render(); toast('حُذفت الرسالة');
+    };
+  }
+  document.addEventListener('click', e => { const b = e.target.closest('[data-stmsg-del]'); if (b) delStudentMsg(b.dataset.stmsgDel); });
 })();
