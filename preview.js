@@ -1,6 +1,6 @@
 'use strict';
 /* ============ «المعاينة»: يرى المدير التطبيق كما يراه أي حساب ============
-   اختر النوع (طالب، معلم، مشرف، مشرف عام، إداري، محاسب) ثم الشخص، فتظهر تبويباته وصفحاته كما تظهر له،
+   اختر النوع (طالب، معلم، مشرف، مدير عام، إداري، محاسب) ثم الشخص، فتظهر تبويباته وصفحاته كما تظهر له،
    على شاشة حاسوب أو تابلت أو جوال (إطار بمقاس الجهاز تعمل فيه تنسيقات الشاشات الصغيرة كما على الجهاز نفسه).
    - للاطلاع فقط: الأزرار والخانات معطّلة (عدا التبويبات والقائمة واختيار الحلقة والشهر والتاريخ، وفتح «السجل» و«الملف»)، فلا يُسجَّل شيء باسمه.
    - الصلاحيات (كصلاحيات المحاسب) تُحسب من «الصلاحيات» كما يحسبها الخادم.
@@ -15,7 +15,7 @@
     ['student', 'طالب', () => db.students],
     ['teacher', 'معلم', () => db.teachers],
     ['supervisor', 'مشرف', () => (db.supervisors || []).filter(m => !gen(m))],
-    ['gsup', 'مشرف عام', () => (db.supervisors || []).filter(gen)],
+    ['gsup', 'مدير عام', () => (db.supervisors || []).filter(gen)],
     ['placeadmin', 'إداري', () => db.placeadmins || []],
     ['accountant', 'محاسب', () => db.accountants || []]
   ];
@@ -70,7 +70,7 @@
         <label style="margin:0">النوع<select data-pvk style="width:auto">${KINDS.map(([k, l, f]) => `<option value="${k}" ${k === pv.k ? 'selected' : ''}>${l} (${f().length})</option>`).join('')}</select></label>
         <label style="margin:0;flex:1 1 16rem">الشخص<select data-pvid>${list.map(x => `<option value="${esc(x.id)}" ${x.id === pv.id ? 'selected' : ''}>${esc(optLabel(pv.k, x))}</option>`).join('')}</select></label></div>
       <p class="muted" style="font-size:.85rem;margin:.6rem 0 0">للاطلاع فقط: الأزرار معطّلة فلا يُسجَّل شيء باسمه. ما يظهر هنا هو ما تعرضه له صفحات التطبيق من البيانات المتاحة له.</p></div>`;
-    if (!m) return head + `<div class="card">${empty(`لا يوجد ${kindL} بعد.${pv.k === 'gsup' ? ' اجعل مشرفًا «مشرفًا عامًا» من زر «النطاق».' : pv.k === 'placeadmin' ? ' أنشئه من «الأعضاء ← الإداريون» أو صنّفه من «غير مصنف».' : ''}`)}</div>`;
+    if (!m) return head + `<div class="card">${empty(`لا يوجد ${kindL} بعد.${pv.k === 'gsup' ? ' أضفه من «الأعضاء ← المديرون العامون»، أو اجعل مشرفًا «مديرًا عامًا» من زر «النطاق».' : pv.k === 'placeadmin' ? ' أنشئه من «الأعضاء ← الإداريون» أو صنّفه من «غير مصنف».' : ''}`)}</div>`;
     const warn = blockedNote(role, m) || (pv.k === 'placeadmin' && !(m.info?.places || []).length ? 'لم يُحدَّد لهذا الإداري مكان بعد، فلن يرى حلقات.' : '') || (CLOUD && !m.hasLogin ? 'ليس له حساب دخول بعد، فلا يستطيع الدخول حتى يُنشأ له.' : '');
     const devBar = `<div class="pvdevs">${Object.entries(DEVS).map(([k, [l]]) => `<button type="button" class="btn ${k === pv.dev ? 'on' : ''}" data-pvdev="${k}">${l}</button>`).join('')}</div>`;
     pv.doc = deviceDoc(role, m, tabs, kindL);
