@@ -10,10 +10,21 @@
      (الحلقات والطلاب والمشرفون، «اشتراك خاص»، «تحتاج إجراء») وأسماء المشرفين عند الوقوف عليه. أعمال المكان في صف وحده:
      «+ حلقة هنا» و«⋯» (تعديل المكان واشتراكه وحذفه) في صف أدوات الجدول نفسه، والجدول بعرض البطاقة. يُفتح أكثر من مكان معًا، و«فتح الكل / طي الكل».
      وعلى الهاتف كل حلقة بطاقة صغيرة (المعلم، ثم المشرف وعدد الطلاب، ثم الوقت، وبجانبها تعديل وحذف) بدل الجدول العريض.
+   - للمحاسب أيضًا (ولمن مُنح صلاحية «الأماكن والحلقات» halaqat.manage): الصفحة كاملة بكل إعداداتها؛ ومن لا يملكها من المحاسبين
+     يراها للاطلاع كما كانت (accountant.js). الخادم يتحقق من الصلاحية (supabase/halaqat_perm.sql).
    يُحمَّل بعد ملفات الأدوات (links، cleanup، distribute، split) وقبل nav.js و app-actions.js. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./places.js')) VFILES.push('./places.js'); } catch (e) { /* ignore */ } });
   const st = { v: 'place', f: '', open: new Set(), q: '', sel: new Set(), sup: '', src: '' };
+  /* صلاحية «الأماكن والحلقات»: للمحاسبين افتراضيًا، ويسحبها المدير أو يمنحها من «الصلاحيات» */
+  try { Perms.define({ key: 'halaqat.manage', label: 'الأماكن والحلقات', desc: 'إضافة الأماكن والحلقات وتعديلها وحذفها وأدواتها (التنظيف والتقسيم والتوزيع)', group: 'الحلقات والطلاب', defaults: ['accountant'] }); } catch (e) { /* ignore */ }
+  const canManage = () => session?.role === 'admin' || (session?.role === 'accountant' && !!window.Perms?.can('halaqat.manage'));
+  /* المحاسب: «الأماكن والحلقات» في قائمته (تُضاف قبل أن ترتّب nav.js وstuview.js القوائم) */
+  try { if (TABS.accountant && !TABS.accountant.some(t => t[0] === 'halaqat')) TABS.accountant.push(['halaqat', 'الأماكن والحلقات']); } catch (e) { /* ignore */ }
+  document.addEventListener('DOMContentLoaded', () => {
+    const ro = VIEWS.accountant?.halaqat;
+    if (VIEWS.accountant) VIEWS.accountant.halaqat = function () { return canManage() ? adminViews.halaqat() : (ro ? ro.apply(this, arguments) : adminViews.halaqat()); };
+  });
   const base = adminViews.halaqat;
   const stuN = h => db.students.filter(s => s.halaqaId === h.id).length;
   const hasTime = h => !!timeText(h);
@@ -109,7 +120,7 @@
     return i > -1 && j > i ? h.slice(i + 10, j) : '';
   }
   adminViews.halaqat = () => {
-    if (session?.role !== 'admin') return base();
+    if (!canManage()) return base();
     return header() + linksCard() + (st.v === 'sup' ? bySup() : st.v === 'all' ? all() : byPlace());
   };
 
