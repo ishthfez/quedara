@@ -43,16 +43,18 @@
     });
     return { cats: Array.isArray(c?.cats) ? c.cats : [], general: isNum(c?.general) ? +c.general : null, general3: isNum(c?.general3) ? +c.general3 : null, places };
   };
-  /* لكل سنة مبالغها (years): مبالغ السنة المحفوظة لها، وإلا لأقرب سنة قبلها، وإلا لأقرب سنة بعدها، وإلا العامة.
-     فتغيير الاشتراك في سنة جديدة لا يغيّر مستحقات ما قبلها. الخصومات واحدة لكل السنوات. */
+  /* مبالغ الاشتراك تتغير ابتداءً من شهر بعينه (years): مفتاح «2026» = من يناير 2026، و«2026-09» = من سبتمبر 2026.
+     مستحق شهر = مبالغ آخر تغيير بدأ فيه أو قبله (وإلا أول تغيير)، فلا يتغير مستحق ما قبله. الخصومات واحدة للكل.
+     (على الخادم بالقاعدة نفسها: fee_due_ym في supabase/fee_periods.sql) */
   const yearsOf = () => { const Y = db.settings.priv_fees?.years; return Y && typeof Y === 'object' ? Y : {}; };
-  const pickYear = (Y, y) => {
-    const ks = Object.keys(Y).filter(k => /^\d{4}$/.test(k)).map(Number).sort((a, b) => a - b);
-    if (!ks.length) return null;
-    const k = [...ks].reverse().find(x => x <= y) ?? ks[0];
-    return Y[k];
-  };
-  const cfg = (y = st.y) => { const A = cfgBase(), Y = pickYear(yearsOf(), +y); return Y ? { ...A, ...amountsOf(Y) } : A; };
+  const pOrd = k => (/^\d{4}$/.test(k) ? +k * 100 + 1 : /^\d{4}-(0[1-9]|1[0-2])$/.test(k) ? +k.slice(0, 4) * 100 + +k.slice(5) : null);
+  const pKeys = Y => Object.keys(Y).filter(k => pOrd(k) != null).sort((a, b) => pOrd(a) - pOrd(b));
+  const pickKey = (Y, y, m) => { const ks = pKeys(Y); if (!ks.length) return null; const o = y * 100 + (m || 1); return [...ks].reverse().find(k => pOrd(k) <= o) ?? ks[0]; };
+  const pickYear = (Y, y, m) => { const k = pickKey(Y, y, m); return k == null ? null : Y[k]; };
+  const pLabel = k => { const o = pOrd(k); return o == null ? k : `من ${MONTHS[o % 100 - 1]} ${Math.floor(o / 100)}`; };
+  /* بلا سنة: الشهر المعروض في «الاشتراكات». وبالسنة وحدها: الشهر الجاري للسنة الحالية، وديسمبر لما قبلها، ويناير لما بعدها */
+  const defM = y => { const t = today(), cy = +t.slice(0, 4); return y === cy ? +t.slice(5, 7) : y < cy ? 12 : 1; };
+  const cfg = (y, m) => { if (y == null) { y = st.y; m = m ?? st.m; } const A = cfgBase(), Y = pickYear(yearsOf(), +y, m ?? defM(+y)); return Y ? { ...A, ...amountsOf(Y) } : A; };
   const cfgBase = () => {
     const c = db.settings.priv_fees || {};
     let discs = Array.isArray(c.discs) ? c.discs : DEF_DISCS;
@@ -68,8 +70,8 @@
   const discTxt = (d, v, t) => ((t || d.type) === 'amt' ? money(v) + ' جنيه' : v + '%');
   const discLabel = d => (d.each ? `${d.name} (يُحدَّد لكل طالب)` : `${d.name} (${discTxt(d, d.value)})`);
   /* المستحق = (المبلغ الخاص للطالب، أو مبلغ فئته، أو الفئة الافتراضية لسنّه، أو «الاشتراك العام») − الخصم أو الإعفاء */
-  function dueOf(s, y) {
-    const I = s?.info || {}, C = cfg(y ?? st.y);
+  function dueOf(s, y, m) {
+    const I = s?.info || {}, C = y == null ? cfg(st.y, st.m) : cfg(+y, m ?? defM(+y));
     let base = null, src = '';
     if (isNum(I.fee) && +I.fee > 0) { base = +I.fee; src = 'مبلغ خاص'; }
     else {
@@ -96,10 +98,10 @@
     }
     return { base, src, off, dl, due: Math.round((base - off) * 100) / 100 };
   }
-  const feeOf = (s, y) => dueOf(s, y)?.due ?? null;
+  const feeOf = (s, y, m) => dueOf(s, y, m)?.due ?? null;
   const hasThree = C => C.general3 != null || Object.values(C.places).some(p => p.general3 != null);
   const anyGeneral = C => C.general != null || C.general3 != null || Object.keys(C.places).length > 0;
-  window.QLFeeDue = feeOf; // للإيصال: مستحق الطالب للشهر
+  window.QLFeeDue = feeOf; // مستحق الطالب: (طالب، سنة، شهر)؛ بلا سنة = شهر العرض
   const halOf = s => byId(db.halaqat, s.halaqaId);
   /* فهرس المدفوع (طالب|سنة|شهر) يُبنى مرة كلما تغيّرت قائمة الدفعات: آلاف الدفعات × آلاف الطلاب تبقى سريعة */
   let pIdx = new Map(), pAny = new Set(), pRef = null, pLen = -1;
@@ -286,14 +288,16 @@
 
   /* ===== نافذة الفئات والخصومات ===== */
   function cfgDialog() {
-    let curY = st.y;
-    const C = JSON.parse(JSON.stringify(cfg(curY)));
+    /* الفترات: كل تغيير في المبالغ يبدأ من شهر (مفتاح «2026» أو «2026-09»)، والمعروضة أولًا فترة شهر العرض */
+    const yNow = +today().slice(0, 4), mNow = +today().slice(5, 7);
     const origYears = JSON.parse(JSON.stringify(yearsOf())), baseNow = JSON.parse(JSON.stringify(amountsOf(db.settings.priv_fees || {})));
-    const stash = {};   // مبالغ كل سنة عُدّلت في هذه النافذة
-    const yNow = +today().slice(0, 4);
-    const yearOpts = () => [...new Set([yNow - 1, yNow, yNow + 1, st.y, curY, ...Object.keys(origYears).map(Number)])].filter(Boolean).sort((a, b) => a - b);
-    const takeYear = () => { stash[curY] = { general: C.general, general3: C.general3, places: C.places, cats: C.cats }; };
-    const loadYear = y => { const v = stash[y] ? JSON.parse(JSON.stringify(stash[y])) : JSON.parse(JSON.stringify(cfg(y))); C.general = v.general; C.general3 = v.general3; C.places = v.places || {}; C.cats = v.cats || []; };
+    const stash = {}, dropped = new Set();   // مبالغ كل فترة عُدّلت أو أُنشئت في هذه النافذة، وما حُذف منها
+    let curK = pickKey(origYears, st.y, st.m) || String(yNow), newOpen = false;
+    const C = JSON.parse(JSON.stringify(cfg(st.y, st.m)));
+    const live = () => { const Y = {}; Object.entries(origYears).forEach(([k, v]) => { if (!dropped.has(k)) Y[k] = v; }); Object.entries(stash).forEach(([k, v]) => { if (!dropped.has(k)) Y[k] = v; }); if (!pKeys(Y).length) Y[String(yNow)] = baseNow; return Y; };
+    const periodKeys = () => pKeys(live());
+    const takeYear = () => { stash[curK] = { general: C.general, general3: C.general3, places: C.places, cats: C.cats }; };
+    const loadYear = k => { const v = JSON.parse(JSON.stringify(amountsOf(live()[k] || {}))); C.general = v.general; C.general3 = v.general3; C.places = v.places || {}; C.cats = v.cats || []; };
     const ov = document.createElement('div'); ov.className = 'overlay';
     const catRow = (c, i) => `<tr><td><input data-c="name" data-i="${i}" value="${esc(c.name)}" placeholder="مثال: الصغار"></td><td><input type="number" min="0" data-c="amount" data-i="${i}" value="${esc(c.amount ?? '')}" style="width:7rem"></td>
       <td><select data-c="def" data-i="${i}"><option value="">—</option><option value="child" ${c.def === 'child' ? 'selected' : ''}>الصغار</option><option value="adult" ${c.def === 'adult' ? 'selected' : ''}>الكبار</option></select></td><td><button type="button" class="btn sm danger" data-cdel="${i}">حذف</button></td></tr>`;
@@ -303,9 +307,16 @@
     const used = (k, id) => db.students.filter(x => (x.info || {})[k] === id).length;
     const draw = () => {
       ov.innerHTML = `<div class="modal wide"><h2>إعدادات الاشتراك</h2>
-        <div class="bar" style="margin:0 0 .6rem"><label style="margin:0">مبالغ سنة<select data-cfgy style="width:auto">${yearOpts().map(y => `<option value="${y}" ${y === curY ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
-          <span class="muted" style="font-size:.85rem">لكل سنة مبالغها: تغيير مبالغ سنة لا يغيّر مستحقات السنوات الأخرى. السنة التي لم تُحدَّد مبالغها تأخذ مبالغ السنة التي قبلها.</span></div>
-        <h3 style="font-size:1rem;margin:.4rem 0">الاشتراك العام لسنة ${curY} (المبلغ الشهري بحسب نظام الحضور)</h3>
+        <div class="bar" style="margin:0 0 .4rem;flex-wrap:wrap"><label style="margin:0">المبالغ<select data-cfgy style="width:auto">${periodKeys().map(k => `<option value="${k}" ${k === curK ? 'selected' : ''}>${pLabel(k)}</option>`).join('')}</select></label>
+          <button type="button" class="btn sm" data-cfgnew>+ تغيير المبلغ ابتداءً من شهر…</button>
+          ${periodKeys().length > 1 && curK !== periodKeys()[0] ? '<button type="button" class="btn sm danger" data-cfgdel>حذف هذا التغيير</button>' : ''}</div>
+        <p class="muted" style="font-size:.85rem;margin:0 0 .6rem">كل تغيير في المبلغ يسري من الشهر الذي تختاره وما بعده، ولا يغيّر مستحقات ما قبله. الخصومات واحدة للكل.</p>
+        ${newOpen ? `<div class="note" style="display:flex;flex-wrap:wrap;gap:.4rem .6rem;align-items:center;margin:0 0 .8rem"><b>المبلغ الجديد يبدأ من</b>
+          <select data-newm style="width:auto;margin:0">${MONTHS.map((n, i) => `<option value="${i + 1}" ${i + 1 === (mNow % 12) + 1 ? 'selected' : ''}>${n}</option>`).join('')}</select>
+          <select data-newy style="width:auto;margin:0">${[yNow - 1, yNow, yNow + 1].map(y => `<option value="${y}" ${y === (mNow === 12 ? yNow + 1 : yNow) ? 'selected' : ''}>${y}</option>`).join('')}</select>
+          <button type="button" class="btn sm primary" data-cfgnewok>إنشاء</button><button type="button" class="btn sm" data-cfgnewx>إلغاء</button>
+          <span class="muted" style="font-size:.82rem;flex-basis:100%">تُنسخ إليه المبالغ السارية في ذلك الشهر، فتعدّل منها ما تغيّر ثم «حفظ».</span></div>` : ''}
+        <h3 style="font-size:1rem;margin:.4rem 0">الاشتراك العام ${pLabel(curK)} (المبلغ الشهري بحسب نظام الحضور)</h3>
         <div class="two" style="max-width:30rem"><label style="margin:0 0 .3rem">نظام 6 أيام (جنيه)<input type="number" min="0" step="any" data-general value="${C.general ?? ''}" placeholder="مثال: 60"></label>
           <label style="margin:0 0 .3rem">نظام 3 أيام (جنيه)<input type="number" min="0" step="any" data-general3 value="${C.general3 ?? ''}" placeholder="مثال: 40"></label></div>
         <p class="muted" style="font-size:.85rem;margin:0 0 1rem">كل طالب على «نظام 6 أيام» ما لم يُختر له «نظام 3 أيام» من القائمة بجانب اسمه في «الاشتراكات» (أو من «تعيين لنتائج البحث» لحلقة كاملة). ثم يُطرح من المبلغ خصمه أو إعفاؤه. اترك «3 أيام» فارغًا إن كان الاشتراك واحدًا للجميع.</p>
@@ -342,7 +353,7 @@
     };
     ov.addEventListener('change', e => {
       if (e.target.matches('[data-each]')) { read(); draw(); }
-      if (e.target.matches('[data-cfgy]')) { read(); takeYear(); curY = +e.target.value; loadYear(curY); draw(); }
+      if (e.target.matches('[data-cfgy]')) { read(); takeYear(); curK = e.target.value; loadYear(curK); draw(); }
     });
     ov.addEventListener('input', e => {
       if (!e.target.matches('[data-cfgpq]')) return;
@@ -352,6 +363,18 @@
     ov.addEventListener('click', e => {
       const t = e.target;
       if (t.matches('[data-close]')) { ov.remove(); return; }
+      if (t.matches('[data-cfgnew]')) { read(); newOpen = true; draw(); return; }
+      if (t.matches('[data-cfgnewx]')) { read(); newOpen = false; draw(); return; }
+      if (t.matches('[data-cfgnewok]')) {
+        const m = +ov.querySelector('[data-newm]').value, y = +ov.querySelector('[data-newy]').value, k = m === 1 ? String(y) : `${y}-${String(m).padStart(2, '0')}`;
+        read(); takeYear(); newOpen = false;
+        if (!live()[k]) { dropped.delete(k); stash[k] = JSON.parse(JSON.stringify(amountsOf(pickYear(live(), y, m) || {}))); }
+        curK = k; loadYear(k); draw(); toast(`عدّل مبالغ «${pLabel(k)}» ثم «حفظ»`); return;
+      }
+      if (t.matches('[data-cfgdel]')) {
+        read(); const ks = periodKeys(), i = ks.indexOf(curK);
+        dropped.add(curK); delete stash[curK]; curK = ks[Math.max(0, i - 1)]; loadYear(curK); draw(); toast('سيُحذف التغيير عند «حفظ»، فتعود شهوره إلى المبالغ التي قبله'); return;
+      }
       if (t.matches('[data-cadd]')) { read(); C.cats.push({ id: uid(), name: '', amount: '', def: '' }); draw(); return; }
       if (t.matches('[data-dadd]')) { read(); C.discs.push({ id: uid(), name: '', type: 'pct', value: '' }); draw(); return; }
       if (t.matches('[data-dexempt]')) { read(); C.discs.push({ id: uid(), name: 'إعفاء كامل', type: 'pct', value: 100 }); draw(); return; }
@@ -364,19 +387,21 @@
       }
       if (t.matches('[data-save]')) {
         read(); takeYear();
-        for (const [y, V] of Object.entries(stash)) {
-          if ([V.general, V.general3].some(x => x != null && (!isNum(x) || x < 0))) { toast(`مبلغ الاشتراك العام لسنة ${y} غير صحيح`); return; }
-          if (Object.values(V.places || {}).some(p => [p.general, p.general3].some(x => x != null && (!isNum(x) || x < 0)))) { toast(`مبلغ أحد الأماكن لسنة ${y} غير صحيح`); return; }
-          if ((V.cats || []).some(c => !c.name || !isNum(c.amount) || +c.amount < 0)) { toast(`أكمل اسم كل فئة ومبلغها لسنة ${y}`); return; }
+        for (const [y, V] of Object.entries(stash).filter(([k]) => !dropped.has(k))) {
+          if ([V.general, V.general3].some(x => x != null && (!isNum(x) || x < 0))) { toast(`مبلغ الاشتراك العام (${pLabel(y)}) غير صحيح`); return; }
+          if (Object.values(V.places || {}).some(p => [p.general, p.general3].some(x => x != null && (!isNum(x) || x < 0)))) { toast(`مبلغ أحد الأماكن (${pLabel(y)}) غير صحيح`); return; }
+          if ((V.cats || []).some(c => !c.name || !isNum(c.amount) || +c.amount < 0)) { toast(`أكمل اسم كل فئة ومبلغها (${pLabel(y)})`); return; }
           if (['child', 'adult'].some(k => (V.cats || []).filter(c => c.def === k).length > 1)) { toast('فئة افتراضية واحدة فقط للصغار وواحدة للكبار'); return; }
         }
         if (C.discs.some(d => !d.name || (!d.each && (!isNum(d.value) || +d.value < 0)))) { toast('أكمل اسم كل خصم وقيمته'); return; }
         if (C.discs.some(d => d.type !== 'amt' && +d.value > 100)) { toast('نسبة الخصم لا تزيد على 100%'); return; }
-        /* مبالغ السنوات: ما عُدّل هنا، وما قبل ذلك كما هو. أول مرة تُثبَّت مبالغ هذه السنة كما كانت حتى لا تتغير مستحقاتها */
+        /* الفترات: ما عُدّل أو أُنشئ هنا، وما حُذف، وما قبل ذلك كما هو. أول مرة تُثبَّت مبالغ هذه السنة كما كانت حتى لا تتغير مستحقاتها */
         const years = { ...origYears };
-        if (!Object.keys(origYears).length && !stash[yNow]) years[yNow] = baseNow;
-        Object.entries(stash).forEach(([y, V]) => { years[y] = { general: V.general, general3: V.general3, places: V.places || {}, cats: (V.cats || []).map(c => ({ ...c, amount: +c.amount })) }; });
-        const cur = amountsOf(pickYear(years, yNow) || {});
+        if (!pKeys(origYears).length && !stash[yNow]) years[yNow] = baseNow;
+        dropped.forEach(k => { delete years[k]; });
+        Object.entries(stash).filter(([k]) => !dropped.has(k)).forEach(([y, V]) => { years[y] = { general: V.general, general3: V.general3, places: V.places || {}, cats: (V.cats || []).map(c => ({ ...c, amount: +c.amount })) }; });
+        if (!pKeys(years).length) years[yNow] = baseNow;
+        const cur = amountsOf(pickYear(years, yNow, mNow) || {});
         db.settings.priv_fees = { v: 3, general: cur.general, general3: cur.general3, places: cur.places, cats: cur.cats, years, discs: C.discs.map(d => ({ ...d, value: d.each ? 0 : +d.value, each: !!d.each })) };
         ov.remove(); save(); render(); toast('حُفظت إعدادات الاشتراك');
       }

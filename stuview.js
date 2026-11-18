@@ -7,7 +7,7 @@
    - الطلاب والحلقات: المعلم حلقاته، والمشرف حلقاته (والمشرف العام كلها)، والإداري حلقات نطاقه (أماكنه، أو حلقات بعينها فيها)، والمحاسب الكل.
      الخادم لا يرسل لكل حساب إلا ما يخصه أصلًا؛ والتضييق هنا على الجهاز أيضًا (لـ«العمل بصفة» حيث تصل المدير كل البيانات).
    - الاشتراكات لحلقاته فقط: المعلم والمشرف والإداري لا يصلهم جدول الدفعات ولا إعدادات الاشتراك، فتأتيهم مستحقات طلابهم
-     ودفعاتهم من دالة الخادم staff_fees (supabase/fees_staff.sql) كل دقيقتين ومع تغيير سنة الشهر المختار. */
+     ودفعاتهم من دالة الخادم staff_fees (supabase/fees_staff.sql ثم fee_periods.sql) كل دقيقتين ومع تغيير الشهر المختار. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./stuview.js')) VFILES.push('./stuview.js'); } catch (e) { /* ignore */ } });
   const R4 = ['teacher', 'supervisor', 'accountant', 'placeadmin'];
@@ -53,24 +53,27 @@
   });
 
   /* ===== الاشتراكات لحلقاته (المعلم والمشرف والإداري على الخادم) ===== */
-  const FS = { y: 0, at: 0, loading: false, dues: new Map(), fees: null, ok: false };
+  const FS = { y: 0, m: 0, at: 0, loading: false, dues: new Map(), fees: null, ok: false, old: false };
   const needFees = () => CLOUD && on() && ['teacher', 'supervisor', 'placeadmin'].includes(role()) && !window.QLActAs?.();
-  async function load(y) {
+  /* المستحق عن الشهر المختار (supabase/fee_periods.sql: المبلغ قد يتغير من شهر بعينه)؛ وقبل تنفيذه: بالسنة وحدها كما كان */
+  async function load(y, m) {
     if (FS.loading) return; FS.loading = true;
     try {
-      const r = await window.Cloud.rpc('staff_fees', { yy: y });
+      let r;
+      if (!FS.old) { try { r = await window.Cloud.rpc('staff_fees', { yy: y, mm: m }); } catch (e) { if (e?.status === 404 || /PGRST20[23]|staff_fees/.test(String(e?.message || e))) FS.old = true; else throw e; } }
+      if (FS.old) r = await window.Cloud.rpc('staff_fees', { yy: y });
       FS.dues = new Map((r?.dues || []).map(x => [x.s, x.d == null ? null : +x.d]));
       FS.fees = (r?.fees || []).map(f => ({ id: f.id, studentId: f.s, y: +f.y, m: +f.m, amount: +f.a || 0, date: f.dt || '', by: f.by || '', note: f.n || '' }));
-      FS.y = y; FS.at = Date.now(); FS.ok = true;
+      FS.y = y; FS.m = m; FS.at = Date.now(); FS.ok = true;
     } catch (e) { FS.ok = false; FS.at = Date.now(); console.warn('staff_fees:', e?.message || e); }
     FS.loading = false;
     if (on() && ui.tab === 'students') render();
   }
   function staffFees() {
     if (!needFees()) return;
-    const y = (window.QLFees && window.QLFees.y) || new Date().getFullYear();
+    const y = (window.QLFees && window.QLFees.y) || new Date().getFullYear(), m = (window.QLFees && window.QLFees.m) || (new Date().getMonth() + 1);
     if (FS.fees && db.fees !== FS.fees) db.fees = FS.fees;   // كل سحب من الخادم يعيد db.fees فارغة لهذه الفئات
-    if (y !== FS.y || Date.now() - FS.at > 120000) load(y);
+    if (y !== FS.y || m !== FS.m || Date.now() - FS.at > 120000) load(y, m);
   }
   /* المستحق: من الخادم لهذه الفئات (لا تصلهم إعدادات الاشتراك) */
   document.addEventListener('DOMContentLoaded', () => {

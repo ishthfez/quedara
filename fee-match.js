@@ -17,11 +17,14 @@
   };
 
   /* أسعار الأماكن الفعلية: من مبالغ السنة الحالية إن وُجدت (كما يحسبها fees.js)، وإلا من الإعدادات العامة */
+  /* فترة المبالغ السارية الآن: مفتاح «2026» (من يناير) أو «2026-09» (من سبتمبر)، كما في fees.js */
   var yearKey = function (cfg) {
     var Y = cfg && cfg.years; if (!Y || typeof Y !== 'object') return null;
-    var y = new Date().getFullYear(), ks = Object.keys(Y).filter(function (k) { return /^\d{4}$/.test(k); }).map(Number).sort(function (a, b) { return a - b; });
+    var ord = function (k) { return /^\d{4}$/.test(k) ? +k * 100 + 1 : /^\d{4}-(0[1-9]|1[0-2])$/.test(k) ? +k.slice(0, 4) * 100 + +k.slice(5) : null; };
+    var d = new Date(), now = d.getFullYear() * 100 + d.getMonth() + 1;
+    var ks = Object.keys(Y).filter(function (k) { return ord(k) != null; }).sort(function (a, b) { return ord(a) - ord(b); });
     if (!ks.length) return null;
-    var k = ks.slice().reverse().find(function (x) { return x <= y; }); return String(k != null ? k : ks[0]);
+    var k = ks.slice().reverse().find(function (x) { return ord(x) <= now; }); return k != null ? k : ks[0];
   };
   var curPlaces = function (cfg) { var k = yearKey(cfg); return ((k ? (cfg.years[k] || {}).places : cfg.places) || {}); };
   /* علامة fee-setup.js «تم الضبط»: حتى لا يعمل تلقائيًا لاحقًا فيفرض نظامًا واحدًا على كل طلاب المكان فوق المطابقة */
