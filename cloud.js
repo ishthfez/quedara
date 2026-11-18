@@ -407,6 +407,8 @@ const ALLOWED = {
   placeadmin: [], // يطّلع فقط؛ والتحصيل عبر دالة الخادم
   student: []
 };
+/* مجموعات يرسلها غير المدير متى مُنح صلاحيتها (والخادم يتحقق منها): الأماكن والحلقات (supabase/halaqat_perm.sql) */
+const PERM_GROUPS = { places: 'halaqat.manage', halaqat: 'halaqat.manage' };
 /* مقارنة لا تتأثر بترتيب الحقول: قاعدة البيانات تعيد ترتيب حقول JSON (مثل إعدادات المرتبات)،
    فلولا هذا لظنّ التطبيق أنها تغيّرت وأعاد إرسالها مع كل مزامنة. تُستخدم فقط حين يختلف النص الظاهر. */
 const canon = v => (Array.isArray(v) ? '[' + v.map(canon).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}' : JSON.stringify(v === undefined ? null : v));
@@ -415,7 +417,7 @@ function diff(db) {
   const role = auth?.member?.role, allow = ALLOWED[role];
   const out = [];
   for (const gr of groups(db)) {
-    if (allow && !allow.includes(gr.name)) continue;
+    if (allow && !allow.includes(gr.name) && !(PERM_GROUPS[gr.name] && (db.myPerms || []).includes(PERM_GROUPS[gr.name]))) continue;
     const prev = snap?.[gr.name] || {}, cur = {};
     const up = [];
     gr.rows.forEach(r => { const k = rowKey(gr.pk, r), j = JSON.stringify(r); cur[k] = j; if (prev[k] !== j && !(prev[k] && sameRow(prev[k], r))) up.push(r); });
