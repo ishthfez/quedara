@@ -43,9 +43,9 @@
         return e.act === 'delete' ? `حذف تسميع ${q(t)}: ${what}` : e.act === 'update' ? `عدّل تسميع ${q(t)}: ${what}` : `سجّل تسميع ${q(t)}: ${what}`;
       }
       case 'fees':
-        if (e.act === 'cn_edit') return [d.added?.length ? `أضاف إلى إخطار التحصيل: ${lines(d.added)}` : '', d.removed?.length ? `ألغى من الإخطار: ${lines(d.removed)}` : ''].filter(Boolean).join('، و');
-        if (e.act === 'cn_send') return `أرسل إخطار تحصيل للمحاسب: ${(d.lines || []).length} من الطلاب، ${sum(d.lines)} جنيه`;
-        if (e.act === 'cn_finish') { const ok = (d.lines || []).filter(l => l.state === 'ok'), no = (d.lines || []).filter(l => l.state === 'issue'); return `حصّل إخطار ${q(t)}: ${ok.length} من الطلاب، ${sum(ok)} جنيه${no.length ? `، وأعاد ${no.length}` : ''}`; }
+        if (e.act === 'cn_edit') return [d.added?.length ? `أضاف إلى كشف التحصيل: ${lines(d.added)}` : '', d.removed?.length ? `ألغى من الكشف: ${lines(d.removed)}` : ''].filter(Boolean).join('، و');
+        if (e.act === 'cn_send') return `أرسل كشف تحصيل للمحاسب: ${(d.lines || []).length} من الطلاب، ${sum(d.lines)} جنيه`;
+        if (e.act === 'cn_finish') { const ok = (d.lines || []).filter(l => l.state === 'ok'), no = (d.lines || []).filter(l => l.state === 'issue'); return `حصّل كشف ${q(t)}: ${ok.length} من الطلاب، ${sum(ok)} جنيه${no.length ? `، وأعاد ${no.length}` : ''}`; }
         if (e.act.startsWith('coll_')) return `${e.act === 'coll_done' ? 'أكّد' : e.act === 'coll_returned' ? 'أعاد' : e.act === 'coll_sent' ? 'أرسل' : 'غيّر'} قائمة تحصيل ${q(t)} (${ym(d.y, d.m)})`;
         if (e.act === 'delete') return `حذف دفعة ${q(t)} عن ${ym(d.y, d.m)}`;
         if (e.act === 'update') return `عدّل دفعة ${q(t)} عن ${ym(d.y, d.m)}: ${money(d.old)} ← ${money(d.amount)} جنيه`;

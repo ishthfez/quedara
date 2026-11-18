@@ -7,7 +7,7 @@
    - مدة الإعلان: يختار المدير مدة (أو تاريخًا) يختفي بعدها الإعلان من «الرئيسية» و«الإعلانات» عند الجميع؛
      ويبقى في «الإعلانات» عند المدير بعلامة «انتهى»، وله فيها «تعديل» لكل إعلان (النص والجمهور والأهمية والمدة).
    - الحفظ على الخادم: عمودا prio و until (supabase/news_ext.sql)؛ وقبل تنفيذه يعمل الإعلان كما كان بلا أهمية ولا مدة.
-   - تحت الإعلانات عدّادات بحسب اختصاص كل فئة (بطاقة «الحلقات والطلاب» نفسها التي عند المدير)، كلٌّ في نطاقه:
+   - تحت الإعلانات عدّادات بحسب اختصاص كل فئة (بطاقة «الحلقات والطلاب» نفسها التي عند المدير)، كلٌّ في نطاقه:
      المعلم حلقاته، والمشرف حلقاته، والإداري حلقات أماكنه، والمحاسب الطلاب و«الاشتراكات»، والطالب حضوره وتسميعه.
      الطلاب في العدّادات كلها المنتظمون وحدهم، والمعلمون العاملون وحدهم (لا الموقوفون)، عند المدير وغيره. */
 (() => {
@@ -116,7 +116,7 @@
     return { H, S, on, attT, here, pct: on.length ? Math.round(here / on.length * 100) : 0, notYet: on.filter(s => !day.has(s.id)).length, halDone, recT, absM, mon };
   }
   const trs = () => (window.QLTransfers?.list?.() || []);
-  /* إخطارات التحصيل بانتظار المراجعة (للمحاسب): من الخادم كل دقيقة على الأكثر */
+  /* كشوف التحصيل بانتظار المراجعة (للمحاسب): من الخادم كل دقيقة على الأكثر */
   const INB = { n: null, at: 0, busy: false };
   function inbox() {
     if (INB.busy || Date.now() - INB.at < 60000 || !window.QLCN?.api) return;
@@ -138,7 +138,7 @@
       inbox();
       let fee = ''; try { fee = window.QLFeeSummary ? window.QLFeeSummary(db.students) : ''; } catch (e) { fee = ''; }
       return card('الطلاب', [row('fr-plain', 'الطلاب المنتظمون', on),
-        ...(window.QLStuPerm?.can?.('accbtn') === false ? [] : [row(INB.n ? 'fr-no' : 'fr-ok', 'إخطارات بانتظار المراجعة', INB.n == null ? '…' : INB.n)])]) + fee;
+        ...(window.QLStuPerm?.can?.('accbtn') === false ? [] : [row(INB.n ? 'fr-no' : 'fr-ok', 'كشوف بانتظار المراجعة', INB.n == null ? '…' : INB.n)])]) + fee;
     }
     const d = scopeData(), T = trs(), wait = T.filter(x => x.canDecide).length;
     const att = d.on.length ? pctRow('حضور اليوم', d.pct) : row('fr-plain', 'حضور اليوم', '—');

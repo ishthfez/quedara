@@ -1,17 +1,17 @@
 'use strict';
-/* ============ إخطارات التحصيل: جانب المعلم والإداري ============
+/* ============ كشوف التحصيل: جانب المعلم والإداري ============
    زر «تحصيل» في صف أدوات صفحة «الطلاب» (بجانب «الحضور») يفتح نافذة فيها طلاب حلقات الجامع ومستحق كل منهم،
    وأمام كل طالب «تحصيل الاشتراك»: نافذة التحصيل نفسها التي عند المحاسب (المبلغ، الشهر، التاريخ، الملاحظة، وسبب المبلغ الأقل).
-   ما يُحصَّل يدخل «الإخطار الحالي» (مسودة على الخادم)، ثم «مراجعة وإرسال» يعرض الأسماء والمبالغ والإجمالي ويرسله للمحاسب.
-   الزر أخضر إن كان للطالب تحصيل عن الشهر الحالي (في الإخطار أو عند المحاسب أو مؤكَّد، أو دفعة مسجّلة)، وعادي إن كان لشهر سابق.
-   ما أعاده المحاسب يعود إلى الإخطار الحالي بالأحمر وملاحظته، فيُصحَّح ويُرسل من جديد.
-   الضغط مرة أخرى على «تحصيل الاشتراك» لطالب في الإخطار الحالي يسأل (نافذة تأكيد) ثم يلغي تحصيله منه؛
+   ما يُحصَّل يدخل «الكشف الحالي» (مسودة على الخادم)، ثم «مراجعة وإرسال» يعرض الأسماء والمبالغ والإجمالي ويرسله للمحاسب.
+   الزر أخضر إن كان للطالب تحصيل عن الشهر الحالي (في الكشف أو عند المحاسب أو مؤكَّد، أو دفعة مسجّلة)، وعادي إن كان لشهر سابق.
+   ما أعاده المحاسب يعود إلى الكشف الحالي بالأحمر وملاحظته، فيُصحَّح ويُرسل من جديد.
+   الضغط مرة أخرى على «تحصيل الاشتراك» لطالب في الكشف الحالي يسأل (نافذة تأكيد) ثم يلغي تحصيله منه؛
    وما أُرسل للمحاسب أو حصّله لا يُلغى من هنا (الزر عندئذ يفتح التحصيل لشهر آخر).
    - الخادم: supabase/cnotices.sql (cn_add / cn_remove / cn_send / cn_list). بلا خادم (نسخة العرض): القاعدة نفسها على الجهاز في db.cnotices.
-   - المحاسب والمدير: زر «إخطارات» في صف الأدوات نفسه، وعليه عدد الإخطارات المنتظرة. يفتح نافذة بتبويبين:
-     «الإخطارات»: كل إخطار رسالة (الجامع وتاريخه، ثم الأسماء والشهر والمبلغ والإجمالي)، وأمام كل اسم «تم التحصيل» فيصير أخضر باهتًا ✓
+   - المحاسب والمدير: زر «كشوف» في صف الأدوات نفسه، وعليه عدد الكشوف المنتظرة. يفتح نافذة بتبويبين:
+     «الكشوف»: كل كشف رسالة (الجامع وتاريخه، ثم الأسماء والشهر والمبلغ والإجمالي)، وأمام كل اسم «تم التحصيل» فيصير أخضر باهتًا ✓
      أو «إعادة» بملاحظة (cn_mark، يُحفظ فورًا ويمكن التراجع عنه)، ثم «تم تحصيل المبلغ» حين تُراجع الأسماء كلها (cn_finish) فينتقل إلى السجل.
-     «السجل»: الإخطارات المنتهية، والقوائم القديمة (collect.js) ومنها ما ينتظر المراجعة.
+     «السجل»: الكشوف المنتهية، والقوائم القديمة (collect.js) ومنها ما ينتظر المراجعة.
    - حلّت هذه محل الصفحات القديمة: «التحصيل» عند المعلم والإداري، و«تحصيل المعلمين» عند المحاسب والمدير (تبويبها وشريط تبويبات «الطلاب»). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./tcollect.js')) VFILES.push('./tcollect.js'); } catch (e) { /* ignore */ } });
@@ -50,14 +50,14 @@
     send() {
       const d = local.draft(false); if (!d || !d.lines.length) throw new Error('لا يوجد ما يُرسل');
       d.status = 'sent'; d.sentAt = new Date().toISOString(); d.lines = d.lines.map(l => ({ ...l, state: 'pending', accNote: '' }));
-      news('accountant', `إخطار تحصيل من ${d.collectorName}: عدد الطلاب ${d.lines.length}، والإجمالي ${money(d.lines.reduce((a, l) => a + l.amount, 0))} جنيه. راجعه من «الطلاب ← إخطارات».`);
+      news('accountant', `كشف تحصيل من ${d.collectorName}: عدد الطلاب ${d.lines.length}، والإجمالي ${money(d.lines.reduce((a, l) => a + l.amount, 0))} جنيه. راجعه من «الطلاب ← كشوف».`);
     },
     mark(nid, lid, ok, msg) {
-      const n = L().find(x => x.id === nid && x.status === 'sent'); if (!n) throw new Error('الإخطار غير موجود أو انتهت مراجعته');
+      const n = L().find(x => x.id === nid && x.status === 'sent'); if (!n) throw new Error('الكشف غير موجود أو انتهت مراجعته');
       n.lines = n.lines.map(l => l.id === lid ? { ...l, state: ok == null ? 'pending' : ok ? 'ok' : 'issue', accNote: ok === false ? (msg || '') : '' } : l);
     },
     finish(nid, msg) {
-      const n = L().find(x => x.id === nid && x.status === 'sent'); if (!n) throw new Error('الإخطار غير موجود أو انتهت مراجعته');
+      const n = L().find(x => x.id === nid && x.status === 'sent'); if (!n) throw new Error('الكشف غير موجود أو انتهت مراجعته');
       if (n.lines.some(l => l.state !== 'ok' && l.state !== 'issue')) throw new Error('راجع الأسماء كلها أولًا');
       if (!Array.isArray(db.fees)) db.fees = [];
       const ok = n.lines.filter(l => l.state === 'ok'), back = n.lines.filter(l => l.state === 'issue').map(l => ({ ...l, id: uid() }));
@@ -68,7 +68,7 @@
         if (!d) { d = { id: uid(), collectorId: n.collectorId, collectorName: n.collectorName, status: 'draft', lines: [], accNote: '', createdAt: new Date().toISOString() }; L().push(d); }
         d.lines = d.lines.filter(x => !back.some(b => b.studentId === x.studentId && b.y === x.y && b.m === x.m)).concat(back);
       }
-      news('m:' + n.collectorId, `تم تحصيل إخطارك: عدد الطلاب ${ok.length}، والإجمالي ${money(ok.reduce((a, l) => a + l.amount, 0))} جنيه.${back.length ? ` وأُعيد إليك ${back.length} من الأسماء بملاحظة المحاسب، فصحّحها وأعد إرسالها من «تحصيل».` : ''}`);
+      news('m:' + n.collectorId, `تم تحصيل كشفك: عدد الطلاب ${ok.length}، والإجمالي ${money(ok.reduce((a, l) => a + l.amount, 0))} جنيه.${back.length ? ` وأُعيد إليك ${back.length} من الأسماء بملاحظة المحاسب، فصحّحها وأعد إرسالها من «تحصيل».` : ''}`);
       return back.length ? 'partial' : 'done';
     }
   };
@@ -100,7 +100,7 @@
   };
   const draft = () => S.mine.find(n => n.status === 'draft');
   const sent = () => S.mine.filter(n => n.status === 'sent');
-  /* حالة الطالب: آخر ما يخصه في الإخطارات، وهل حُصّل عن الشهر الحالي */
+  /* حالة الطالب: آخر ما يخصه في الكشوف، وهل حُصّل عن الشهر الحالي */
   function stuState(s) {
     const [y, m] = ym();
     const lines = S.mine.flatMap(n => n.lines.map(l => ({ ...l, ns: n.status }))).filter(l => l.studentId === s.id);
@@ -112,7 +112,7 @@
     const green = !!(inDraft || atAcc || done || paidFee) && !issue;
     let txt = '';
     if (issue) txt = `<span class="tag tag-no">مُعاد${issue.y !== y || issue.m !== m ? ` (${MONTHS[issue.m - 1]})` : ''}: ${esc(issue.accNote || 'راجعه')}</span>`;
-    else if (inDraft) txt = `<span class="tag">في الإخطار: ${money(inDraft.amount)}</span>`;
+    else if (inDraft) txt = `<span class="tag">في الكشف: ${money(inDraft.amount)}</span>`;
     else if (atAcc) txt = `<span class="tag">عند المحاسب: ${money(atAcc.amount)}</span>`;
     else if (done || paidFee) txt = '<span class="tag tag-ok">مُسدَّد ✓</span>';
     else {
@@ -151,14 +151,14 @@
         <td><button type="button" class="btn sm ${st.green ? 'qpaid' : ''}" data-colpay="${esc(s.id)}">${st.green ? '✓ ' : ''}تحصيل الاشتراك</button></td></tr>`;
     }).join('');
     const dn = d?.lines.length || 0, dt = (d?.lines || []).reduce((a, l) => a + l.amount, 0), di = (d?.lines || []).filter(l => l.state === 'issue').length;
-    const sentTxt = sent().map(n => `<p class="muted qcolsent">إخطار أُرسل ${esc(String(n.sentAt || '').slice(0, 10))} بانتظار المحاسب: ${n.lines.length} من الطلاب، ${money(n.lines.reduce((a, l) => a + l.amount, 0))} جنيه.</p>`).join('');
+    const sentTxt = sent().map(n => `<p class="muted qcolsent">كشف أُرسل ${esc(String(n.sentAt || '').slice(0, 10))} بانتظار المحاسب: ${n.lines.length} من الطلاب، ${money(n.lines.reduce((a, l) => a + l.amount, 0))} جنيه.</p>`).join('');
     return `<div class="modal wide"><h2>التحصيل — ${MONTHS[m - 1]} ${y}</h2>
       ${hs.length > 1 ? `<label style="max-width:28rem">الحلقة<select data-colhal><option value="">كل حلقاتي</option>${hs.map(h => `<option value="${esc(h.id)}" ${h.id === S.hid ? 'selected' : ''}>${esc(halaqaLabel(h))}</option>`).join('')}</select></label>` : ''}
-      <p class="muted" style="font-size:.86rem;margin:.2rem 0 .6rem">«تحصيل الاشتراك» يضيف الطالب إلى الإخطار الحالي، ثم «مراجعة وإرسال» يرسله للمحاسب. الزر الأخضر: حُصّل عن الشهر الحالي.</p>
+      <p class="muted" style="font-size:.86rem;margin:.2rem 0 .6rem">«تحصيل الاشتراك» يضيف الطالب إلى الكشف الحالي، ثم «مراجعة وإرسال» يرسله للمحاسب. الزر الأخضر: حُصّل عن الشهر الحالي.</p>
       ${S.loading && !S.mine.length ? '<p class="muted">جارٍ التحميل…</p>' : ''}
       ${sentTxt}
       ${list.length ? `<div class="tbl"><table><tr><th class="qnm">الطالب</th><th>المستحق</th><th></th></tr>${rows}</table></div>` : empty('لا يوجد طلاب.')}
-      <div class="row qcolbar"><span class="grow">${dn ? `الإخطار الحالي: <b>${dn}</b> من الطلاب، والإجمالي <b>${money(dt)}</b> جنيه${di ? ` · <span style="color:var(--red,#b3372f)">${di} مُعاد للتصحيح</span>` : ''}` : '<span class="muted">الإخطار الحالي فارغ.</span>'}</span>
+      <div class="row qcolbar"><span class="grow">${dn ? `الكشف الحالي: <b>${dn}</b> من الطلاب، والإجمالي <b>${money(dt)}</b> جنيه${di ? ` · <span style="color:var(--red,#b3372f)">${di} مُعاد للتصحيح</span>` : ''}` : '<span class="muted">الكشف الحالي فارغ.</span>'}</span>
         <button type="button" class="btn primary" data-colrev ${dn ? '' : 'disabled'}>مراجعة وإرسال</button><button type="button" class="btn" data-close>إغلاق</button></div></div>`;
   }
   function paint() { if (ov && ov.isConnected) { const sc = ov.querySelector('.modal')?.scrollTop || 0; ov.innerHTML = body(); const m = ov.querySelector('.modal'); if (m) m.scrollTop = sc; } }
@@ -184,8 +184,8 @@
       <label>التاريخ<input type="date" name="date" value="${today()}"></label>
       <label>ملاحظة<input name="note" value="${esc(ex?.note || '')}"></label>
       <div data-rw hidden><label>سبب مبلغ أقل<select name="reason"><option value="">— اختر —</option><option value="متأخر">متأخر</option><option value="حالة خاصة">حالة خاصة</option></select></label></div>
-      <p class="muted" style="font-size:.85rem;margin:.2rem 0 0">يُضاف إلى الإخطار الحالي، ولا يُسجَّل في الاشتراكات حتى يؤكده المحاسب.</p>
-      <div class="row"><button type="button" class="btn primary" data-colsave>إضافة إلى الإخطار</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
+      <p class="muted" style="font-size:.85rem;margin:.2rem 0 0">يُضاف إلى الكشف الحالي، ولا يُسجَّل في الاشتراكات حتى يؤكده المحاسب.</p>
+      <div class="row"><button type="button" class="btn primary" data-colsave>إضافة إلى الكشف</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
     document.body.appendChild(p);
     const ai = p.querySelector('[name=amount]'), rw = p.querySelector('[data-rw]');
     const need = () => { rw.hidden = !(fee && +ai.value > 0 && +ai.value < fee); };
@@ -198,12 +198,12 @@
       const [y, m] = p.querySelector('[name=month]').value.split('-').map(Number);
       const note = [(p.querySelector('[name=note]').value || '').trim(), reason].filter(Boolean).join(' — ');
       e.target.disabled = true;
-      try { await api.add(s.id, y, m, amt, p.querySelector('[name=date]').value || today(), note); p.remove(); toast(`أُضيف «${s.name}» (${money(amt)} جنيه) إلى الإخطار`); await reload(); }
+      try { await api.add(s.id, y, m, amt, p.querySelector('[name=date]').value || today(), note); p.remove(); toast(`أُضيف «${s.name}» (${money(amt)} جنيه) إلى الكشف`); await reload(); }
       catch (err) { e.target.disabled = false; toast(errMsg(err)); }
     };
   }
 
-  /* ===== إلغاء تحصيل طالب من الإخطار الحالي (لم يصل المحاسب بعد) =====
+  /* ===== إلغاء تحصيل طالب من الكشف الحالي (لم يصل المحاسب بعد) =====
      نافذة تأكيد صغيرة فوق نافذة التحصيل (لا .overlay: تلك تصير صفحة كاملة على الهاتف في pages.js) */
   const cssC = document.createElement('style');
   cssC.textContent = `.qinner{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(10,18,35,.45)}
@@ -216,7 +216,7 @@
     const p = document.createElement('div'); p.className = 'qinner'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-modal', 'true');
     const tot = ls.reduce((a, l) => a + l.amount, 0);
     p.innerHTML = `<div class="qinbox"><h3>إلغاء تحصيل «${esc(s.name)}»؟</h3>
-      <p>${ls.length > 1 ? 'سيُحذف من الإخطار الحالي:' : 'سيُحذف من الإخطار الحالي'} ${ls.map(l => `<b>${money(l.amount)} جنيه</b> عن ${MONTHS[l.m - 1]} ${l.y}`).join('، و')}${ls.length > 1 ? ` (${money(tot)} جنيه)` : ''}.</p>
+      <p>${ls.length > 1 ? 'سيُحذف من الكشف الحالي:' : 'سيُحذف من الكشف الحالي'} ${ls.map(l => `<b>${money(l.amount)} جنيه</b> عن ${MONTHS[l.m - 1]} ${l.y}`).join('، و')}${ls.length > 1 ? ` (${money(tot)} جنيه)` : ''}.</p>
       <p class="muted" style="font-size:.85rem">لم يُرسل للمحاسب بعد، فلا يُسجَّل له شيء.</p>
       <div class="row"><button type="button" class="btn danger" data-colcancel>إلغاء التحصيل</button><button type="button" class="btn" data-close>رجوع</button></div></div>`;
     document.body.appendChild(p);
@@ -227,12 +227,12 @@
     p.querySelector('[data-close]').focus({ preventScroll: true });
     p.querySelector('[data-colcancel]').onclick = async e => {
       e.target.disabled = true;
-      try { for (const l of ls) await api.remove(l.id); close(); toast(`أُلغي تحصيل «${s.name}» من الإخطار`); await reload(); }
+      try { for (const l of ls) await api.remove(l.id); close(); toast(`أُلغي تحصيل «${s.name}» من الكشف`); await reload(); }
       catch (err) { e.target.disabled = false; toast(errMsg(err)); }
     };
   }
 
-  /* ===== مراجعة الإخطار ثم إرساله ===== */
+  /* ===== مراجعة الكشف ثم إرساله ===== */
   function reviewDialog() {
     const d = draft(); if (!d || !d.lines.length) return;
     const p = document.createElement('div'); p.className = 'overlay';
@@ -240,12 +240,12 @@
       const dd = draft(), ls = (dd?.lines || []).slice().sort((a, b) => a.studentName.localeCompare(b.studentName, 'ar'));
       if (!ls.length) { p.remove(); return; }
       const tot = ls.reduce((a, l) => a + l.amount, 0);
-      p.innerHTML = `<div class="modal wide"><h2>مراجعة الإخطار قبل الإرسال</h2>
+      p.innerHTML = `<div class="modal wide"><h2>مراجعة الكشف قبل الإرسال</h2>
         <div class="tbl"><table><tr><th>#</th><th class="qnm">الطالب</th><th>عن شهر</th><th>المبلغ</th><th>ملاحظة</th><th></th></tr>
         ${ls.map((l, i) => `<tr${l.state === 'issue' ? ' style="background:#fdecea"' : ''}><td>${i + 1}</td><td class="qnm">${esc(l.studentName)}${l.state === 'issue' ? `<br><small style="color:var(--red,#b3372f)">أعاده المحاسب: ${esc(l.accNote || '')}</small>` : ''}</td><td>${MONTHS[l.m - 1]} ${l.y}</td><td>${money(l.amount)}</td><td>${esc(l.note || '')}</td>
-          <td><button type="button" class="btn sm" data-coledit="${esc(l.studentId)}" title="تعديل">تعديل</button> <button type="button" class="btn sm danger" data-coldel="${esc(l.id)}" title="حذف من الإخطار" aria-label="حذف">×</button></td></tr>`).join('')}
+          <td><button type="button" class="btn sm" data-coledit="${esc(l.studentId)}" title="تعديل">تعديل</button> <button type="button" class="btn sm danger" data-coldel="${esc(l.id)}" title="حذف من الكشف" aria-label="حذف">×</button></td></tr>`).join('')}
         <tr class="sum"><td colspan="3">الإجمالي</td><td>${money(tot)}</td><td colspan="2"></td></tr></table></div>
-        <p class="muted" style="font-size:.85rem">بعد الإرسال لا يُعدَّل الإخطار حتى يراجعه المحاسب؛ وما تحصّله بعده يدخل إخطارًا جديدًا.</p>
+        <p class="muted" style="font-size:.85rem">بعد الإرسال لا يُعدَّل الكشف حتى يراجعه المحاسب؛ وما تحصّله بعده يدخل كشفًا جديدًا.</p>
         <div class="row"><button type="button" class="btn primary" data-colsend>إرسال للمحاسب (${ls.length}، ${money(tot)} جنيه)</button><button type="button" class="btn" data-close>رجوع</button></div></div>`;
     };
     draw(); document.body.appendChild(p);
@@ -257,7 +257,7 @@
       if (ed) { const s = byId(db.students, ed.dataset.coledit); if (s) { p.remove(); payDialog(s); } return; }
       const sb = e.target.closest('[data-colsend]'); if (!sb) return;
       sb.disabled = true;
-      try { await api.send(); p.remove(); toast('أُرسل الإخطار للمحاسب'); await reload(); }
+      try { await api.send(); p.remove(); toast('أُرسل الكشف للمحاسب'); await reload(); }
       catch (err) { sb.disabled = false; toast(errMsg(err)); }
     });
   }
@@ -282,7 +282,7 @@
   const A = { inbox: [], log: [], at: 0, tab: 'inbox', open: new Set(), busy: false, who: '' };
   async function accLoad(force) {
     const who = session ? session.role + ':' + session.id : '';
-    if (who !== A.who) { A.who = who; A.at = 0; A.inbox = []; A.log = []; }   // تبديل الحساب (والعمل بصفة) لا يُبقي إخطارات غيره
+    if (who !== A.who) { A.who = who; A.at = 0; A.inbox = []; A.log = []; }   // تبديل الحساب (والعمل بصفة) لا يُبقي كشوف غيره
     if (!canAcc() || A.busy || (!force && Date.now() - A.at < 60000)) return;
     A.busy = true;
     try { const [i, l] = await Promise.all([api.list('inbox'), api.list('log')]); A.inbox = i; A.log = l; }
@@ -294,7 +294,7 @@
   function noticeCard(n) {
     const ls = n.lines.slice().sort((a, b) => a.studentName.localeCompare(b.studentName, 'ar'));
     const done = ls.every(l => l.state === 'ok' || l.state === 'issue'), ok = ls.filter(l => l.state === 'ok'), pend = ls.filter(l => l.state !== 'ok' && l.state !== 'issue').length;
-    return `<div class="card qnotice" data-nid="${esc(n.id)}"><div class="qnhead"><b>إخطار تحصيل من ${esc(n.collectorName)}</b><small class="muted">${dt(n.sentAt)} · ${ls.length} من الطلاب · ${money(sumOf(ls))} جنيه</small></div>
+    return `<div class="card qnotice" data-nid="${esc(n.id)}"><div class="qnhead"><b>كشف تحصيل من ${esc(n.collectorName)}</b><small class="muted">${dt(n.sentAt)} · ${ls.length} من الطلاب · ${money(sumOf(ls))} جنيه</small></div>
       <div class="tbl"><table><tr><th class="qnm">الطالب</th><th>عن شهر</th><th>المبلغ</th><th></th></tr>
       ${ls.map(l => `<tr class="${l.state === 'ok' ? 'qok' : l.state === 'issue' ? 'qno' : ''}"><td class="qnm">${l.state === 'ok' ? '✓ ' : ''}${esc(l.studentName)}${l.note ? `<br><small class="muted">${esc(l.note)}</small>` : ''}${l.state === 'issue' && l.accNote ? `<br><small>أُعيد: ${esc(l.accNote)}</small>` : ''}</td><td>${MONTHS[l.m - 1]} ${l.y}</td><td>${money(l.amount)}</td>
         <td>${l.state === 'ok' || l.state === 'issue' ? `<button type="button" class="btn sm" data-acmark="${esc(l.id)}" data-v="">تراجع</button>` : `<button type="button" class="btn sm primary" data-acmark="${esc(l.id)}" data-v="1">تم التحصيل</button> <button type="button" class="btn sm" data-acmark="${esc(l.id)}" data-v="0">إعادة</button>`}</td></tr>`).join('')}
@@ -313,15 +313,15 @@
     /* القوائم القديمة (قائمة الشهر): تُراجع وتُعرض بأدواتها القديمة (collect.js) */
     const oldN = (db.collections || []).filter(c => c.status !== 'draft').length;
     let old = '';
-    if (oldN && typeof adminViews.tcollect === 'function') { try { old = `<h3 class="sc-h" style="margin-top:1rem">القوائم القديمة (قبل الإخطارات)</h3>${adminViews.tcollect()}`; } catch (e) { old = ''; } }
-    return (rows || '<p class="muted">لا توجد إخطارات منتهية بعد.</p>') + old;
+    if (oldN && typeof adminViews.tcollect === 'function') { try { old = `<h3 class="sc-h" style="margin-top:1rem">القوائم القديمة (قبل الكشوف)</h3>${adminViews.tcollect()}`; } catch (e) { old = ''; } }
+    return (rows || '<p class="muted">لا توجد كشوف منتهية بعد.</p>') + old;
   }
   let aov = null;
   function accBody() {
     const n = A.inbox.length, oldPend = (db.collections || []).filter(c => c.status === 'sent').length;
-    return `<div class="modal wide"><h2>إخطارات</h2>
-      <div class="qseg" role="tablist" style="margin:0 0 .8rem"><button type="button" data-actab="inbox" class="${A.tab === 'inbox' ? 'on' : ''}" aria-selected="${A.tab === 'inbox'}">الإخطارات${n ? ` <small>(${n})</small>` : ''}</button><button type="button" data-actab="log" class="${A.tab === 'log' ? 'on' : ''}" aria-selected="${A.tab === 'log'}">السجل${oldPend ? ` <small>(${oldPend} قديمة)</small>` : ''}</button></div>
-      ${A.busy && !A.at ? '<p class="muted">جارٍ التحميل…</p>' : A.tab === 'inbox' ? (n ? A.inbox.map(noticeCard).join('') : `<p class="muted">لا توجد إخطارات تنتظر المراجعة.${oldPend ? ' وفي «السجل» قوائم قديمة تنتظر المراجعة.' : ''}</p>`) : logView()}
+    return `<div class="modal wide"><h2>كشوف</h2>
+      <div class="qseg" role="tablist" style="margin:0 0 .8rem"><button type="button" data-actab="inbox" class="${A.tab === 'inbox' ? 'on' : ''}" aria-selected="${A.tab === 'inbox'}">الكشوف${n ? ` <small>(${n})</small>` : ''}</button><button type="button" data-actab="log" class="${A.tab === 'log' ? 'on' : ''}" aria-selected="${A.tab === 'log'}">السجل${oldPend ? ` <small>(${oldPend} قديمة)</small>` : ''}</button></div>
+      ${A.busy && !A.at ? '<p class="muted">جارٍ التحميل…</p>' : A.tab === 'inbox' ? (n ? A.inbox.map(noticeCard).join('') : `<p class="muted">لا توجد كشوف تنتظر المراجعة.${oldPend ? ' وفي «السجل» قوائم قديمة تنتظر المراجعة.' : ''}</p>`) : logView()}
       <div class="row"><button type="button" class="btn" data-close>إغلاق</button></div></div>`;
   }
   function accPaint() { if (aov && aov.isConnected) { const m0 = aov.querySelector('.modal'), sc = m0?.scrollTop || 0; aov.innerHTML = accBody(); const m = aov.querySelector('.modal'); if (m) m.scrollTop = sc; } }
@@ -374,7 +374,7 @@
     document.querySelectorAll('main [data-acopen] .count').forEach(c => { if (!n) c.remove(); else c.textContent = n; });
     const b = document.querySelector('main [data-acopen]'); if (b && n && !b.querySelector('.count')) b.insertAdjacentHTML('beforeend', `<span class="count">${n}</span>`);
     const sb = document.querySelector('.side nav.tabs button[data-v="students"]');
-    if (sb) { const c = sb.querySelector('.qcacc-c'); if (n && !c) sb.insertAdjacentHTML('beforeend', `<span class="count qcacc-c" title="إخطارات تحصيل تنتظر المراجعة">${n}</span>`); else if (c && !n) c.remove(); else if (c) c.textContent = n; }
+    if (sb) { const c = sb.querySelector('.qcacc-c'); if (n && !c) sb.insertAdjacentHTML('beforeend', `<span class="count qcacc-c" title="كشوف تحصيل تنتظر المراجعة">${n}</span>`); else if (c && !n) c.remove(); else if (c) c.textContent = n; }
   }
   new MutationObserver(() => { try { badge(); } catch (e) { /* ignore */ } }).observe(document.getElementById('app') || document.body, { childList: true });
   setInterval(() => { if (session && !document.hidden && canAcc()) accLoad(false); }, 60000);
@@ -407,7 +407,7 @@
       if (e2 > -1) h = h.slice(0, i) + h.slice(e2 + 12);
       if ((ui.svw && ui.svw !== 'list') || !canAcc()) return h;
       const n = A.inbox.length;
-      return h.replace(/(<div class="qseg" data-sstfseg|<select data-sstf)/, `<button type="button" class="btn" data-acopen>${PAY}إخطارات${n ? ` <span class="count">${n}</span>` : ''}</button>$1`);
+      return h.replace(/(<div class="qseg" data-sstfseg|<select data-sstf)/, `<button type="button" class="btn" data-acopen>${PAY}كشوف${n ? ` <span class="count">${n}</span>` : ''}</button>$1`);
     };
     const baseR = render;
     render = function () {

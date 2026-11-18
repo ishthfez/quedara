@@ -1,18 +1,18 @@
 -- =====================================================================
---  إخطارات التحصيل (بدل قائمة الشهر الواحدة في collections.sql)
---   - المعلم (أو الإداري لحلقات نطاقه) يحصّل اشتراك طالب من صفحة «الطلاب»، فيدخل سطرًا في إخطاره المفتوح (مسودة):
+--  كشوف التحصيل (بدل قائمة الشهر الواحدة في collections.sql)
+--   - المعلم (أو الإداري لحلقات نطاقه) يحصّل اشتراك طالب من صفحة «الطلاب»، فيدخل سطرًا في كشفه المفتوح (مسودة):
 --     الطالب والمبلغ والشهر الذي دفع عنه والتاريخ والملاحظة. لكل جامع مسودة واحدة يضيف إليها ويحذف منها.
---   - «إرسال» يجعل المسودة إخطارًا عند المحاسب، ويبدأ الجامع مسودة جديدة متى حصّل بعده (لا قيد بالشهر:
+--   - «إرسال» يجعل المسودة كشفًا عند المحاسب، ويبدأ الجامع مسودة جديدة متى حصّل بعده (لا قيد بالشهر:
 --     يرسل ما شاء متى شاء، ولكل سطر شهره، فيُقبل التحصيل المتأخر عن شهر سابق).
 --   - المحاسب (صلاحية «تحصيل الاشتراكات») يضغط «تم التحصيل» أمام كل اسم، أو «إعادة» بملاحظة. وحين يراجع الأسماء كلها
 --     يضغط «تم تحصيل المبلغ»: تُسجَّل دفعات المؤكَّد في الاشتراكات باسمه، ويعود المُعاد إلى مسودة الجامع بملاحظة المحاسب
---     ليصححه ويعيد إرساله، وينتقل الإخطار إلى سجل التحصيل.
+--     ليصححه ويعيد إرساله، وينتقل الكشف إلى سجل التحصيل.
 --   - إشعارات في «الإعلانات»: للمحاسبين عند الإرسال، وللجامع عند الانتهاء.
 --   - قوائم collections القديمة تبقى كما هي (تُعرض في السجل)، ودوالها تعمل حتى تُحذف صفحاتها.
 --  يُنفَّذ بعد transfers.sql، مرة واحدة في Supabase ← SQL Editor ← Run. آمن للتكرار.
 -- =====================================================================
 
--- 1) الإخطارات (لا تُقرأ ولا تُكتب مباشرة: الدوال أدناه وحدها)
+-- 1) الكشوف (لا تُقرأ ولا تُكتب مباشرة: الدوال أدناه وحدها)
 create table if not exists public.cnotices (
   id             uuid primary key default gen_random_uuid(),
   collector_id   uuid not null references public.members(id) on delete cascade,
@@ -74,7 +74,7 @@ begin
   where status = 'draft' and collector_id in (select public.my_ids());
 end $$;
 
--- 5) إرسال المسودة إخطارًا للمحاسب
+-- 5) إرسال المسودة كشفًا للمحاسب
 create or replace function public.cn_send() returns uuid
 language plpgsql security definer set search_path = public as $$
 declare d record; n int; tot numeric;
@@ -88,7 +88,7 @@ begin
   where id = d.id;
   select jsonb_array_length(d.lines), coalesce(sum((x->>'amount')::numeric), 0) into n, tot from jsonb_array_elements(d.lines) x;
   insert into news (id, text, audience, date, author_id, author)
-  values (gen_random_uuid(), 'إخطار تحصيل من ' || d.collector_name || ': عدد الطلاب ' || n || '، والإجمالي ' || trim_scale(tot) || ' جنيه. راجعه من «الطلاب ← إخطارات».',
+  values (gen_random_uuid(), 'كشف تحصيل من ' || d.collector_name || ': عدد الطلاب ' || n || '، والإجمالي ' || trim_scale(tot) || ' جنيه. راجعه من «الطلاب ← كشوف».',
           'accountant', current_date, d.collector_id, d.collector_name);
   return d.id;
 end $$;
@@ -103,7 +103,7 @@ begin
                                                               'accNote', case when ok is false then left(coalesce(msg, ''), 300) else '' end)
                                  else x end) from jsonb_array_elements(lines) x)
   where id = nid and status = 'sent';
-  if not found then raise exception 'الإخطار غير موجود أو انتهت مراجعته'; end if;
+  if not found then raise exception 'الكشف غير موجود أو انتهت مراجعته'; end if;
 end $$;
 
 -- 7) المحاسب: «تم تحصيل المبلغ» بعد مراجعة الأسماء كلها
@@ -114,7 +114,7 @@ begin
   if not public.has_perm('fees.collect') then raise exception 'غير مصرح'; end if;
   select id, name into me from members where user_id = auth.uid() and role <> 'student' order by (role = 'accountant') desc limit 1;
   select * into n from cnotices where id = nid for update;
-  if n.id is null or n.status <> 'sent' then raise exception 'الإخطار غير موجود أو انتهت مراجعته'; end if;
+  if n.id is null or n.status <> 'sent' then raise exception 'الكشف غير موجود أو انتهت مراجعته'; end if;
   if exists (select 1 from jsonb_array_elements(n.lines) e where e->>'state' not in ('ok', 'issue')) then raise exception 'راجع الأسماء كلها أولًا'; end if;
   for ln in select e from jsonb_array_elements(n.lines) e loop
     if ln->>'state' = 'ok' then
@@ -139,13 +139,13 @@ begin
          where id = d.id; end if;
   end if;
   insert into news (id, text, audience, date, author_id, author)
-  values (gen_random_uuid(), 'تم تحصيل إخطارك: عدد الطلاب ' || okn || '، والإجمالي ' || trim_scale(okt) || ' جنيه.'
+  values (gen_random_uuid(), 'تم تحصيل كشفك: عدد الطلاب ' || okn || '، والإجمالي ' || trim_scale(okt) || ' جنيه.'
           || case when isn > 0 then ' وأُعيد إليك ' || isn || ' من الأسماء بملاحظة المحاسب، فصحّحها وأعد إرسالها من «تحصيل».' else '' end,
           'm:' || n.collector_id::text, current_date, me.id, coalesce(me.name, ''));
   return case when isn > 0 then 'partial' else 'done' end;
 end $$;
 
--- 8) القراءة: للجامع إخطاراته (المسودة والمرسَلة وآخر ما انتهى)، وللمحاسب المرسَلة وسجل ما انتهى
+-- 8) القراءة: للجامع كشوفه (المسودة والمرسَلة وآخر ما انتهى)، وللمحاسب المرسَلة وسجل ما انتهى
 create or replace function public.cn_list(kind text default 'mine', lim int default 100) returns jsonb
 language sql stable security definer set search_path = public as $$
   select coalesce(jsonb_agg(to_jsonb(q) order by q.ord desc), '[]') from (
