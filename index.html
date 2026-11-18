@@ -38,7 +38,7 @@
     document.addEventListener('input', e => {
       const t = e.target;
       if (!t || t.tagName !== 'INPUT' || !(t.type === 'password' || t.dataset.eye)) return;
-      const v = t.value.replace(/[\u0660-\u0669]/g, c => c.charCodeAt(0) - 1632).replace(/[\u06f0-\u06f9]/g, c => c.charCodeAt(0) - 1776);
+      const v = t.value.replace(/[٠-٩]/g, c => c.charCodeAt(0) - 1632).replace(/[۰-۹]/g, c => c.charCodeAt(0) - 1776);
       const clean = v.replace(/[^\x21-\x7E]/g, '');
       if (clean === t.value) return;
       const pos = Math.max(0, (t.selectionStart || 0) - (t.value.length - clean.length));
@@ -116,6 +116,7 @@
   <script src="tcollect.js"></script>
   <script src="activity.js"></script>
   <script src="home.js"></script>
+  <script src="delreq.js"></script>
   <script>
     setTimeout(() => { const s = document.getElementById('splash'); if (s) { s.classList.add('hide'); setTimeout(() => s.remove(), 650); } }, 1100);
   </script>
