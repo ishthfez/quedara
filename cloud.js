@@ -36,12 +36,26 @@ const uuid = () => {
 
 /* ---------------- الطلبات ---------------- */
 class HttpError extends Error { constructor(status, msg, body) { super(msg); this.status = status; this.body = body; } }
+/* تبويب آخر (أو التطبيق المثبّت) جدّد الجلسة وحفظها: نأخذ الأحدث بدل تجديد الرمز القديم،
+   فتجديد رمز سبق استعماله يجعل الخادم يُلغي الجلسة كلها (خروج كامل) */
+function syncAuth() {
+  const s = LS.get(AKEY);
+  if (s && auth && s.uid === auth.uid && s.refresh_token && s.refresh_token !== auth.refresh_token && (s.expires_at || 0) >= (auth.expires_at || 0))
+    auth = { ...auth, ...s, member: auth.member || s.member };
+}
 async function token() {
   if (!auth) return null;
+  syncAuth();
   if (auth.expires_at && Date.now() / 1000 > auth.expires_at - 60) await refresh();
   return auth?.access_token || null;
 }
-async function refresh() {
+/* تجديد واحد في الوقت نفسه: الطلبات المتزامنة تنتظره ولا تجدّد الرمز نفسه مرتين */
+let refreshing = null;
+function refresh() { return refreshing || (refreshing = doRefresh().finally(() => { refreshing = null; })); }
+async function doRefresh() {
+  const old = auth?.access_token;
+  syncAuth();
+  if (auth?.access_token !== old) return;   // جُدِّدت في تبويب آخر: نستعمل رمزه
   const r = await fetch(`${CFG.url}/auth/v1/token?grant_type=refresh_token`, {
     method: 'POST', headers: { apikey: CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: auth.refresh_token })
   });
@@ -84,6 +98,20 @@ async function signIn(email, password) {
   if (!r.ok) throw new HttpError(r.status, /invalid/i.test(j.error_description || j.msg || '') ? 'كلمة المرور غير صحيحة' : (j.error_description || j.msg || 'تعذّر الدخول'));
   auth = null; storeAuth(j); resetSync();
   snap = LS.get(snapKey());
+  emit();
+  return auth;
+}
+/* فتح شاشة القفل: دخول بكلمة المرور يجدّد الجلسة نفسها دون مسح حالة المزامنة (المستخدم نفسه) */
+async function reauth(email, password) {
+  const r = await fetch(`${CFG.url}/auth/v1/token?grant_type=password`, {
+    method: 'POST', headers: { apikey: CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new HttpError(r.status, /invalid/i.test(j.error_description || j.msg || '') ? 'كلمة المرور غير صحيحة' : (j.error_description || j.msg || 'تعذّر الدخول'));
+  const same = auth && j.user?.id && auth.uid === j.user.id;
+  if (!same) { auth = null; resetSync(); }
+  storeAuth(j);
+  if (!same) snap = LS.get(snapKey());
   emit();
   return auth;
 }
@@ -548,7 +576,7 @@ window.Cloud = {
   get lastError() { return lastError; },
   get lastSync() { return lastSync; },
   cfg: CFG, uuid, isUuid, ensureUuids, emptyDb, snapshotOf,
-  signIn, signOut, lookup, setMember, pull, push, schedule, pendingCount, cached, saveLocal, loadLocal, ready, publicSettings,
+  signIn, reauth, signOut, lookup, setMember, pull, push, schedule, pendingCount, cached, saveLocal, loadLocal, ready, publicSettings,
   provision, fn, rpc, req, selectAll,
   get lastChanged() { return lastChanged; },
   get incremental() { return inc; },
