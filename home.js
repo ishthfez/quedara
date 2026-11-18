@@ -47,7 +47,9 @@
   document.addEventListener('click', e => { const b = e.target.closest('[data-qnall]'); if (b) openAll(b.dataset.qnall, b.dataset.qn || ''); });
 
   /* ===== نموذج الإعلان (جديد وتعديل): الأهمية والمدة ===== */
-  const AUDS = [{ v: 'all', l: 'الجميع' }, { v: 'teacher', l: 'المعلمون' }, { v: 'supervisor', l: 'المشرفون' }, { v: 'placeadmin', l: 'الإداريون' }, { v: 'student', l: 'الطلاب' }];
+  const AUDS = [{ v: 'all', l: 'الجميع' }, { v: 'teacher', l: 'المعلمون' }, { v: 'supervisor', l: 'المشرفون' }, { v: 'accountant', l: 'المحاسبون' }, { v: 'placeadmin', l: 'الإداريون' }, { v: 'student', l: 'الطلاب' }];
+  /* اسم الجمهور في قائمة إعلانات المدير (AUD في app.js): الإداريون */
+  try { if (typeof AUD === 'object' && AUD && !AUD.placeadmin) AUD.placeadmin = 'الإداريون'; } catch (e) { /* ignore */ }
   const addDays = d => { const t = new Date(today() + 'T12:00:00'); t.setDate(t.getDate() + d); return t.toISOString().slice(0, 10); };
   const DUR = [['', 'بلا مدة'], ['0', 'اليوم فقط'], ['2', '3 أيام'], ['6', 'أسبوع'], ['13', 'أسبوعان'], ['29', 'شهر']];
   function newsForm(n) {
