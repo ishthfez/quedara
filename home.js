@@ -18,10 +18,12 @@
   const ROLES = ['teacher', 'supervisor', 'accountant', 'placeadmin', 'student'];
   const isOn = n => !n.until || String(n.until) >= today();
   const mine = n => !!session && n.audience === 'm:' + session.id;
+  /* «المديرون العامون» جمهور مستقل، ويصلهم أيضًا ما يُرسل للمشرفين (supabase/gmanager.sql) */
+  const isGM = () => session?.role === 'supervisor' && !!window.isGenSup?.(me());
   const pr = n => (PR[n.prio] ? n.prio : '');
   /* إعلانات الحساب السارية: العاجل ثم المهم ثم العادي، والأحدث أولًا */
   function listFor(aud) {
-    return (db.news || []).map((n, i) => [n, i]).filter(([n]) => (n.audience === 'all' || n.audience === aud || mine(n)) && isOn(n))
+    return (db.news || []).map((n, i) => [n, i]).filter(([n]) => (n.audience === 'all' || n.audience === aud || (n.audience === 'gmanager' && isGM()) || mine(n)) && isOn(n))
       .sort((a, b) => RANK[pr(a[0])] - RANK[pr(b[0])] || b[1] - a[1]).map(x => x[0]);
   }
   const tag = n => (pr(n) ? `<span class="tag qn-tag ${PR[pr(n)][1]}">${PR[pr(n)][0]}</span> ` : '');
@@ -47,9 +49,9 @@
   document.addEventListener('click', e => { const b = e.target.closest('[data-qnall]'); if (b) openAll(b.dataset.qnall, b.dataset.qn || ''); });
 
   /* ===== نموذج الإعلان (جديد وتعديل): الأهمية والمدة ===== */
-  const AUDS = [{ v: 'all', l: 'الجميع' }, { v: 'teacher', l: 'المعلمون' }, { v: 'supervisor', l: 'المشرفون' }, { v: 'accountant', l: 'المحاسبون' }, { v: 'placeadmin', l: 'الإداريون' }, { v: 'student', l: 'الطلاب' }];
-  /* اسم الجمهور في قائمة إعلانات المدير (AUD في app.js): الإداريون */
-  try { if (typeof AUD === 'object' && AUD && !AUD.placeadmin) AUD.placeadmin = 'الإداريون'; } catch (e) { /* ignore */ }
+  const AUDS = [{ v: 'all', l: 'الجميع' }, { v: 'gmanager', l: 'المديرون العامون' }, { v: 'supervisor', l: 'المشرفون (ومعهم المديرون العامون)' }, { v: 'teacher', l: 'المعلمون' }, { v: 'accountant', l: 'المحاسبون' }, { v: 'placeadmin', l: 'الإداريون' }, { v: 'student', l: 'الطلاب' }];
+  /* أسماء الجمهور في قائمة إعلانات المدير (AUD في app.js) */
+  try { if (typeof AUD === 'object' && AUD) { if (!AUD.placeadmin) AUD.placeadmin = 'الإداريون'; AUD.gmanager = 'المديرون العامون'; } } catch (e) { /* ignore */ }
   const addDays = d => { const t = new Date(today() + 'T12:00:00'); t.setDate(t.getDate() + d); return t.toISOString().slice(0, 10); };
   const DUR = [['', 'بلا مدة'], ['0', 'اليوم فقط'], ['2', '3 أيام'], ['6', 'أسبوع'], ['13', 'أسبوعان'], ['29', 'شهر']];
   function newsForm(n) {
