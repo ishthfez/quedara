@@ -6,7 +6,11 @@
    الزر أخضر إن كان للطالب تحصيل عن الشهر الحالي (في الإخطار أو عند المحاسب أو مؤكَّد، أو دفعة مسجّلة)، وعادي إن كان لشهر سابق.
    ما أعاده المحاسب يعود إلى الإخطار الحالي بالأحمر وملاحظته، فيُصحَّح ويُرسل من جديد.
    - الخادم: supabase/cnotices.sql (cn_add / cn_remove / cn_send / cn_list). بلا خادم (نسخة العرض): القاعدة نفسها على الجهاز في db.cnotices.
-   - جانب المحاسب (cn_mark / cn_finish) في المرحلة التالية؛ والدوال المحلية لها هنا (window.QLCN) ليستعملها. */
+   - المحاسب والمدير: زر «تحصيل المعلمين» في صف الأدوات نفسه، وعليه عدد الإخطارات المنتظرة. يفتح نافذة بتبويبين:
+     «الإخطارات»: كل إخطار رسالة (الجامع وتاريخه، ثم الأسماء والشهر والمبلغ والإجمالي)، وأمام كل اسم «تم التحصيل» فيصير أخضر باهتًا ✓
+     أو «إعادة» بملاحظة (cn_mark، يُحفظ فورًا ويمكن التراجع عنه)، ثم «تم تحصيل المبلغ» حين تُراجع الأسماء كلها (cn_finish) فينتقل إلى السجل.
+     «السجل»: الإخطارات المنتهية، والقوائم القديمة (collect.js) ومنها ما ينتظر المراجعة.
+   - حلّت هذه محل الصفحات القديمة: «التحصيل» عند المعلم والإداري، و«تحصيل المعلمين» عند المحاسب والمدير (تبويبها وشريط تبويبات «الطلاب»). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./tcollect.js')) VFILES.push('./tcollect.js'); } catch (e) { /* ignore */ } });
   const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
@@ -241,4 +245,146 @@
     const b = e.target.closest('[data-colpay]'); if (b) { const s = byId(db.students, b.dataset.colpay); if (s) payDialog(s); return; }
     if (e.target.closest('[data-colrev]') && !e.target.closest('[data-colrev]').disabled) reviewDialog();
   });
+
+  /* ======================= المحاسب والمدير ======================= */
+  const canAcc = () => !!session && (session.role === 'admin' || (session.role === 'accountant' && (!window.Perms || Perms.can('fees.collect')) && (!window.QLStuPerm || window.QLStuPerm.can('accbtn'))));
+  const A = { inbox: [], log: [], at: 0, tab: 'inbox', open: new Set(), busy: false, who: '' };
+  async function accLoad(force) {
+    const who = session ? session.role + ':' + session.id : '';
+    if (who !== A.who) { A.who = who; A.at = 0; A.inbox = []; A.log = []; }   // تبديل الحساب (والعمل بصفة) لا يُبقي إخطارات غيره
+    if (!canAcc() || A.busy || (!force && Date.now() - A.at < 60000)) return;
+    A.busy = true;
+    try { const [i, l] = await Promise.all([api.list('inbox'), api.list('log')]); A.inbox = i; A.log = l; }
+    catch (e) { if (force) toast(errMsg(e)); }
+    A.at = Date.now(); A.busy = false; accPaint(); badge();
+  }
+  const dt = s => String(s || '').slice(0, 10);
+  const sumOf = ls => ls.reduce((a, l) => a + l.amount, 0);
+  function noticeCard(n) {
+    const ls = n.lines.slice().sort((a, b) => a.studentName.localeCompare(b.studentName, 'ar'));
+    const done = ls.every(l => l.state === 'ok' || l.state === 'issue'), ok = ls.filter(l => l.state === 'ok'), pend = ls.filter(l => l.state !== 'ok' && l.state !== 'issue').length;
+    return `<div class="card qnotice" data-nid="${esc(n.id)}"><div class="qnhead"><b>إخطار تحصيل من ${esc(n.collectorName)}</b><small class="muted">${dt(n.sentAt)} · ${ls.length} من الطلاب · ${money(sumOf(ls))} جنيه</small></div>
+      <div class="tbl"><table><tr><th class="qnm">الطالب</th><th>عن شهر</th><th>المبلغ</th><th></th></tr>
+      ${ls.map(l => `<tr class="${l.state === 'ok' ? 'qok' : l.state === 'issue' ? 'qno' : ''}"><td class="qnm">${l.state === 'ok' ? '✓ ' : ''}${esc(l.studentName)}${l.note ? `<br><small class="muted">${esc(l.note)}</small>` : ''}${l.state === 'issue' && l.accNote ? `<br><small>أُعيد: ${esc(l.accNote)}</small>` : ''}</td><td>${MONTHS[l.m - 1]} ${l.y}</td><td>${money(l.amount)}</td>
+        <td>${l.state === 'ok' || l.state === 'issue' ? `<button type="button" class="btn sm" data-acmark="${esc(l.id)}" data-v="">تراجع</button>` : `<button type="button" class="btn sm primary" data-acmark="${esc(l.id)}" data-v="1">تم التحصيل</button> <button type="button" class="btn sm" data-acmark="${esc(l.id)}" data-v="0">إعادة</button>`}</td></tr>`).join('')}
+      <tr class="sum"><td colspan="2">الإجمالي (${ls.length})</td><td>${money(sumOf(ls))}</td><td></td></tr></table></div>
+      <div class="row qnfoot">${pend ? `<button type="button" class="btn" data-acall>تم التحصيل للكل (${pend})</button>` : ''}
+        <button type="button" class="btn primary" data-acfin ${done ? '' : 'disabled'}>تم تحصيل المبلغ${done ? ` (${ok.length}، ${money(sumOf(ok))} جنيه)` : ''}</button>
+        ${done ? '' : '<small class="muted">راجع الأسماء كلها أولًا</small>'}</div></div>`;
+  }
+  function logView() {
+    const rows = A.log.map(n => {
+      const ok = n.lines.filter(l => l.state === 'ok'), iss = n.lines.filter(l => l.state === 'issue'), op = A.open.has(n.id);
+      return `<div class="card qnotice qlog"><button type="button" class="qlogh" data-aclog="${esc(n.id)}" aria-expanded="${op}"><b>${esc(n.collectorName)}</b> <small class="muted">أُرسل ${dt(n.sentAt)} · حصّله ${esc(n.reviewedBy || '')} ${dt(n.reviewedAt)}</small>
+        <span class="tag tag-ok">${ok.length} · ${money(sumOf(ok))} جنيه</span>${iss.length ? ` <span class="tag tag-no">أُعيد ${iss.length}</span>` : ''}</button>
+        ${op ? `<div class="tbl"><table><tr><th class="qnm">الطالب</th><th>عن شهر</th><th>المبلغ</th><th>الحالة</th></tr>${n.lines.map(l => `<tr class="${l.state === 'ok' ? 'qok' : 'qno'}"><td class="qnm">${l.state === 'ok' ? '✓ ' : ''}${esc(l.studentName)}</td><td>${MONTHS[l.m - 1]} ${l.y}</td><td>${money(l.amount)}</td><td>${l.state === 'ok' ? 'حُصّل' : 'أُعيد' + (l.accNote ? ': ' + esc(l.accNote) : '')}</td></tr>`).join('')}</table></div>` : ''}</div>`;
+    }).join('');
+    /* القوائم القديمة (قائمة الشهر): تُراجع وتُعرض بأدواتها القديمة (collect.js) */
+    const oldN = (db.collections || []).filter(c => c.status !== 'draft').length;
+    let old = '';
+    if (oldN && typeof adminViews.tcollect === 'function') { try { old = `<h3 class="sc-h" style="margin-top:1rem">القوائم القديمة (قبل الإخطارات)</h3>${adminViews.tcollect()}`; } catch (e) { old = ''; } }
+    return (rows || '<p class="muted">لا توجد إخطارات منتهية بعد.</p>') + old;
+  }
+  let aov = null;
+  function accBody() {
+    const n = A.inbox.length, oldPend = (db.collections || []).filter(c => c.status === 'sent').length;
+    return `<div class="modal wide"><h2>تحصيل المعلمين</h2>
+      <div class="qseg" role="tablist" style="margin:0 0 .8rem"><button type="button" data-actab="inbox" class="${A.tab === 'inbox' ? 'on' : ''}" aria-selected="${A.tab === 'inbox'}">الإخطارات${n ? ` <small>(${n})</small>` : ''}</button><button type="button" data-actab="log" class="${A.tab === 'log' ? 'on' : ''}" aria-selected="${A.tab === 'log'}">السجل${oldPend ? ` <small>(${oldPend} قديمة)</small>` : ''}</button></div>
+      ${A.busy && !A.at ? '<p class="muted">جارٍ التحميل…</p>' : A.tab === 'inbox' ? (n ? A.inbox.map(noticeCard).join('') : `<p class="muted">لا توجد إخطارات تنتظر المراجعة.${oldPend ? ' وفي «السجل» قوائم قديمة تنتظر المراجعة.' : ''}</p>`) : logView()}
+      <div class="row"><button type="button" class="btn" data-close>إغلاق</button></div></div>`;
+  }
+  function accPaint() { if (aov && aov.isConnected) { const m0 = aov.querySelector('.modal'), sc = m0?.scrollTop || 0; aov.innerHTML = accBody(); const m = aov.querySelector('.modal'); if (m) m.scrollTop = sc; } }
+  function accOpen() {
+    if (aov && aov.isConnected) return;
+    aov = document.createElement('div'); aov.className = 'overlay qcol qcacc'; aov.innerHTML = accBody();
+    document.body.appendChild(aov);
+    aov.addEventListener('click', accClick);
+    accLoad(true);
+  }
+  async function accClick(e) {
+    if (e.target.closest('[data-close]') && e.target.closest('.overlay') === aov) { aov.remove(); aov = null; return; }
+    const tb = e.target.closest('[data-actab]'); if (tb) { A.tab = tb.dataset.actab; accPaint(); return; }
+    const lg = e.target.closest('[data-aclog]'); if (lg) { const id = lg.dataset.aclog; A.open.has(id) ? A.open.delete(id) : A.open.add(id); accPaint(); return; }
+    const card = e.target.closest('[data-nid]'), nid = card?.dataset.nid, n = A.inbox.find(x => x.id === nid); if (!n) return;
+    const mk = e.target.closest('[data-acmark]');
+    if (mk) {
+      const lid = mk.dataset.acmark, v = mk.dataset.v, ok = v === '' ? null : v === '1';
+      const go = async msg => {
+        const l = n.lines.find(x => x.id === lid), prev = l && { state: l.state, accNote: l.accNote };
+        if (l) { l.state = ok == null ? 'pending' : ok ? 'ok' : 'issue'; l.accNote = ok === false ? (msg || '') : ''; accPaint(); }   // فورًا، ثم الخادم
+        try { await api.mark(nid, lid, ok, msg); } catch (err) { if (l) Object.assign(l, prev); accPaint(); toast(errMsg(err)); }
+      };
+      if (ok === false) {
+        openForm('إعادة الاسم للمعلم', [{ name: 'msg', label: 'السبب (يصل المعلم)', type: 'textarea' }], vv => { setTimeout(() => go((vv.msg || '').trim()), 0); });
+        const sv = [...document.querySelectorAll('.overlay')].pop()?.querySelector('[data-save]'); if (sv) sv.textContent = 'إعادة';
+      } else go('');
+      return;
+    }
+    if (e.target.closest('[data-acall]')) {
+      const pend = n.lines.filter(l => l.state !== 'ok' && l.state !== 'issue');
+      pend.forEach(l => { l.state = 'ok'; l.accNote = ''; }); accPaint();
+      try { for (const l of pend) await api.mark(nid, l.id, true, ''); } catch (err) { toast(errMsg(err)); await accLoad(true); }
+      return;
+    }
+    const fb = e.target.closest('[data-acfin]');
+    if (fb && !fb.disabled) {
+      fb.disabled = true;
+      try {
+        const r = await api.finish(nid, '');
+        toast(r === 'partial' ? 'تم التحصيل، وأُعيد الباقي للمعلم' : 'تم تحصيل المبلغ وسُجّلت الدفعات');
+        if (CLOUD && typeof cloudRefresh === 'function') cloudRefresh(true, false, true);   // الدفعات الجديدة في الاشتراكات
+      } catch (err) { toast(errMsg(err)); }
+      await accLoad(true);
+    }
+  }
+  /* العدد على الزر وعلى «الطلاب» في القائمة الجانبية */
+  function badge() {
+    const n = canAcc() ? A.inbox.length : 0;
+    document.querySelectorAll('main [data-acopen] .count').forEach(c => { if (!n) c.remove(); else c.textContent = n; });
+    const b = document.querySelector('main [data-acopen]'); if (b && n && !b.querySelector('.count')) b.insertAdjacentHTML('beforeend', `<span class="count">${n}</span>`);
+    const sb = document.querySelector('.side nav.tabs button[data-v="students"]');
+    if (sb) { const c = sb.querySelector('.qcacc-c'); if (n && !c) sb.insertAdjacentHTML('beforeend', `<span class="count qcacc-c" title="إخطارات تحصيل تنتظر المراجعة">${n}</span>`); else if (c && !n) c.remove(); else if (c) c.textContent = n; }
+  }
+  new MutationObserver(() => { try { badge(); } catch (e) { /* ignore */ } }).observe(document.getElementById('app') || document.body, { childList: true });
+  setInterval(() => { if (session && !document.hidden && canAcc()) accLoad(false); }, 60000);
+
+  /* ===== الزر، وإزالة الصفحات القديمة ===== */
+  const css2 = document.createElement('style');
+  css2.textContent = `.qcacc .qnotice{margin:0 0 1rem;padding:.9rem}.qcacc .qnhead{display:flex;flex-wrap:wrap;gap:.2rem .8rem;align-items:baseline;margin-bottom:.5rem}
+    .qcacc tr.qok td{background:#eef7f1!important;color:#3d7a52}.qcacc tr.qok td.qnm{font-weight:700}
+    .qcacc tr.qno td{background:#fdf0ee!important;color:#9a3b30}.qcacc .qnfoot{align-items:center}
+    .qcacc .qlogh{display:flex;flex-wrap:wrap;gap:.3rem .6rem;align-items:center;width:100%;border:0;background:none;padding:0;font:inherit;text-align:start;cursor:pointer}
+    .qcacc .qlog .tbl{margin-top:.6rem}
+    .qcacc .modal,.qcacc .qnotice{min-width:0;max-width:100%;box-sizing:border-box}.qcacc .tbl:not(.paytbl){max-width:100%;overflow-x:auto}
+    .qcacc td:not(:last-child){white-space:normal!important}.qcacc td.qnm{min-width:6rem}
+    .qcacc .qnotice tr:not(.qok):not(.qno):not(.sum) td{background:var(--card,#fff)!important}
+    @media (max-width:600px){.qcacc .qnotice{padding:.7rem .4rem}.qcacc .qnotice table{font-size:.86rem}.qcacc .qnotice th,.qcacc .qnotice td{padding:.4rem .3rem!important}
+      .qcacc td [data-acmark]{display:block;width:100%;margin:.15rem 0;padding:.25rem .45rem!important;font-size:.8rem;min-height:0!important}.qcacc td.qnm{min-width:5rem}.qcacc .qnotice td:nth-child(2){max-width:4.2rem}}
+    main .tblprint.qtb:has([data-sstfseg]) > .bar > [data-acopen]:is(.btn,button){order:4!important;flex:0 0 auto!important}
+    [data-acopen] svg{width:18px;height:18px;vertical-align:-3px;margin-inline-end:.3rem}`;
+  document.head.appendChild(css2);
+  const OLD = { teacher: 'collect', placeadmin: 'collect', accountant: 'tcollect', admin: 'tcollect' };
+  document.addEventListener('DOMContentLoaded', () => {
+    Object.entries(OLD).forEach(([r, k]) => { const T = TABS[r]; if (!T) return; const i = T.findIndex(t => t[0] === k); if (i > -1) T.splice(i, 1); });
+    const base = adminViews.students;
+    adminViews.students = function () {
+      if (ui.svw === 'tcollect') ui.svw = 'list';
+      let h = base.apply(this, arguments);
+      if (typeof h !== 'string') return h;
+      /* شريط «الطلاب / تحصيل المعلمين»: لم يبق فيه إلا «الطلاب» */
+      const i = h.indexOf('<div class="card subnav">'), e2 = i < 0 ? -1 : h.indexOf('</div></div>', i);
+      if (e2 > -1) h = h.slice(0, i) + h.slice(e2 + 12);
+      if ((ui.svw && ui.svw !== 'list') || !canAcc()) return h;
+      const n = A.inbox.length;
+      return h.replace(/(<div class="qseg" data-sstfseg|<select data-sstf)/, `<button type="button" class="btn" data-acopen>${PAY}تحصيل المعلمين${n ? ` <span class="count">${n}</span>` : ''}</button>$1`);
+    };
+    const baseR = render;
+    render = function () {
+      try { if (ui.tab === 'collect' || ui.tab === 'tcollect') ui.tab = 'students'; if (canAcc()) accLoad(false); } catch (e) { /* ignore */ }
+      const r = baseR.apply(this, arguments);
+      try { if (aov && aov.isConnected && A.tab === 'log') accPaint(); } catch (e) { /* ignore */ }   // بعد مراجعة قائمة قديمة
+      return r;
+    };
+  });
+  document.addEventListener('click', e => { if (e.target.closest('[data-acopen]')) accOpen(); });
 })();
