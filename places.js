@@ -8,7 +8,7 @@
    - «اشتراك المكان» بجانب «تعديل المكان»: مبالغ المكان لكل الفئات وقيم الخصومات (النافذة في fees.js، والعلامة «خاص» إن كان له شيء منها).
    - تنظيم الصفحة: البطاقة العلوية صفّان (الأعداد و«يحتاج إجراء» والقائمتان «أدوات» و«+ إضافة»، ثم العرض والبحث و«فتح/طي الكل»). رأس المكان أعداد وعلامات
      (الحلقات والطلاب والمشرفون، «اشتراك خاص»، «تحتاج إجراء») وأسماء المشرفين عند الوقوف عليه. أعمال المكان في صف وحده:
-     «+ حلقة هنا» و«⋯» (تعديل المكان واشتراكه وحذفه) في صف أدوات الجدول نفسه، والجدول بعرض البطاقة. يُفتح أكثر من مكان معًا، و«فتح الكل / طي الكل».
+     «+ حلقة هنا» والترس (تعديل المكان واشتراكه وحذفه) في صف أدوات الجدول نفسه، والجدول بعرض البطاقة. يُفتح أكثر من مكان معًا، و«فتح الكل / طي الكل».
      وعلى الهاتف كل حلقة بطاقة صغيرة (المعلم، ثم المشرف وعدد الطلاب، ثم الوقت، وبجانبها تعديل وحذف) بدل الجدول العريض.
    - للمحاسب أيضًا (ولمن مُنح صلاحية «الأماكن والحلقات» halaqat.manage): الصفحة كاملة بكل إعداداتها؛ ومن لا يملكها من المحاسبين
      يراها للاطلاع كما كانت (accountant.js). الخادم يتحقق من الصلاحية (supabase/halaqat_perm.sql).
@@ -78,8 +78,8 @@
       const sups = [...new Set(all.map(h => h.supervisorId).filter(Boolean))].map(supName);
       const bad = all.filter(h => !h.supervisorId || !stuN(h)).length;
       const own = p && window.QLFeePlace?.can() && window.QLFeePlace.has(p.id);
-      /* أعمال المكان («+ حلقة هنا» و«⋯» وفيها تعديله واشتراكه وحذفه) في صف واحد مع أدوات الجدول (.bar تضمّه أدوات الجدول إليها) */
-      const more = p ? `<details class="pltools plmore"><summary class="btn sm" aria-label="أعمال المكان" title="أعمال المكان">⋯</summary><div class="pltmenu">
+      /* أعمال المكان («+ حلقة هنا» والترس وفيها تعديله واشتراكه وحذفه) في صف واحد مع أدوات الجدول (.bar تضمّه أدوات الجدول إليها) */
+      const more = p ? `<details class="pltools plmore"><summary class="btn sm" aria-label="أعمال المكان" title="أعمال المكان"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:block" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></summary><div class="pltmenu">
           <button class="btn" data-act="editPlace" data-id="${p.id}">تعديل المكان</button>
           ${window.QLFeePlace?.can() ? `<button class="btn" data-fee-place="${p.id}">اشتراك المكان${own ? ' <span class="tag tag-ok">خاص</span>' : ''}</button>` : ''}
           <button class="btn danger" data-act="delPlace" data-id="${p.id}">حذف المكان</button></div></details>` : '';
@@ -160,7 +160,7 @@
     .plcard{padding:.7rem .9rem;margin-bottom:.55rem}.plhead{display:flex;align-items:center;gap:.7rem;cursor:pointer}.plhead .pico svg{width:22px;height:22px}.plchev{color:var(--muted,#667);font-size:1.1rem}
     .plbulk{position:sticky;top:.5rem;z-index:6;border:2px solid var(--navy)}
     .pladd .pltmenu,.plmore .pltmenu{inset-inline-start:auto;inset-inline-end:0}.pladd>summary::after,.plmore>summary::after{content:''}
-    .plmore>summary{min-width:2.4rem;font-weight:700;letter-spacing:.1em}.plmore .pltmenu .tag{margin-inline-start:.3rem}
+    .plmore>summary{min-width:2.4rem;display:inline-flex;align-items:center;justify-content:center}.plmore .pltmenu .tag{margin-inline-start:.3rem}
     .placts{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.5rem 0 .4rem}
     .plcard .tblprint.qtb{margin:.5rem 0 .4rem}.plcard .tbl:not(#qz0),.plcard .tbl:not(#qz0) > table{width:100%!important}.plcard .tbl:not(#qz0) td:not(:last-child){white-space:normal}
     .plhdr{padding-block:.8rem}.plrow{display:flex;align-items:center;gap:.5rem .6rem;flex-wrap:wrap}.plrow + .plrow{margin-top:.6rem}
