@@ -8,7 +8,7 @@
    الضغط مرة أخرى على «تحصيل الاشتراك» لطالب في الإخطار الحالي يسأل (نافذة تأكيد) ثم يلغي تحصيله منه؛
    وما أُرسل للمحاسب أو حصّله لا يُلغى من هنا (الزر عندئذ يفتح التحصيل لشهر آخر).
    - الخادم: supabase/cnotices.sql (cn_add / cn_remove / cn_send / cn_list). بلا خادم (نسخة العرض): القاعدة نفسها على الجهاز في db.cnotices.
-   - المحاسب والمدير: زر «تحصيل المعلمين» في صف الأدوات نفسه، وعليه عدد الإخطارات المنتظرة. يفتح نافذة بتبويبين:
+   - المحاسب والمدير: زر «إخطارات» في صف الأدوات نفسه، وعليه عدد الإخطارات المنتظرة. يفتح نافذة بتبويبين:
      «الإخطارات»: كل إخطار رسالة (الجامع وتاريخه، ثم الأسماء والشهر والمبلغ والإجمالي)، وأمام كل اسم «تم التحصيل» فيصير أخضر باهتًا ✓
      أو «إعادة» بملاحظة (cn_mark، يُحفظ فورًا ويمكن التراجع عنه)، ثم «تم تحصيل المبلغ» حين تُراجع الأسماء كلها (cn_finish) فينتقل إلى السجل.
      «السجل»: الإخطارات المنتهية، والقوائم القديمة (collect.js) ومنها ما ينتظر المراجعة.
@@ -50,7 +50,7 @@
     send() {
       const d = local.draft(false); if (!d || !d.lines.length) throw new Error('لا يوجد ما يُرسل');
       d.status = 'sent'; d.sentAt = new Date().toISOString(); d.lines = d.lines.map(l => ({ ...l, state: 'pending', accNote: '' }));
-      news('accountant', `إخطار تحصيل من ${d.collectorName}: عدد الطلاب ${d.lines.length}، والإجمالي ${money(d.lines.reduce((a, l) => a + l.amount, 0))} جنيه. راجعه من «الطلاب ← تحصيل المعلمين».`);
+      news('accountant', `إخطار تحصيل من ${d.collectorName}: عدد الطلاب ${d.lines.length}، والإجمالي ${money(d.lines.reduce((a, l) => a + l.amount, 0))} جنيه. راجعه من «الطلاب ← إخطارات».`);
     },
     mark(nid, lid, ok, msg) {
       const n = L().find(x => x.id === nid && x.status === 'sent'); if (!n) throw new Error('الإخطار غير موجود أو انتهت مراجعته');
@@ -319,7 +319,7 @@
   let aov = null;
   function accBody() {
     const n = A.inbox.length, oldPend = (db.collections || []).filter(c => c.status === 'sent').length;
-    return `<div class="modal wide"><h2>تحصيل المعلمين</h2>
+    return `<div class="modal wide"><h2>إخطارات</h2>
       <div class="qseg" role="tablist" style="margin:0 0 .8rem"><button type="button" data-actab="inbox" class="${A.tab === 'inbox' ? 'on' : ''}" aria-selected="${A.tab === 'inbox'}">الإخطارات${n ? ` <small>(${n})</small>` : ''}</button><button type="button" data-actab="log" class="${A.tab === 'log' ? 'on' : ''}" aria-selected="${A.tab === 'log'}">السجل${oldPend ? ` <small>(${oldPend} قديمة)</small>` : ''}</button></div>
       ${A.busy && !A.at ? '<p class="muted">جارٍ التحميل…</p>' : A.tab === 'inbox' ? (n ? A.inbox.map(noticeCard).join('') : `<p class="muted">لا توجد إخطارات تنتظر المراجعة.${oldPend ? ' وفي «السجل» قوائم قديمة تنتظر المراجعة.' : ''}</p>`) : logView()}
       <div class="row"><button type="button" class="btn" data-close>إغلاق</button></div></div>`;
@@ -407,7 +407,7 @@
       if (e2 > -1) h = h.slice(0, i) + h.slice(e2 + 12);
       if ((ui.svw && ui.svw !== 'list') || !canAcc()) return h;
       const n = A.inbox.length;
-      return h.replace(/(<div class="qseg" data-sstfseg|<select data-sstf)/, `<button type="button" class="btn" data-acopen>${PAY}تحصيل المعلمين${n ? ` <span class="count">${n}</span>` : ''}</button>$1`);
+      return h.replace(/(<div class="qseg" data-sstfseg|<select data-sstf)/, `<button type="button" class="btn" data-acopen>${PAY}إخطارات${n ? ` <span class="count">${n}</span>` : ''}</button>$1`);
     };
     const baseR = render;
     render = function () {

@@ -88,7 +88,7 @@ begin
   where id = d.id;
   select jsonb_array_length(d.lines), coalesce(sum((x->>'amount')::numeric), 0) into n, tot from jsonb_array_elements(d.lines) x;
   insert into news (id, text, audience, date, author_id, author)
-  values (gen_random_uuid(), 'إخطار تحصيل من ' || d.collector_name || ': عدد الطلاب ' || n || '، والإجمالي ' || trim_scale(tot) || ' جنيه. راجعه من «الطلاب ← تحصيل المعلمين».',
+  values (gen_random_uuid(), 'إخطار تحصيل من ' || d.collector_name || ': عدد الطلاب ' || n || '، والإجمالي ' || trim_scale(tot) || ' جنيه. راجعه من «الطلاب ← إخطارات».',
           'accountant', current_date, d.collector_id, d.collector_name);
   return d.id;
 end $$;

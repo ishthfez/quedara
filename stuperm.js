@@ -41,7 +41,7 @@
     ['halaqa', 'قائمة الحلقة', 'أدوات الجدول', [S, A, P], 'main .qcombo:has([data-change="fh"]),main select[data-change="fh"]', 'hide'],
     ['att', 'زر «الحضور» (نافذة تسجيل الحضور)', 'أدوات الجدول', [T, S, P], 'main [data-attopen]', 'hide'],
     ['colbtn', 'زر «تحصيل» (إخطار التحصيل للمحاسب)', 'أدوات الجدول', [T, P], 'main [data-colopen]', 'hide'],
-    ['accbtn', 'زر «تحصيل المعلمين» (مراجعة إخطارات التحصيل وسجلها)', 'أدوات الجدول', [A], 'main [data-acopen]', 'hide'],
+    ['accbtn', 'زر «إخطارات» (مراجعة إخطارات التحصيل وسجلها)', 'أدوات الجدول', [A], 'main [data-acopen]', 'hide'],
     ['seg', 'تبويبا الحالة كلاهما (منتظم / منقطع)', 'أدوات الجدول', ALL, 'main [data-sstfseg]', 'hide'],
     ['seg_on', 'تبويب «منتظم»', 'أدوات الجدول', ALL, 'main [data-sstfv="on"]', 'hide'],
     ['seg_off', 'تبويب «منقطع»', 'أدوات الجدول', ALL, 'main [data-sstfv="off"]', 'hide'],
