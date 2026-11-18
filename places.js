@@ -6,9 +6,9 @@
    - أدوات (تنظيف الحلقات، تقسيم بملف، توزيع بالنص) في زر واحد «أدوات».
    - للمدير فقط؛ قسم المحاسب المبني على هذه الصفحة يبقى كما كان.
    - «اشتراك المكان» بجانب «تعديل المكان»: مبالغ المكان لكل الفئات وقيم الخصومات (النافذة في fees.js، والعلامة «خاص» إن كان له شيء منها).
-   - تنظيم الصفحة: البطاقة العلوية بلا عنوان مكرر، و«+ إضافة» (مكان أو حلقة) و«أدوات» قائمتان. رأس المكان أعداد وعلامات
+   - تنظيم الصفحة: البطاقة العلوية صفّان (الأعداد و«يحتاج إجراء» والقائمتان «أدوات» و«+ إضافة»، ثم العرض والبحث و«فتح/طي الكل»). رأس المكان أعداد وعلامات
      (الحلقات والطلاب والمشرفون، «اشتراك خاص»، «تحتاج إجراء») وأسماء المشرفين عند الوقوف عليه. أعمال المكان في صف وحده:
-     «+ حلقة هنا» ظاهر، وتعديل المكان واشتراكه وحذفه في قائمة «⋯» (لا تختلط بأدوات الجدول). يُفتح أكثر من مكان معًا، و«فتح الكل / طي الكل».
+     «+ حلقة هنا» و«⋯» (تعديل المكان واشتراكه وحذفه) في صف أدوات الجدول نفسه، والجدول بعرض البطاقة. يُفتح أكثر من مكان معًا، و«فتح الكل / طي الكل».
      وعلى الهاتف كل حلقة بطاقة صغيرة (المعلم، ثم المشرف وعدد الطلاب، ثم الوقت، وبجانبها تعديل وحذف) بدل الجدول العريض.
    يُحمَّل بعد ملفات الأدوات (links، cleanup، distribute، split) وقبل nav.js و app-actions.js. */
 (() => {
@@ -32,8 +32,8 @@
   const cards = (list, cols, check) => `<div class="plhl">${list.map(h => `<div class="plhi">${check ? `<input type="checkbox" data-plsel="${h.id}" ${st.sel.has(h.id) ? 'checked' : ''} aria-label="تحديد">` : ''}
       <div class="plhi-b"><div>${nameCell(h)}</div><div class="muted plhi-m">${cols.filter(c => c !== C.name && c !== C.time).map(c => c === C.n ? `${stuN(h)} طالب` : c[1](h)).join(' · ')}</div>${cols.includes(C.time) ? `<div class="muted plhi-m">${C.time[1](h)}</div>` : ''}</div>
       <div class="plhi-a">${acts(h)}</div></div>`).join('')}</div>`;
-  const table = (list, cols, check) => cards(list, cols, check) + `<div class="tbl"><table><tr>${check ? `<th><input type="checkbox" data-plall aria-label="تحديد الكل" ${list.length && list.every(h => st.sel.has(h.id)) ? 'checked' : ''}></th>` : ''}${cols.map(c => `<th>${c[0]}</th>`).join('')}<th></th></tr>
-    ${list.map(h => `<tr>${check ? `<td><input type="checkbox" data-plsel="${h.id}" ${st.sel.has(h.id) ? 'checked' : ''} aria-label="تحديد"></td>` : ''}${cols.map(c => `<td>${c[1](h)}</td>`).join('')}<td>${acts(h)}</td></tr>`).join('')}</table></div>`;
+  const table = (list, cols, check) => `<div class="tbl"><table><tr>${check ? `<th><input type="checkbox" data-plall aria-label="تحديد الكل" ${list.length && list.every(h => st.sel.has(h.id)) ? 'checked' : ''}></th>` : ''}${cols.map(c => `<th>${c[0]}</th>`).join('')}<th></th></tr>
+    ${list.map(h => `<tr>${check ? `<td><input type="checkbox" data-plsel="${h.id}" ${st.sel.has(h.id) ? 'checked' : ''} aria-label="تحديد"></td>` : ''}${cols.map(c => `<td>${c[1](h)}</td>`).join('')}<td>${acts(h)}</td></tr>`).join('')}</table></div>` + cards(list, cols, check);   // البطاقات بعد الجدول: فصف الأعمال والأدوات فوقها على الهاتف
   const C = {
     name: ['الحلقة', nameCell],
     place: ['المكان', h => esc(placeName(h) || '—')],
@@ -47,12 +47,13 @@
     const emptyPlaces = db.places.filter(p => !hs.some(h => h.placeId === p.id)).length;
     const chips = Object.entries(FILTERS).map(([k, [l, fn]]) => [k, l, hs.filter(fn).length]).filter(([k, , n]) => n || st.f === k)
       .map(([k, l, n]) => `<button type="button" class="btn sm ${st.f === k ? 'on' : ''}" data-plf="${k}">${l} <span class="count">${n}</span></button>`).join('');
-    return `<div class="card"><div class="bar" style="margin:0"><span class="muted grow">${db.places.length} مكان · ${hs.length} حلقة · ${nSt} طالب</span>
+    /* صفّان فقط: (الأعداد ثم «يحتاج إجراء» في سطرها، والأدوات والإضافة) ثم (طريقة العرض والبحث و«فتح/طي الكل») */
+    const need = chips || emptyPlaces ? `<span class="plneed"><span class="muted">يحتاج إجراء:</span>${chips}${emptyPlaces ? `<span class="tag">${emptyPlaces} مكان بلا حلقات</span>` : ''}${st.f ? '<button type="button" class="btn sm" data-plf="">عرض الكل</button>' : ''}</span>` : '<span class="plneed muted">كل الحلقات لها مشرف ووقت وطلاب ✓</span>';
+    return `<div class="card plhdr"><div class="plrow"><span class="plsum"><span class="muted">${db.places.length} مكان · ${hs.length} حلقة · ${nSt} طالب</span>${need}</span>
         <details class="pltools"><summary class="btn">أدوات</summary><div class="pltmenu"><button class="btn" data-cuopen>تنظيف الحلقات</button><button class="btn" data-spopen>تقسيم بملف</button><button class="btn" data-dsopen>توزيع بالنص</button></div></details>
         <details class="pltools pladd"><summary class="btn primary">+ إضافة</summary><div class="pltmenu"><button class="btn" data-act="addHalaqa">حلقة</button><button class="btn" data-act="addPlace">مكان</button></div></details></div>
-      ${chips || emptyPlaces ? `<div class="bar" style="margin:.7rem 0 0"><span class="muted" style="font-size:.85rem">يحتاج إجراء:</span>${chips}${emptyPlaces ? `<span class="tag">${emptyPlaces} مكان بلا حلقات</span>` : ''}${st.f ? '<button type="button" class="btn sm" data-plf="">عرض الكل</button>' : ''}</div>` : '<p class="muted" style="margin:.6rem 0 0;font-size:.88rem">كل الحلقات لها مشرف ووقت وطلاب ✓</p>'}
-      <div class="bar" style="margin:.7rem 0 0"><div class="plseg">${[['place', 'حسب المكان'], ['sup', 'حسب المشرف'], ['all', 'كل الحلقات']].map(([k, l]) => `<button type="button" class="btn ${st.v === k ? 'on' : ''}" data-plv="${k}">${l}</button>`).join('')}</div>
-        <input type="search" data-plq value="${esc(st.q)}" placeholder="ابحث بالمعلم أو المكان أو المشرف" style="flex:1 1 14rem;max-width:24rem" aria-label="بحث في الحلقات">
+      <div class="plrow plctl"><div class="plseg">${[['place', 'حسب المكان'], ['sup', 'حسب المشرف'], ['all', 'كل الحلقات']].map(([k, l]) => `<button type="button" class="btn ${st.v === k ? 'on' : ''}" data-plv="${k}">${l}</button>`).join('')}</div>
+        <input type="search" data-plq value="${esc(st.q)}" placeholder="ابحث بالمعلم أو المكان أو المشرف" aria-label="بحث في الحلقات">
         ${st.v === 'place' && !st.f && !st.q ? `<button type="button" class="btn sm" data-plall2>${st.open.size ? 'طي الكل' : 'فتح الكل'}</button>` : ''}</div></div>`;
   }
   function byPlace() {
@@ -66,7 +67,7 @@
       const sups = [...new Set(all.map(h => h.supervisorId).filter(Boolean))].map(supName);
       const bad = all.filter(h => !h.supervisorId || !stuN(h)).length;
       const own = p && window.QLFeePlace?.can() && window.QLFeePlace.has(p.id);
-      /* أعمال المكان في صف وحده (ليس .bar: ذاك تضمّه أدوات الجدول إليها)، وتعديله واشتراكه وحذفه في «⋯» */
+      /* أعمال المكان («+ حلقة هنا» و«⋯» وفيها تعديله واشتراكه وحذفه) في صف واحد مع أدوات الجدول (.bar تضمّه أدوات الجدول إليها) */
       const more = p ? `<details class="pltools plmore"><summary class="btn sm" aria-label="أعمال المكان" title="أعمال المكان">⋯</summary><div class="pltmenu">
           <button class="btn" data-act="editPlace" data-id="${p.id}">تعديل المكان</button>
           ${window.QLFeePlace?.can() ? `<button class="btn" data-fee-place="${p.id}">اشتراك المكان${own ? ' <span class="tag tag-ok">خاص</span>' : ''}</button>` : ''}
@@ -76,7 +77,7 @@
           <div style="flex:1;min-width:0"><b>${esc(p ? p.name : 'حلقات لم يُحدَّد مكانها')}</b> ${p ? `<span class="tag">${esc(p.type)}</span>` : ''}${own ? ' <span class="tag tag-ok">اشتراك خاص</span>' : ''}${bad ? ` <span class="tag tag-no">${bad} تحتاج إجراء</span>` : ''}
             <div class="muted" style="font-size:.85rem" title="${esc(sups.join('، ') || 'بلا مشرف')}">${all.length} حلقة · ${all.reduce((a, h) => a + stuN(h), 0)} طالب · ${sups.length ? `${sups.length} مشرف` : 'بلا مشرف'}</div></div>
           <span class="plchev" aria-hidden="true">${isOpen ? '▴' : '▾'}</span></div>
-        ${isOpen ? `${p ? `<div class="placts">${p.address ? `<span class="muted grow">${esc(p.address)}</span>` : '<span class="grow"></span>'}<button class="btn sm primary" data-act="addHalaqa" data-p="${p.id}">+ حلقة هنا</button>${more}</div>` : ''}
+        ${isOpen ? `${p ? `<div class="bar placts"><button class="btn sm primary" data-act="addHalaqa" data-p="${p.id}">+ حلقة هنا</button>${more}${p.address ? `<span class="muted grow pladdr">${esc(p.address)}</span>` : '<span class="grow"></span>'}</div>` : ''}
           ${list.length ? table(list, [C.name, C.sup, C.time, C.n]) : empty('لا توجد حلقات في هذا المكان بعد.')}` : ''}</div>`;
     }).join('');
     return out || `<div class="card">${empty('لا توجد حلقات تطابق البحث.')}</div>`;
@@ -120,14 +121,19 @@
     .plbulk{position:sticky;top:.5rem;z-index:6;border:2px solid var(--navy)}
     .pladd .pltmenu,.plmore .pltmenu{inset-inline-start:auto;inset-inline-end:0}.pladd>summary::after,.plmore>summary::after{content:''}
     .plmore>summary{min-width:2.4rem;font-weight:700;letter-spacing:.1em}.plmore .pltmenu .tag{margin-inline-start:.3rem}
-    .placts{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
+    .placts{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.5rem 0 .4rem}
+    .plcard .tblprint.qtb{margin:.5rem 0 .4rem}.plcard .tbl:not(#qz0),.plcard .tbl:not(#qz0) > table{width:100%!important}
+    .plhdr{padding-block:.8rem}.plrow{display:flex;align-items:center;gap:.5rem .6rem;flex-wrap:wrap}.plrow + .plrow{margin-top:.6rem}
+    .plsum{flex:1 1 auto;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .9rem}
+    .plneed{display:inline-flex;flex-wrap:wrap;align-items:center;gap:.35rem;font-size:.9rem}
+    .plctl{flex-wrap:nowrap}.plctl .plseg{flex:none}.plctl input[data-plq]{flex:1 1 auto;min-width:8rem;max-width:26rem;width:auto;margin:0}.plctl [data-plall2]{flex:none;margin-inline-start:auto}
     .plhl{display:none}
     @media (max-width:640px){
       main .card:has(.plhl) .tbl,main .card:has(.plhl) .tblprint .tzoom,main .card:has(.plhl) .tblprint .qzoom{display:none!important}
       .plhl{display:block}.plhi{display:flex;align-items:center;gap:.6rem;padding:.65rem .1rem;border-top:1px solid var(--line,#eee6d6)}
       .plhl .plhi:first-child{border-top:0}.plhi-b{flex:1;min-width:0}.plhi-b .lnk{text-align:start}
       .plhi-m{font-size:.84rem;margin-top:.15rem;line-height:1.5}
-      main .card:has([data-plq]) > .bar:first-child > .grow{flex-basis:100%}
+      .plsum{flex-basis:100%}.plctl{flex-wrap:wrap}.plctl input[data-plq]{max-width:none;flex-basis:100%;order:3}.plctl [data-plall2]{order:4}.pladdr{display:none}
       .plhi-a{display:flex;flex-direction:column;gap:.3rem}.plhi-a .btn{padding:.25rem .55rem!important;min-height:0!important;font-size:.82rem}
       .plhi>input[type=checkbox]{flex:none;width:1.15rem;height:1.15rem}
     }`;
