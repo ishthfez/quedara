@@ -6,7 +6,9 @@
    - أهمية الإعلان بلونه: عادي (هادئ)، مهم (برتقالي)، عاجل (أحمر).
    - مدة الإعلان: يختار المدير مدة (أو تاريخًا) يختفي بعدها الإعلان من «الرئيسية» و«الإعلانات» عند الجميع؛
      ويبقى في «الإعلانات» عند المدير بعلامة «انتهى»، وله فيها «تعديل» لكل إعلان (النص والجمهور والأهمية والمدة).
-   - الحفظ على الخادم: عمودا prio و until (supabase/news_ext.sql)؛ وقبل تنفيذه يعمل الإعلان كما كان بلا أهمية ولا مدة. */
+   - الحفظ على الخادم: عمودا prio و until (supabase/news_ext.sql)؛ وقبل تنفيذه يعمل الإعلان كما كان بلا أهمية ولا مدة.
+   - تحت الإعلانات عدّادات بحسب اختصاص كل فئة (بطاقة «الحلقات والطلاب» نفسها التي عند المدير)، كلٌّ في نطاقه:
+     المعلم حلقاته، والمشرف حلقاته، والإداري حلقات أماكنه، والمحاسب الطلاب و«الاشتراكات»، والطالب حضوره وتسميعه. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./home.js')) VFILES.push('./home.js'); } catch (e) { /* ignore */ } });
   const PR = { '': ['عادي', 'qn-n'], imp: ['مهم', 'qn-imp'], urgent: ['عاجل', 'qn-urg'] };
@@ -92,8 +94,70 @@
     };
   });
 
+  /* ===== العدّادات تحت الإعلانات: بحسب اختصاص كل فئة ===== */
+  const row = (cls, l, v) => `<div class="feerow ${cls}"><span>${esc(l)}</span><b>${esc(String(v))}</b></div>`;
+  const pctRow = (l, p) => `<div class="feerow fr-ok qfpct"><span>${esc(l)}</span><span class="qfbar" aria-hidden="true"><span style="width:${Math.min(p, 100)}%"></span></span><b>${p}%</b></div>`;
+  const card = (title, r1, r2) => `<div class="card qdashcard qhomecnt" style="margin:0 0 1rem"><h3 style="margin:0 0 .8rem">${esc(title)}</h3>
+    <div class="qfrow">${r1.join('')}</div>${r2 && r2.length ? `<div class="qfrow">${r2.join('')}</div>` : ''}</div>`;
+  /* حلقات الحساب وطلابها (نطاقه كما في «الطلاب») */
+  const scopeHal = () => { const H = window.QLStuView?.scopeH?.(); return H || db.halaqat; };
+  function scopeData() {
+    const H = scopeHal(), ids = new Set(H.map(h => h.id));
+    const S = db.students.filter(s => ids.has(s.halaqaId)), on = S.filter(s => !stOff(s)), onIds = new Set(on.map(s => s.id));
+    const t = today(), mon = t.slice(0, 7);
+    /* حضور اليوم: حالة واحدة لكل طالب (آخر ما سُجّل له) */
+    const day = new Map(); (db.attendance || []).forEach(a => { if (a.date === t && onIds.has(a.studentId)) day.set(a.studentId, a); });
+    const attT = [...day.values()];
+    const here = attT.filter(a => a.status === 'present' || a.status === 'late').length;
+    const halDone = H.filter(h => attT.some(a => byId(db.students, a.studentId)?.halaqaId === h.id)).length;
+    const recT = (db.records || []).filter(r => r.date === t && onIds.has(r.studentId)).length;
+    const absM = (db.attendance || []).filter(a => a.status === 'absent' && String(a.date).startsWith(mon) && onIds.has(a.studentId)).length;
+    return { H, S, on, attT, here, pct: on.length ? Math.round(here / on.length * 100) : 0, notYet: on.filter(s => !day.has(s.id)).length, halDone, recT, absM, mon };
+  }
+  const trs = () => (window.QLTransfers?.list?.() || []);
+  /* إخطارات التحصيل بانتظار المراجعة (للمحاسب): من الخادم كل دقيقة على الأكثر */
+  const INB = { n: null, at: 0, busy: false };
+  function inbox() {
+    if (INB.busy || Date.now() - INB.at < 60000 || !window.QLCN?.api) return;
+    INB.busy = true;
+    window.QLCN.api.list('inbox').then(L => { INB.n = L.length; }, () => { INB.n = null; }).finally(() => { INB.at = Date.now(); INB.busy = false; if (ui.tab === 'home') render(); });
+  }
+  function counters(r) {
+    if (r === 'student') {
+      const me = session.id, t = today(), mon = t.slice(0, 7);
+      const byDay = new Map(); (db.attendance || []).forEach(a => { if (a.studentId === me && String(a.date).startsWith(mon)) byDay.set(a.date, a); });
+      const att = [...byDay.values()];
+      const ok = att.filter(a => a.status === 'present' || a.status === 'late').length, abs = att.filter(a => a.status === 'absent').length;
+      const rec = (db.records || []).filter(x => x.studentId === me && String(x.date).startsWith(mon)).length;
+      let last = '—'; try { last = lastHifz(me) || '—'; } catch (e) { /* ignore */ }
+      return card('هذا الشهر', [att.length ? pctRow('نسبة حضوري', Math.round(ok / att.length * 100)) : row('fr-plain', 'نسبة حضوري', '—'), row(abs ? 'fr-no' : 'fr-ok', 'أيام الغياب', abs), row('fr-info', 'تسميعاتي', rec)], [row('fr-plain', 'آخر حفظ', last)]);
+    }
+    if (r === 'accountant') {
+      const on = db.students.filter(s => !stOff(s)).length;
+      inbox();
+      let fee = ''; try { fee = window.QLFeeSummary ? window.QLFeeSummary(db.students) : ''; } catch (e) { fee = ''; }
+      return card('الطلاب', [row('fr-plain', 'الطلاب', on), row('fr-no', 'منقطع', db.students.length - on),
+        ...(window.QLStuPerm?.can?.('accbtn') === false ? [] : [row(INB.n ? 'fr-no' : 'fr-ok', 'إخطارات بانتظار المراجعة', INB.n == null ? '…' : INB.n)])]) + fee;
+    }
+    const d = scopeData(), T = trs(), wait = T.filter(x => x.canDecide).length;
+    const att = d.on.length ? pctRow('حضور اليوم', d.pct) : row('fr-plain', 'حضور اليوم', '—');
+    if (r === 'teacher') {
+      return card('حلقاتي', [row('fr-plain', 'الطلاب', d.on.length), row('fr-no', 'منقطع', d.S.length - d.on.length), att, row(d.notYet ? 'fr-no' : 'fr-ok', 'لم يُسجَّل حضورهم اليوم', d.notYet)],
+        [row('fr-info', 'تسميع اليوم', d.recT), row('fr-plain', 'غياب هذا الشهر', d.absM), ...(T.length ? [row('fr-info', 'بانتظار موافقة النقل', T.length)] : [])]);
+    }
+    if (r === 'supervisor') {
+      const ab = ((db.payroll || {}).absences || []).filter(a => String(a.date || '').startsWith(d.mon)).length;
+      return card('حلقاتي', [row('fr-plain', 'الحلقات', d.H.length), row('fr-plain', 'الطلاب', d.on.length), row('fr-no', 'منقطع', d.S.length - d.on.length), att],
+        [row(d.halDone < d.H.length ? 'fr-no' : 'fr-ok', 'حلقات سُجّل حضورها اليوم', `${d.halDone} من ${d.H.length}`), row('fr-info', 'تسميع اليوم', d.recT), row('fr-plain', 'غياب المعلمين هذا الشهر', ab), row(wait ? 'fr-no' : 'fr-ok', 'طلبات نقل بانتظار موافقتك', wait)]);
+    }
+    /* الإداري */
+    const pl = new Set(d.H.map(h => h.placeId).filter(Boolean)).size;
+    return card('نطاقي', [row('fr-plain', 'الأماكن', pl), row('fr-plain', 'الحلقات', d.H.length), row('fr-plain', 'الطلاب', d.on.length), row('fr-no', 'منقطع', d.S.length - d.on.length)],
+      [att, row(d.halDone < d.H.length ? 'fr-no' : 'fr-ok', 'حلقات سُجّل حضورها اليوم', `${d.halDone} من ${d.H.length}`), row('fr-info', 'تسميع اليوم', d.recT), ...(T.length ? [row(wait ? 'fr-no' : 'fr-info', 'طلبات النقل', T.length)] : [])]);
+  }
+
   /* ===== «الرئيسية» ===== */
-  const homeView = r => box(r);
+  const homeView = r => { let c = ''; try { c = counters(r); } catch (e) { console.error('home counters:', e); } return box(r) + c; };
   /* الطالب: تُضاف قبل أن يرتّب nav.js القوائم (فيحفظها صفحة البداية)، ثم تُعاد أول القائمة بعد ترتيبه.
      (العاملون يضعها stuview.js أول قائمتهم) */
   try { if (TABS.student && !TABS.student.some(t => t[0] === 'home')) TABS.student.unshift(['home', 'الرئيسية']); } catch (e) { /* ignore */ }
