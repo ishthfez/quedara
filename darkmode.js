@@ -42,7 +42,6 @@
   ${D} .side{background:linear-gradient(180deg,var(--navy-d),color-mix(in srgb,var(--navy-d) 75%,#000))}
   ${D} .btn{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14);color:var(--text)}
   ${D} .btn:not(.on):not(.primary):hover{background:rgba(255,255,255,.12)}
-  ${D} .btn.primary,${D} .btn.on{color:var(--on-navy)}
   ${D} main .btn:not(.primary):not(.on):not(.danger),${D} .modal .btn:not(.primary):not(.on):not(.danger),${D} .mode:not(.on){border-color:rgba(255,255,255,.18)}
   ${D} .btn.danger{color:#f08a80}
   ${D} select,${D} input,${D} textarea,${D} option{background:#111924;border-color:rgba(255,255,255,.14);color:var(--text)}
@@ -53,7 +52,6 @@
   ${D} .content .iconbtn:hover{background:rgba(255,255,255,.12)}
   ${D} .modal,${D} .results,${D} .opt,${D} .tile,${D} .mode,${D} .chip,${D} .logo-prev,${D} label.sw,${D} .ipop{background:var(--glass-strong)}
   ${D} .tile,${D} .mode{color:var(--text)}
-  ${D} .tile.on,${D} .mode.on{background:var(--navy);color:var(--on-navy)}
   ${D} .note{background:color-mix(in srgb,var(--gold) 9%,#151d2a)}
   ${D} .news{background:color-mix(in srgb,var(--gold) 7%,#151d2a)}
   ${D} th{background:var(--navy-l);color:var(--text)}
@@ -74,14 +72,12 @@
   ${D} .tfs legend,${D} .sc-h{color:#fff}
   ${D} .tfs,${D} .dupg,${D} .prrows{background:rgba(255,255,255,.03)}
   ${D} .seg,${D} .chip-r span,${D} .prchip,${D} .ipx{background:rgba(255,255,255,.06);color:var(--text)}
-  ${D} .chip-r input:checked+span{background:var(--navy);color:var(--on-navy)}
   ${D} .dupi:hover{background:rgba(255,255,255,.07)}
   ${D} .ph img,${D} .ph .ph0{background:var(--navy-l)}
   ${D} .av{border-color:#2b3546}
   ${D} .tag{background:var(--gold-l);color:var(--gold-d)}
   ${D} .tag.tag-ok{background:color-mix(in srgb,var(--leaf) 26%,#0e141d);color:#8fd18a}
   ${D} .tag.tag-no{background:color-mix(in srgb,var(--red) 26%,#0e141d);color:#f3a097}
-  ${D} .tag.lock{background:var(--navy);color:var(--on-navy)}
   ${D} .ahal{background:var(--card)}
   ${D} #actasbar .btn,${D} #demobar .btn,${D} #actasbar select{background:#fff}
   ${D} #qclist{background:var(--glass-strong);color:var(--text)}
@@ -94,6 +90,11 @@
   ${D} .tag.qtrtag{background:color-mix(in srgb,#d9822b 22%,#0e141d);color:#f0c27a;border-color:color-mix(in srgb,#d9822b 45%,#0e141d)}
   ${D} .qzthumb{background:var(--text)}
   ${D} [data-qdark] svg{width:18px;height:18px}
+  /* المحدَّد والأزرار الأساسية: أبيض ونصه أسود بدل اللون المضيء (أزرار الحضور الملوّنة تبقى بألوانها) */
+  ${D} .side .tabs button.on{background:#fff;color:#14181f;box-shadow:inset -3px 0 0 var(--gold)}
+  ${D} .btn.primary,${D} .btn.on:not(.present):not(.absent):not(.late):not(.excused):not(.qoff),${D} .tile.on,${D} .mode.on,${D} .chip-r input:checked+span,${D} .seg input:checked+span,${D} .qseg button.on,${D} .tag.lock{background:#fff!important;color:#14181f!important;border-color:#fff!important;box-shadow:none}
+  ${D} main [data-qadd],${D} main [data-act="addStudent"]{background:#fff!important;color:#14181f!important;border-color:#fff!important}
+  ${D} .btn.primary:hover,${D} .btn.on:not(.present):not(.absent):not(.late):not(.excused):not(.qoff):hover{background:#e4e8ee!important}
   }
   @media screen and (max-width:860px),screen and (hover:none) and (pointer:coarse){
     ${D} .card,${D} .stat{background:#172030!important;box-shadow:0 1px 4px rgba(0,0,0,.3)!important}
