@@ -30,7 +30,7 @@
   }
   const stuIn = hs => { const s = new Set(hs.map(h => h.id)); return db.students.filter(x => s.has(x.halaqaId) && !stOff(x)).length; };
   function scopeTxt(x) {
-    if (x.k === 'supervisors' && gen(x.m)) return 'كل الحلقات (مشرف عام)';
+    if (x.k === 'supervisors' && gen(x.m)) return 'كل الحلقات (مدير عام)';
     if (x.k === 'placeadmins') return (window.placeScopeTxt ? window.placeScopeTxt(x.m) : plc(x.m).map(id => byId(db.places, id)?.name).filter(Boolean).join('، ')) || 'بلا مكان';
     const hs = halsOf(x);
     if (!hs.length) return x.k === 'teachers' || x.k === 'supervisors' ? 'بلا حلقة' : '—';
@@ -41,7 +41,8 @@
   function people() {
     const out = [];
     /* حساب المدير حساب إداري للنظام وليس موظفًا، فلا يظهر هنا إلا إن رُبط بموظف في المرتبات (يُدار من «الأعضاء ← المديرون») */
-    KINDS.forEach(([k, l], gi) => (db[k] || []).forEach(m => { const e = empOf(m); if (k !== 'admins' || e) out.push({ m, k, gi, e, type: k === 'supervisors' ? (gen(m) ? 'مشرف عام' : /دار/.test(e?.role || '') ? 'مشرف دار' : l) : l }); }));
+    /* «مدير عام» فئة مستقلة أعلى من المشرفين (gm)، وهو على الخادم مشرف نطاقه «الكل» */
+    KINDS.forEach(([k, l], gi) => (db[k] || []).forEach(m => { const e = empOf(m), g = k === 'supervisors' && gen(m); if (k !== 'admins' || e) out.push({ m, k, gi: g ? gi - 0.5 : gi, gm: g, e, type: k === 'supervisors' ? (g ? 'مدير عام' : /دار/.test(e?.role || '') ? 'مشرف دار' : l) : l }); }));
     /* موظفو المرتبات الذين لم يُصنَّفوا بعد */
     emps().filter(e => !clsOf(e)).forEach(e => out.push({ m: null, k: '', gi: 9, e, type: 'غير مصنف' }));
     return out.sort((a, b) => a.gi - b.gi || ((a.m || a.e).name).localeCompare((b.m || b.e).name, 'ar'));
@@ -58,9 +59,10 @@
   /* ===== الصفحة ===== */
   function view() {
     const all = people();
-    const F = [['', 'الكل'], ...KINDS.map(([k, l]) => [k, l === 'مدير' ? 'المديرون' : l === 'مشرف' ? 'المشرفون' : l === 'معلم' ? 'المعلمون' : l === 'محاسب' ? 'المحاسبون' : 'الإداريون']), ['un', 'غير مصنف'], ['off', 'المتوقفون']];
-    const list = all.filter(x => !st.k || (st.k === 'un' ? !x.m : st.k === 'off' ? stopped(x) : x.k === st.k));
-    const cnt = k => all.filter(x => k === 'un' ? !x.m : k === 'off' ? stopped(x) : !k || x.k === k).length;
+    const F = [['', 'الكل'], ...KINDS.flatMap(([k, l]) => [...(k === 'supervisors' ? [['gm', 'المديرون العامون']] : []), [k, l === 'مدير' ? 'المديرون' : l === 'مشرف' ? 'المشرفون' : l === 'معلم' ? 'المعلمون' : l === 'محاسب' ? 'المحاسبون' : 'الإداريون']]), ['un', 'غير مصنف'], ['off', 'المتوقفون']];
+    const inK = (x, k) => k === 'un' ? !x.m : k === 'off' ? stopped(x) : k === 'gm' ? !!x.gm : !k || (x.k === k && !x.gm);
+    const list = all.filter(x => inK(x, st.k));
+    const cnt = k => all.filter(x => inK(x, k)).length;
     const rows = list.map((x, i) => {
       const hs = halsOf(x);
       return `<tr data-stk="${esc(keyOf(x))}"><td>${i + 1}</td><td><b>${esc(nameOf(x))}</b>${stopped(x) ? ' <span class="tag tag-no">متوقف</span>' : ''}</td>
@@ -97,7 +99,7 @@
     ]);
     let hal = '';
     if (x.k === 'teachers' || x.k === 'supervisors' || x.k === 'placeadmins') {
-      const title = x.k === 'teachers' ? 'حلقاته' : x.k === 'placeadmins' ? 'حلقات نطاقه' : gen(m) ? 'كل الحلقات (مشرف عام)' : 'الحلقات المسندة إليه';
+      const title = x.k === 'teachers' ? 'حلقاته' : x.k === 'placeadmins' ? 'حلقات نطاقه' : gen(m) ? 'كل الحلقات (مدير عام)' : 'الحلقات المسندة إليه';
       hal = h3(`${title} (${hs.length}) — ${stuIn(hs)} طالب منتظم`) + (hs.length ? `<div class="tbl" style="margin-bottom:.8rem;max-height:40vh;overflow:auto"><table><tr><th>الحلقة</th><th>المكان</th><th>الوقت</th><th>${x.k === 'teachers' ? 'المشرف' : 'المعلم'}</th><th>الطلاب</th></tr>${hs.map(h => `<tr><td><button type="button" class="lnk" data-hstu="${h.id}">${esc(halaqaLabel(h))}</button></td><td>${esc(placeName(h) || '—')}</td><td>${esc(timeText(h) || '—')}</td><td>${esc(x.k === 'teachers' ? supName(h.supervisorId) : tName(h.teacherId))}</td><td>${stuIn([h])}</td></tr>`).join('')}</table></div>` : empty(x.k === 'placeadmins' ? 'لم يُحدَّد له مكان بعد (زر «النطاق»).' : 'لا توجد حلقات.'));
     }
     let pay = '';
