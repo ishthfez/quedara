@@ -5,7 +5,9 @@
    - زر «تعديل» (للمدير) في صف أدوات الجدول بجانب الطباعة والحفظ: يجعل «الرصيد» و«المخصوم» خانات تُعدَّل لكل موظف.
      يُحفظ في إعدادات المرتبات (settings.lvAdj[السنة][الموظف] = { b: الرصيد، u: فرق المخصوم })، فالمخصوم = ما أُثبت «رصيد» + الفرق،
      ويستمر العدّ بعد التعديل بالغياب الجديد. الخانة التي تُترك على القيمة المحسوبة لا يُحفظ لها شيء.
-   (البطاقة يرسمها payroll.js؛ هنا يُعاد ترتيبها بعد الرسم، ويُرسم جدول الرصيد بالحساب نفسه مع التعديلات) */
+   (البطاقة يرسمها payroll.js؛ هنا يُعاد ترتيبها بعد الرسم، ويُرسم جدول الرصيد بالحساب نفسه مع التعديلات)
+   - المشرف: تعديلات الرصيد تُجلب من الخادم (leave_adj في supabase/leave_adj.sql، أرقام الرصيد وحدها) كلما فتح «غياب المعلمين»
+     (مرة كل دقيقتين على الأكثر)، وتُعاد إلى إعداداته بعد كل مزامنة، فتحسب استمارة الغياب الرصيد كما في جدول المدير (absBalance في payroll.js). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./absbal.js')) VFILES.push('./absbal.js'); } catch (e) { /* ignore */ } });
   const css = document.createElement('style');
@@ -14,6 +16,25 @@
     .lvadj{font-weight:700;color:var(--gold-d,#8f6b33)}`;
   document.head.appendChild(css);
 
+  let adjAt = 0, adjBusy = false, ADJ = null;
+  /* كل مزامنة تعيد بناء db.payroll للمشرف (cloud.js) بلا التعديلات، فتُعاد إليه بعدها */
+  const putAdj = () => { const s = db.payroll?.settings; if (ADJ && s && s.lvAdj !== ADJ) s.lvAdj = ADJ; };
+  async function freshAdj() {
+    if (typeof CLOUD === 'undefined' || !CLOUD || session?.role !== 'supervisor' || adjBusy || Date.now() - adjAt < 120000 || !window.Cloud?.signedIn) return;
+    adjBusy = true; adjAt = Date.now();
+    try {
+      const r = await window.Cloud.rpc('leave_adj');
+      if (r && typeof r === 'object') {
+        const changed = JSON.stringify(r) !== JSON.stringify(ADJ || {}); ADJ = r; putAdj();
+        if (changed && ui.tab === 'absence' && !document.querySelector('.overlay')) render();   // الاستمارة تُعاد بمسودتها
+      }
+    } catch (e) { /* قبل تنفيذ leave_adj.sql: القاعدة العامة وحدها */ }
+    adjBusy = false;
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const base = render;
+    render = function () { try { if (session?.role === 'supervisor') { putAdj(); if (ui.tab === 'absence') freshAdj(); } } catch (e) { /* ignore */ } return base.apply(this, arguments); };
+  });
   let editing = false;
   const isAdm = () => typeof session !== 'undefined' && session?.role === 'admin';
   const PR = () => db.payroll || {};

@@ -438,10 +438,15 @@ function absPick(id) {
 /* ===== «بإذن»: الرصيد تحت الإذن، والإثبات تلقائيًا =====
    الرصيد السنوي بحسب نظام العمل (3 أو 6 أيام)، والمستعمل منه ما أُثبت «رصيد». في الشهر يومان على الأكثر من الرصيد.
    بإذن + الرصيد يسمح + لم يتجاوز يومين في الشهر ← «رصيد»؛ وإلا (أو بغير إذن) ← «خصم». يمكن تغييره قبل التسجيل. */
+/* رصيد الإجازات في استمارة الغياب: القاعدة العامة بنظام العمل، ومعها تعديل المدير لهذا الموظف في «رصيد الإجازات»
+   (settings.lvAdj[السنة][الموظف] = { b: الرصيد، u: فرق المخصوم } — absbal.js)، فيطابق جدول الرصيد.
+   والمشرف يصله التعديل من الخادم بلا أي مبالغ (absbal.js و supabase/leave_adj.sql). */
 function absBalance(e, y, m) {
-  const p = P(), s = p.settings, total = e.sys === '(6) أيام' ? s.lv6 : e.sys === '(3) أيام' ? s.lv3 : null;
+  const p = P(), s = p.settings || {}, base = e.sys === '(6) أيام' ? s.lv6 : e.sys === '(3) أيام' ? s.lv3 : null;
+  const d = ((s.lvAdj || {})[y] || {})[e.id] || {};
+  const total = d.b != null && Number.isFinite(+d.b) ? +d.b : base;
   const mine = p.absences.filter(a => a.eid === e.id && a.y === y);
-  const used = mine.filter(a => a.proof === 'رصيد').length, inMonth = mine.filter(a => a.m === m).length;
+  const used = mine.filter(a => a.proof === 'رصيد').length + (+d.u || 0), inMonth = mine.filter(a => a.m === m).length;
   return { total, used, rest: total == null ? null : total - used, inMonth };
 }
 function absAuto() {
