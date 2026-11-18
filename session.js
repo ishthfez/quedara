@@ -80,14 +80,11 @@
     const email = C()?.auth?.email || lockEmail;
     if (!email) { toast('انتهت الجلسة — سجّل الخروج وأعد الدخول'); return; }
     try {
-      if (C()?.auth?.access_token) {
-        /* الجلسة قائمة: نتحقق فقط من كلمة المرور */
-        await C().testSignIn(email, pw);
-      } else {
-        /* الجلسة انتهت تمامًا: دخول كامل لاستعادتها */
-        await C().signIn(email, pw);
-        if (session) C().setMember(session);
-      }
+      /* دخول بكلمة المرور يجدّد الجلسة نفسها (رمز جديد)، فلا تعتمد المزامنة بعد الفتح على رمز قديم قد يرفضه الخادم فيُخرج المستخدم */
+      if (C()?.reauth) await C().reauth(email, pw);
+      else if (C()?.auth?.access_token) await C().testSignIn(email, pw);
+      else await C().signIn(email, pw);
+      if (session && !C()?.auth?.member) C().setMember(session);   // دخول جديد بلا عضو محفوظ فقط (لا يُمسّ العضو أثناء «العمل بصفة…»)
     } catch (e) { toast(/fetch|network/i.test(e.message || '') ? 'تعذّر الاتصال بالخادم، أعد المحاولة' : 'كلمة المرور غير صحيحة'); return; }
     markLogin(); lockEmail = null; locked = false; el.remove(); toast('مرحبًا بعودتك');
     try { cloudRefresh(true); } catch (e) { /* ignore */ }
