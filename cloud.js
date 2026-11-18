@@ -144,7 +144,8 @@ function groups(db) {
   add('member_admin', 'member_admin', ['member_id'], (db.teachers || []).filter(t => t.admin && Object.keys(t.admin).length).map(t => ({ member_id: t.id, data: t.admin })));
   add('attendance', 'attendance', ['id'], (db.attendance || []).map(a => ({ id: a.id, student_id: a.studentId, date: a.date, status: a.status })), 'student_id,date');
   add('records', 'records', ['id'], (db.records || []).map(r => ({ id: r.id, student_id: r.studentId, date: r.date, type: r.type, surah: +r.surah, from_ayah: +r.from, to_ayah: +r.to, grade: r.grade || null, note: r.note || '' })));
-  add('news', 'news', ['id'], (db.news || []).map(n => ({ id: n.id, text: n.text, audience: n.audience || 'all', date: n.date })));
+  /* أهمية الإعلان ومدته تُرسل متى وُجد عموداها على الخادم (supabase/news_ext.sql)، وقبل ذلك يُرسل الإعلان كما كان */
+  add('news', 'news', ['id'], (db.news || []).map(n => ({ id: n.id, text: n.text, audience: n.audience || 'all', date: n.date, ...(newsExt ? { prio: n.prio || '', until: n.until || null } : {}) })));
   /* اشتراكات الطلاب (للمدير)؛ لا تُرسل إن لم يُنشأ جدولها على الخادم بعد */
   if (Array.isArray(db.fees) && feesOk !== false) add('fees', 'fees', ['id'], db.fees.map(f => ({ id: f.id, student_id: f.studentId, y: +f.y, m: +f.m, amount: num(f.amount) ?? 0, date: f.date || null, by_name: nz(f.by), note: f.note || '' })));
   add('custom_fields', 'custom_fields', ['kind', 'key'], ['students', 'teachers'].flatMap(k => (db.fields?.[k] || []).map(f => ({ kind: k, key: f.key, label: f.label, type: f.type || 'text' }))));
@@ -215,6 +216,8 @@ const SYNC_TABLES = {
   pay_rows: ['id'], pay_closed: ['y', 'm'], absences: ['id'], pending_columns: ['id'], fees: ['id'], collections: ['id']
 };
 let feesOk = null; // هل جدول الاشتراكات موجود على الخادم؟
+let newsExt = null; // هل للإعلانات عمودا الأهمية والمدة على الخادم (news_ext.sql)؟ يُفحص مرة في كل تشغيل
+const probeNews = () => req('/rest/v1/news?select=prio&limit=1').then(() => { newsExt = true; }, e => { if (e instanceof HttpError) newsExt = false; });   // انقطاع الاتصال لا يُحسب رفضًا
 const MEMBER_COLS = 'id,user_id,login_email,role,name,phone,halaqa_id,cat,info,extra,has_photo';
 const FULL_EVERY = 30 * 60000;
 let raw = null, since = null, lastFull = 0, inc = null, scoped = false, lastChanged = true, leaveTried = false;
@@ -254,6 +257,7 @@ async function fetchTables(tables, filter = '', chk = null) {
     const p = selectAll(t, SYNC_TABLES[t].join(','), filter + scopeFilter(t, chk), t === 'members' && inc ? MEMBER_COLS : '*');
     /* جدول الاشتراكات قد لا يكون أُنشئ بعد: لا يعطّل ذلك بقية المزامنة */
     if (t === 'fees') return p.then(r => { feesOk = true; return r; }, () => { feesOk = false; return []; });
+    if (t === 'news') { if (newsExt === null) probeNews(); return p.then(r => { if (r.length) newsExt = 'prio' in r[0]; return r; }); }
     /* قوائم تحصيل المعلمين: قبل تنفيذ collections.sql لا يوجد الجدول، فتبقى فارغة دون تعطيل المزامنة */
     return t === 'collections' ? p.catch(() => []) : p;
   }));
@@ -312,7 +316,7 @@ async function pull() {
   db.attendance = attendance.map(a => ({ id: a.id, studentId: a.student_id, date: a.date, status: a.status }));
   db.records = records.map(r => ({ id: r.id, studentId: r.student_id, date: r.date, type: r.type, surah: r.surah, from: r.from_ayah, to: r.to_ayah, grade: r.grade || '', note: r.note || '' }));
   /* الإعلانات بترتيب إنشائها (الأقدم أولًا، وتعرضها الواجهة معكوسة فيظهر الأحدث أولًا) */
-  db.news = news.slice().sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))).map(n => ({ id: n.id, text: n.text, audience: n.audience, date: n.date, author: n.author || '', authorId: n.author_id || '' }));
+  db.news = news.slice().sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))).map(n => ({ id: n.id, text: n.text, audience: n.audience, date: n.date, author: n.author || '', authorId: n.author_id || '', prio: n.prio || '', until: n.until || '' }));
   fields.forEach(f => { (db.fields[f.kind] = db.fields[f.kind] || []).push({ key: f.key, label: f.label, type: f.type }); });
   db.collections = rows('collections').map(c => ({ id: c.id, teacherId: c.teacher_id, teacherName: c.teacher_name || '', halaqaId: c.halaqa_id || '', y: c.y, m: c.m, status: c.status, lines: c.lines || [], accNote: c.acc_note || '', sentAt: c.sent_at || '', reviewedBy: c.reviewed_by || '' }));
   if (role === 'admin') {
@@ -547,6 +551,7 @@ window.Cloud = {
   get lastChanged() { return lastChanged; },
   get incremental() { return inc; },
   get feesReady() { return feesOk; },
+  get newsExt() { return newsExt; },
   photoOf: id => photoCache.get(id),
   /* تنزيل صور أعضاء محددين عند الحاجة (40 صورة في الطلب) */
   async loadPhotos(ids) {

@@ -30,10 +30,12 @@
       const T = TABS[r]; if (!T) return;
       if (!saved[r]) saved[r] = T.slice();
       const want = r === role() && on();
-      const base = saved[r].filter(t => !(want && (OLD[r].includes(t[0]) || t[0] === 'students')));
-      T.splice(0, T.length, ...(want ? [['students', 'الطلاب'], ...base] : saved[r]));
+      const base = saved[r].filter(t => !(want && (OLD[r].includes(t[0]) || t[0] === 'students' || t[0] === 'home')));
+      /* «الرئيسية» (home.js) أول القائمة إن وُجدت، ثم «الطلاب» */
+      const home = VIEWS[r]?.home ? [['home', 'الرئيسية']] : [];
+      T.splice(0, T.length, ...(want ? [...home, ['students', 'الطلاب'], ...base] : saved[r]));
     });
-    if (on() && (!ui.tab || OLD[role()].includes(ui.tab))) ui.tab = 'students';
+    if (on() && (!ui.tab || OLD[role()].includes(ui.tab))) ui.tab = TABS[role()][0][0];
   }
   /* يُشغَّل fn وطلاب الحساب وحلقاته وحدها في db (ثم تعود كما كانت) */
   function scoped(fn) {
