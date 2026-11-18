@@ -67,25 +67,37 @@ function storeAuth(j) {
   auth = { ...(auth || {}), access_token: j.access_token, refresh_token: j.refresh_token, expires_at: j.expires_at || Math.floor(Date.now() / 1000) + (j.expires_in || 3600), uid: j.user?.id || auth?.uid, email: j.user?.email || auth?.email };
   LS.set(AKEY, auth);
 }
-async function req(path, { method = 'GET', body, headers = {}, anon = false, retry = true } = {}) {
+async function req(path, { method = 'GET', body, headers = {}, anon = false, retry = true, withCount = false } = {}) {
   const h = { apikey: CFG.key, ...headers };
   if (body !== undefined) h['Content-Type'] = 'application/json';
   if (!anon) { const t = await token(); if (t) h.Authorization = 'Bearer ' + t; }
   const r = await fetch(CFG.url + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
-  if (r.status === 401 && !anon && retry && auth) { await refresh(); return req(path, { method, body, headers, anon, retry: false }); }
+  if (r.status === 401 && !anon && retry && auth) { await refresh(); return req(path, { method, body, headers, anon, retry: false, withCount }); }
   const txt = await r.text();
   let j = null; try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = txt; }
   if (!r.ok) throw new HttpError(r.status, (j && (j.message || j.error_description || j.error || j.msg)) || `HTTP ${r.status}`, j);
+  if (withCount) { const t = +String(r.headers.get('content-range') || '').split('/')[1]; return { j, total: Number.isFinite(t) ? t : null }; }
   return j;
 }
 const rpc = (fn, args = {}, anon = false) => req(`/rest/v1/rpc/${fn}`, { method: 'POST', body: args, anon });
+/* الجداول الكبيرة (مثل الاشتراكات: آلاف الدفعات) تُجلب صفحاتها معًا (4 طلبات في الوقت نفسه) بعد معرفة عددها من الصفحة الأولى،
+   بدل صفحة بعد صفحة: 10 صفحات كانت تستغرق نحو 12 ثانية */
 async function selectAll(table, order = 'id', extra = '', cols = '*') {
-  const out = [];
-  for (let off = 0; ; off += 1000) {
-    const page = await req(`/rest/v1/${table}?select=${cols}&order=${order}&limit=1000&offset=${off}${extra}`);
-    out.push(...(page || []));
-    if (!page || page.length < 1000) break;
+  const q = off => `/rest/v1/${table}?select=${cols}&order=${order}&limit=1000&offset=${off}${extra}`;
+  const first = await req(q(0), { headers: { Prefer: 'count=exact' }, withCount: true });
+  const out = [...(first.j || [])];
+  if (out.length < 1000) return out;
+  let off = 1000;
+  if (first.total > 1000) {
+    const offs = []; for (let o = 1000; o < first.total; o += 1000) offs.push(o);
+    const pages = new Array(offs.length); let i = 0;
+    await Promise.all(Array.from({ length: Math.min(4, offs.length) }, async () => { while (i < offs.length) { const k = i++; pages[k] = (await req(q(offs[k]))) || []; } }));
+    pages.forEach(p => out.push(...p));
+    off = 1000 + offs.length * 1000;
+    if (pages[pages.length - 1].length < 1000) return out;   // اكتمل الجدول
   }
+  /* بلا عدد (أو أُضيفت صفوف أثناء الجلب): ما بقي صفحةً بعد صفحة كما كان */
+  for (; ; off += 1000) { const page = await req(q(off)); out.push(...(page || [])); if (!page || page.length < 1000) break; }
   return out;
 }
 
@@ -122,7 +134,8 @@ async function signOut() {
 const lookup = q => rpc('login_lookup', { q }, true);
 const setMember = m => { if (auth) { if (auth.member?.id !== m?.id) raw = null; auth.member = m; LS.set(AKEY, auth); } };
 /* بدء مزامنة جديدة من الصفر (حساب آخر أو خروج): لا تُخلط بيانات جلستين */
-function resetSync() { raw = null; since = null; lastFull = 0; photoCache.clear(); photoSent.clear(); }
+/* ويُعاد فحص المزامنة بالتغييرات (inc): فشلٌ عابر عند فتح التطبيق (جلسة منتهية مثلًا) لا يبقى جلبًا كاملًا طوال الجلسة التالية */
+function resetSync() { raw = null; since = null; lastFull = 0; inc = null; scoped = false; photoCache.clear(); photoSent.clear(); }
 
 /* ---------------- الوظيفة السحابية لإدارة الحسابات ---------------- */
 async function fn(body) {
@@ -295,8 +308,14 @@ const backMinute = ts => new Date(new Date(ts).getTime() - 60000).toISOString();
 async function pull() {
   const role = auth?.member?.role, tables = tablesFor(role);
   if (inc === null) {
+    /* لا يُحكم بغياب الدالة على الخادم إلا برفض صريح منه؛ انقطاع الاتصال أو انتهاء الجلسة يُعاد فحصه في المزامنة التالية */
+    const gone = e => e instanceof HttpError && e.status >= 400 && e.status < 500 && e.status !== 401;
     try { await rpc('sync_check', { since: new Date().toISOString() }); inc = true; scoped = true; }
-    catch (e) { scoped = false; try { await rpc('sync_now'); inc = true; } catch (e2) { inc = false; } }
+    catch (e) {
+      if (!gone(e)) throw e;
+      scoped = false;
+      try { await rpc('sync_now'); inc = true; } catch (e2) { if (!gone(e2)) throw e2; inc = false; }
+    }
   }
   /* عند فتح التطبيق: تُستعاد آخر مزامنة محفوظة على هذا الجهاز، فيُجلب ما تغيّر منذها فقط بدل كل البيانات */
   if (!raw && inc && scoped) await restoreRaw(role, tables);
