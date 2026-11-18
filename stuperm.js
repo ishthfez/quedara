@@ -271,15 +271,5 @@
   }
   let raf = 0;
   new MutationObserver(() => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; try { apply(); } catch (e) { /* ignore */ } }); }).observe(document.body, { childList: true, subtree: true });
-  /* تبويب «الاشتراكات» في «الطلاب» (للمدير) حُذف: محتواه في الرئيسية وعمود المستحق وملف الطالب والإعدادات */
-  /* يُركَّب بعد DOMContentLoaded: nav.js يعرّف adminViews.students عنده */
-  document.addEventListener('DOMContentLoaded', () => {
-    const baseStu = adminViews.students; if (!baseStu) return;
-    adminViews.students = function () {
-      if (ui.svw === 'fees') ui.svw = 'list';
-      const h = baseStu.apply(this, arguments);
-      return typeof h === 'string' ? h.replace(/<button[^>]*data-svw="fees"[^>]*>[^<]*<\/button>/, '') : h;
-    };
-  });
   window.QLStuPerm = { ITEMS, can: k => { const it = ITEMS.find(i => i[0] === k); return it ? myOn(it) : true; } };
 })();

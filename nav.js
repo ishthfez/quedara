@@ -557,7 +557,7 @@
       ask(`إنشاء حسابات دخول لـ ${list.length} عضو؟ ستظهر كلمات المرور مرة واحدة لتسليمها. (المنقطعون والمتوقفون مستبعدون)`, () => cloudMakeLogins(list));
     };
     /* «الطلاب»: الطلاب · الاشتراكات · تحصيل المعلمين · الحسابات (أزرارها data-svw يعالجها mine.js)، والتصفية تحدد عرض «الطلاب» */
-    const stuFees = adminViews.fees, stuTcol = adminViews.tcollect, stuAtt = adminViews.att;
+    const stuTcol = adminViews.tcollect, stuAtt = adminViews.att;
     const inPl = h => !ui.fp || (!!h && h.placeId === ui.fp);
     /* شريط التصفية نفسه (المكان ← الحلقة) لعرضي الحلقة و«بلا حلقة»، بالأسماء نفسها التي يعالجها cascade.js وapp-actions.js */
     const filters = () => {
@@ -722,10 +722,10 @@
     document.addEventListener('click', e => { if (e.target.closest('main [data-sdel]') && sSel.size && typeof delMembersDialog === 'function') delMembersDialog('students', [...sSel]); });
     adminViews.students = () => {
       /* الحضور يفتح على الحلقة نفسها المختارة في «الطلاب» (ui.hid مشترك بينهما) */
-      const T = [['list', 'الطلاب'], ['att', 'الحضور'], ['fees', 'الاشتراكات'], ['tcollect', 'تحصيل المعلمين']];   // «الحسابات» صارت في «الطلاب» (أدوات الصف) وفي ملف الطالب
+      const T = [['list', 'الطلاب'], ['att', 'الحضور'], ['tcollect', 'تحصيل المعلمين']];   // «الحسابات» صارت في «الطلاب» (أدوات الصف) وفي ملف الطالب، و«الاشتراكات» في الرئيسية وعمود المستحق وملف الطالب والإعدادات
       const cur = T.some(([k]) => k === ui.svw) ? ui.svw : 'list';
       const bar = `<div class="card subnav"><div class="bar" style="margin:0">${T.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-svw="${k}">${l}${k === 'tcollect' && tcollectN() ? ` <span class="count">${tcollectN()}</span>` : ''}</button>`).join('')}</div></div>`;
-      const fn = cur === 'att' ? attWork : cur === 'fees' ? stuFees : cur === 'tcollect' ? stuTcol : listView;
+      const fn = cur === 'att' ? attWork : cur === 'tcollect' ? stuTcol : listView;
       return bar + (fn ? fn() : empty('هذا القسم غير محمّل.'));
     };
     document.addEventListener('click', e => { if (e.target.closest('[data-fhnone]')) { ui.svw = 'list'; ui.fh = '__none'; render(); window.scrollTo(0, 0); } });
@@ -741,6 +741,9 @@
       if (session?.role === 'admin' && ui.tab === 'members' && isStu(ui.msub)) { ui.svw = 'list'; if (ui.msub === 'nohal') ui.fh = '__none'; ui.tab = 'students'; saveTab(); }
       if (ui.svw === 'acc') ui.svw = 'list';   // تبويب «الحسابات» القديم
       /* «الحضور» و«الاشتراكات» و«تحصيل المعلمين» صارت تبويبات في «الطلاب» */
+      /* «الاشتراكات» القديم: بطاقته صارت في الصفحة الرئيسية، وتبويبه في «الطلاب» حُذف */
+      if (session?.role === 'admin' && ui.tab === 'fees') { ui.tab = 'dash'; saveTab(); }
+      if (ui.svw === 'fees') ui.svw = 'list';
       if (session?.role === 'admin' && STU_TABS.includes(ui.tab)) { ui.svw = ui.tab; ui.tab = 'students'; saveTab(); }
       /* قسم صار تبويبًا: يُفتح القسم الجامع على هذا التبويب (قبل فحص صفحة البداية، وإلا أعاده إليها) */
       if (session?.role === 'admin' && OWNER[ui.tab] && OWNER[ui.tab] !== ui.tab) { sub[OWNER[ui.tab]] = ui.tab; saveSub(); ui.tab = OWNER[ui.tab]; saveTab(); }
