@@ -98,7 +98,7 @@
     db.halaqat.filter(match).forEach(h => { const k = h.supervisorId && byId(db.supervisors, h.supervisorId) ? h.supervisorId : ''; if (!g.has(k)) g.set(k, []); g.get(k).push(h); });
     const keys = [...g.keys()].sort((a, b) => (a === '') - (b === '') || g.get(b).length - g.get(a).length);
     return keys.map(k => { const l = g.get(k), sup = byId(db.supervisors, k);
-      return `<div class="card plcard"><div class="bar" style="margin:0 0 .6rem"><div class="grow"><b>${esc(sup ? sup.name : 'بلا مشرف')}</b>${sup && sup.info?.scope === 'all' ? ' <span class="tag tag-ok">مشرف عام</span>' : ''}${!sup ? ' <span class="tag tag-no">عيّن لها مشرفًا</span>' : ''}
+      return `<div class="card plcard"><div class="bar" style="margin:0 0 .6rem"><div class="grow"><b>${esc(sup ? sup.name : 'بلا مشرف')}</b>${sup && sup.info?.scope === 'all' ? ' <span class="tag tag-ok">مدير عام</span>' : ''}${!sup ? ' <span class="tag tag-no">عيّن لها مشرفًا</span>' : ''}
         <div class="muted" style="font-size:.85rem">${l.length} حلقة · ${new Set(l.map(h => h.placeId)).size} مكان · ${l.reduce((a, h) => a + stuN(h), 0)} طالب</div></div></div>
         ${table(l, [C.name, C.place, C.time, C.n])}</div>`; }).join('') || `<div class="card">${empty('لا توجد حلقات تطابق البحث.')}</div>`;
   }
