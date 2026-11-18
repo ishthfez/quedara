@@ -60,6 +60,7 @@
 | `mine.js` | «طلابي» و«الحضور» للمعلم والمشرف والمدير، وإشعار الطلاب، ونقل الطالب |
 | `importx.js` · `feesimport.js` | استيراد الطلاب بمعرف الحلقة وحالتهم · استيراد دفعات الاشتراكات |
 | `actas.js` | «العمل بصفة…»: المدير يعمل كأنه محاسب أو معلم أو غيرهما، وكل ما يسجّله باسمه |
+| `delreq.js` | الحذف بموافقة المدير: طلب المحاسب بسبب، وبطاقة الطلبات في رئيسية المدير |
 
 ## إعداد الخادم (Supabase)
 
@@ -68,7 +69,7 @@
 1. `schema.sql` ثم `admin_bootstrap.sql` (أول حساب مدير)
 2. `sync_incremental.sql` ← `sync_scope.sql`
 3. `fees.sql` ← `fees_private.sql` ← `perms.sql` ← `accountant.sql` ← `student_edit.sql` ← `collections.sql` ← `notes.sql`
-4. `roles.sql` (الإداري والمدير العام) ← `notify.sql` (تأكيد الدفع والتذكير بالسداد للطلاب) ← `fees_systems.sql` (نظاما الحضور ومبالغ الأماكن والسنوات) ← `actas.sql` (العمل بصفة فئة أخرى) ← `place_halaqat.sql` (نطاق الإداري بحلقات بعينها داخل المكان) ← `transfers.sql` (نقل الطالب بموافقة المشرف) ← `cnotices.sql` (كشوف التحصيل) ← `absence_proof.sql` (إثبات غياب المعلمين ورصيد الإجازات) ← `leave_adj.sql` (تعديلات رصيد الإجازات للمشرف) ← `activity.sql` (سجل الأنشطة) ← `fee_periods.sql` (تغيير مبلغ الاشتراك ابتداءً من شهر) ← `news_ext.sql` (أهمية الإعلان ومدته) ← `halaqat_perm.sql` (الأماكن والحلقات للمحاسب بصلاحية) ← `gmanager.sql` (إعلانات «المديرون العامون»)
+4. `roles.sql` (الإداري والمدير العام) ← `notify.sql` (تأكيد الدفع والتذكير بالسداد للطلاب) ← `fees_systems.sql` (نظاما الحضور ومبالغ الأماكن والسنوات) ← `actas.sql` (العمل بصفة فئة أخرى) ← `place_halaqat.sql` (نطاق الإداري بحلقات بعينها داخل المكان) ← `transfers.sql` (نقل الطالب بموافقة المشرف) ← `cnotices.sql` (كشوف التحصيل) ← `absence_proof.sql` (إثبات غياب المعلمين ورصيد الإجازات) ← `leave_adj.sql` (تعديلات رصيد الإجازات للمشرف) ← `activity.sql` (سجل الأنشطة) ← `fee_periods.sql` (تغيير مبلغ الاشتراك ابتداءً من شهر) ← `news_ext.sql` (أهمية الإعلان ومدته) ← `halaqat_perm.sql` (الأماكن والحلقات للمحاسب بصلاحية) ← `gmanager.sql` (إعلانات «المديرون العامون») ← `del_requests.sql` (حذف المحاسب بموافقة المدير)
 5. `backup.sql` ثم `select public.backup_new_token();` ← `backup_status.sql` ← `restore.sql`
 
 ودالة الخادم `supabase/functions/admin-users` (إنشاء حسابات الدخول) تُنشر من لوحة Supabase.
