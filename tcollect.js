@@ -5,6 +5,8 @@
    ما يُحصَّل يدخل «الإخطار الحالي» (مسودة على الخادم)، ثم «مراجعة وإرسال» يعرض الأسماء والمبالغ والإجمالي ويرسله للمحاسب.
    الزر أخضر إن كان للطالب تحصيل عن الشهر الحالي (في الإخطار أو عند المحاسب أو مؤكَّد، أو دفعة مسجّلة)، وعادي إن كان لشهر سابق.
    ما أعاده المحاسب يعود إلى الإخطار الحالي بالأحمر وملاحظته، فيُصحَّح ويُرسل من جديد.
+   الضغط مرة أخرى على «تحصيل الاشتراك» لطالب في الإخطار الحالي يسأل (نافذة تأكيد) ثم يلغي تحصيله منه؛
+   وما أُرسل للمحاسب أو حصّله لا يُلغى من هنا (الزر عندئذ يفتح التحصيل لشهر آخر).
    - الخادم: supabase/cnotices.sql (cn_add / cn_remove / cn_send / cn_list). بلا خادم (نسخة العرض): القاعدة نفسها على الجهاز في db.cnotices.
    - المحاسب والمدير: زر «تحصيل المعلمين» في صف الأدوات نفسه، وعليه عدد الإخطارات المنتظرة. يفتح نافذة بتبويبين:
      «الإخطارات»: كل إخطار رسالة (الجامع وتاريخه، ثم الأسماء والشهر والمبلغ والإجمالي)، وأمام كل اسم «تم التحصيل» فيصير أخضر باهتًا ✓
@@ -201,6 +203,35 @@
     };
   }
 
+  /* ===== إلغاء تحصيل طالب من الإخطار الحالي (لم يصل المحاسب بعد) =====
+     نافذة تأكيد صغيرة فوق نافذة التحصيل (لا .overlay: تلك تصير صفحة كاملة على الهاتف في pages.js) */
+  const cssC = document.createElement('style');
+  cssC.textContent = `.qinner{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(10,18,35,.45)}
+    .qinner .qinbox{width:100%;max-width:24rem;background:var(--card,#fff);border-radius:16px;padding:1.1rem 1.1rem .9rem;box-shadow:0 14px 44px rgba(10,18,35,.3)}
+    .qinner h3{margin:0 0 .5rem;font-size:1.05rem}.qinner p{margin:.2rem 0 .5rem;line-height:1.7}
+    .qinner .row{display:flex;gap:.5rem;justify-content:flex-start;margin-top:.8rem}
+    @media print{.qinner{display:none!important}}`;
+  document.head.appendChild(cssC);
+  function cancelDialog(s, ls) {
+    const p = document.createElement('div'); p.className = 'qinner'; p.setAttribute('role', 'dialog'); p.setAttribute('aria-modal', 'true');
+    const tot = ls.reduce((a, l) => a + l.amount, 0);
+    p.innerHTML = `<div class="qinbox"><h3>إلغاء تحصيل «${esc(s.name)}»؟</h3>
+      <p>${ls.length > 1 ? 'سيُحذف من الإخطار الحالي:' : 'سيُحذف من الإخطار الحالي'} ${ls.map(l => `<b>${money(l.amount)} جنيه</b> عن ${MONTHS[l.m - 1]} ${l.y}`).join('، و')}${ls.length > 1 ? ` (${money(tot)} جنيه)` : ''}.</p>
+      <p class="muted" style="font-size:.85rem">لم يُرسل للمحاسب بعد، فلا يُسجَّل له شيء.</p>
+      <div class="row"><button type="button" class="btn danger" data-colcancel>إلغاء التحصيل</button><button type="button" class="btn" data-close>رجوع</button></div></div>`;
+    document.body.appendChild(p);
+    const close = () => { p.remove(); document.removeEventListener('keydown', esc1, true); };
+    const esc1 = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', esc1, true);
+    p.addEventListener('click', e => { if (e.target === p || e.target.closest('[data-close]')) close(); });
+    p.querySelector('[data-close]').focus({ preventScroll: true });
+    p.querySelector('[data-colcancel]').onclick = async e => {
+      e.target.disabled = true;
+      try { for (const l of ls) await api.remove(l.id); close(); toast(`أُلغي تحصيل «${s.name}» من الإخطار`); await reload(); }
+      catch (err) { e.target.disabled = false; toast(errMsg(err)); }
+    };
+  }
+
   /* ===== مراجعة الإخطار ثم إرساله ===== */
   function reviewDialog() {
     const d = draft(); if (!d || !d.lines.length) return;
@@ -242,7 +273,7 @@
   });
   document.addEventListener('click', e => {
     if (e.target.closest('[data-colopen]')) { openWin(); return; }
-    const b = e.target.closest('[data-colpay]'); if (b) { const s = byId(db.students, b.dataset.colpay); if (s) payDialog(s); return; }
+    const b = e.target.closest('[data-colpay]'); if (b) { const s = byId(db.students, b.dataset.colpay); if (s) { const ls = (draft()?.lines || []).filter(l => l.studentId === s.id); ls.length ? cancelDialog(s, ls) : payDialog(s); } return; }
     if (e.target.closest('[data-colrev]') && !e.target.closest('[data-colrev]').disabled) reviewDialog();
   });
 
