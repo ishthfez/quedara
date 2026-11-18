@@ -133,7 +133,7 @@
     .pladd .pltmenu,.plmore .pltmenu{inset-inline-start:auto;inset-inline-end:0}.pladd>summary::after,.plmore>summary::after{content:''}
     .plmore>summary{min-width:2.4rem;font-weight:700;letter-spacing:.1em}.plmore .pltmenu .tag{margin-inline-start:.3rem}
     .placts{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.5rem 0 .4rem}
-    .plcard .tblprint.qtb{margin:.5rem 0 .4rem}.plcard .tbl:not(#qz0),.plcard .tbl:not(#qz0) > table{width:100%!important}
+    .plcard .tblprint.qtb{margin:.5rem 0 .4rem}.plcard .tbl:not(#qz0),.plcard .tbl:not(#qz0) > table{width:100%!important}.plcard .tbl:not(#qz0) td:not(:last-child){white-space:normal}
     .plhdr{padding-block:.8rem}.plrow{display:flex;align-items:center;gap:.5rem .6rem;flex-wrap:wrap}.plrow + .plrow{margin-top:.6rem}
     .plsum{flex:1 1 auto;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .9rem}
     .plneed{display:inline-flex;flex-wrap:wrap;align-items:center;gap:.35rem;font-size:.9rem}
