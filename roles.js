@@ -1,7 +1,7 @@
 'use strict';
 /* ============ أنواع الحسابات المعتمدة ============
    - لا توجد «مسميات أخرى»: كل موظف في المرتبات يُصنَّف بنوع حساب معتمد:
-     معلم، مشرف (ومنه «المشرف العام» الذي يرى كل الحلقات)، محاسب، إداري (في مكان)، مدير.
+     مدير عام (يرى كل الحلقات، وهو على الخادم مشرف نطاقه «الكل»)، مشرف، معلم، محاسب، إداري (في مكان)، مدير.
    - الإداري (placeadmin): يطّلع على حلقات أماكنه وطلابها، ويجمع اشتراكاتهم ويرسلها للمحاسب (تبويب «التحصيل»).
    - النطاق يحدده المدير من «الأعضاء» بزر «النطاق»، ويُحفظ في info للعضو: scope = 'all' للمشرف العام، و places للإداري.
    - يحتاج على الخادم: supabase/roles.sql.
@@ -97,12 +97,15 @@
   const KINDS = [['teachers', 'المعلمون'], ['students', 'الطلاب'], ['supervisors', 'المشرفون'], ['accountants', 'المحاسبون'], ['placeadmins', 'الإداريون'], ['admins', 'المديرون']];
   const STAFF_KINDS = [['admins', 'مدير'], ['supervisors', 'مشرف'], ['teachers', 'معلم'], ['accountants', 'محاسب'], ['placeadmins', 'إداري']];
   const empOfMember = id => { const c = clsRead(); const eid = Object.keys(c).find(k => c[k]?.memberId === id); return eid ? payEmps().find(e => e.id === eid) : null; };
-  const typeOf = (k, l, m) => k === 'supervisors' && isGenSup(m) ? 'مشرف عام' : l;
+  const typeOf = (k, l, m) => k === 'supervisors' && isGenSup(m) ? 'مدير عام' : l;
+  /* «مدير عام»: فئة مستقلة أعلى من المشرفين (على الخادم: مشرف نطاقه «الكل»، فصلاحياته صلاحيات المشرف العام نفسها) */
+  const gms = () => (db.supervisors || []).filter(isGenSup);
+  const sups = () => (db.supervisors || []).filter(m => !isGenSup(m));
   const placeTxt = (k, m, emp) => k === 'placeadmins' ? (placeScopeTxt(m) || 'بلا مكان') : (emp?.place || '—');
   function staffList() {
     const out = [];
     /* حساب المدير حساب إداري للنظام وليس موظفًا: لا يظهر إلا إن رُبط بموظف في المرتبات (ويبقى في «المديرون») */
-    STAFF_KINDS.forEach(([k, l], gi) => (db[k] || []).forEach(m => { const emp = empOfMember(m.id); if (k !== 'admins' || emp) out.push({ m, k, gi, type: typeOf(k, l, m), emp }); }));
+    STAFF_KINDS.forEach(([k, l], gi) => (db[k] || []).forEach(m => { const emp = empOfMember(m.id); if (k !== 'admins' || emp) out.push({ m, k, gi: k === 'supervisors' && isGenSup(m) ? gi - 0.5 : gi, type: typeOf(k, l, m), emp }); }));
     return out.sort((a, b) => a.gi - b.gi || String(a.type).localeCompare(String(b.type), 'ar') || a.m.name.localeCompare(b.m.name, 'ar'));
   }
   function picker(cur) {
@@ -121,18 +124,21 @@
       return `<tr><td>${i + 1}</td><td>${esc(x.m.name)}${st ? ' <span class="tag tag-no">متوقف</span>' : ''}</td><td>${esc(x.type)}</td><td>${esc(x.emp?.role || '—')}</td><td>${esc(placeTxt(x.k, x.m, x.emp))}</td><td>${acc(x)}</td>
         <td>${x.k === 'supervisors' || x.k === 'placeadmins' ? `<button type="button" class="btn sm" data-act="memScope" data-id="${esc(x.m.id)}" data-k="${x.k}">النطاق</button>` : ''}<button type="button" class="btn sm" data-act="editName" data-id="${esc(x.m.id)}" data-k="${x.k}">الاسم</button></td></tr>`; }).join('');
     const cnt = k => list.filter(x => x.k === k).length;
-    return `<div class="note">كل العاملين عدا الطلاب${cnt('admins') ? `: ${cnt('admins')} مدير،` : ':'} ${cnt('supervisors')} مشرف، ${cnt('teachers')} معلم، ${cnt('accountants')} محاسب، ${cnt('placeadmins')} إداري. للإضافة والحذف والإجراءات الجماعية اختر الفئة من القائمة. حساب المدير (حساب النظام) في «المديرون».</div>
+    const gmN = list.filter(x => x.k === 'supervisors' && isGenSup(x.m)).length;
+    return `<div class="note">كل العاملين عدا الطلاب${cnt('admins') ? `: ${cnt('admins')} مدير،` : ':'} ${gmN ? `${gmN} مدير عام، ` : ''}${cnt('supervisors') - gmN} مشرف، ${cnt('teachers')} معلم، ${cnt('accountants')} محاسب، ${cnt('placeadmins')} إداري. للإضافة والحذف والإجراءات الجماعية اختر الفئة من القائمة. حساب المدير (حساب النظام) في «المديرون».</div>
       ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الاسم</th><th>الصفة</th><th>الوظيفة في المرتبات</th><th>المكان</th><th>الحساب</th><th></th></tr>${rows}</table></div>` : empty('لا يوجد موظفون بعد.')}`;
   }
-  function withScope(h, kind) {
+  function withScope(h, kind0) {
+    const kind = kind0 === 'gmanagers' ? 'supervisors' : kind0;
     if (kind !== 'supervisors' && kind !== 'placeadmins') return h;
     (db[kind] || []).forEach(m => {
-      const tag = kind === 'supervisors' ? (isGenSup(m) ? ' <span class="tag tag-ok">مشرف عام</span>' : '') : ` <span class="tag ${placesOf(m).length ? '' : 'tag-no'}">${esc(placeTxt(kind, m))}</span>`;
+      const tag = kind === 'supervisors' ? '' : ` <span class="tag ${placesOf(m).length ? '' : 'tag-no'}">${esc(placeTxt(kind, m))}</span>`;
       if (tag) h = h.replace(new RegExp(`(data-sel="${m.id}"[\\s\\S]*?<td>\\d+</td><td>[\\s\\S]*?)(</td>)`), (x, p1, p2) => p1 + tag + p2);
       const nb = `<button class="btn sm" data-act="editName" data-id="${m.id}" data-k="${kind}">`;
       h = h.split(nb).join(`<button class="btn sm" data-act="memScope" data-id="${m.id}" data-k="${kind}">النطاق</button>` + nb);
     });
-    const tip = kind === 'supervisors' ? 'حدّد حلقات كل مشرف من «الأماكن والحلقات» ← تعديل ← المشرف، أو اجعله «مشرفًا عامًا» يرى كل الحلقات من زر «النطاق».' : 'حدّد مكان كل إداري من زر «النطاق» (وحلقات بعينها فيه إن شئت): يطّلع على حلقاته وطلابها، ويجمع اشتراكاتهم ويرسلها للمحاسب.';
+    const tip = kind0 === 'gmanagers' ? 'المدير العام يرى كل الحلقات والأماكن ويعمل فيها كما يعمل المشرف في حلقاته (الحضور والتسميع وغياب المعلمين). لإرجاعه مشرفًا عاديًا: زر «النطاق».'
+      : kind === 'supervisors' ? 'حدّد حلقات كل مشرف من «الأماكن والحلقات» ← تعديل ← المشرف، أو اجعله «مديرًا عامًا» يرى كل الحلقات من زر «النطاق».' : 'حدّد مكان كل إداري من زر «النطاق» (وحلقات بعينها فيه إن شئت): يطّلع على حلقاته وطلابها، ويجمع اشتراكاتهم ويرسلها للمحاسب.';
     return h.replace('<div class="note">', `<div class="note">${tip} `);
   }
   const SEL = /<select class="msubsel"[\s\S]*?<\/select>/;
@@ -151,6 +157,12 @@
       db.accountants = db.placeadmins; ui.msub = 'accountants';
       try { h = baseMembers(); } finally { db.accountants = acc; ui.msub = 'placeadmins'; }
       h = h.split('data-k="accountants"').join('data-k="placeadmins"').split('>+ محاسب<').join('>+ إداري<');
+    } else if (cur === 'gmanagers' || cur === 'supervisors') {
+      /* «المديرون العامون» و«المشرفون» قائمتان منفصلتان من قالب قائمة المشرفين نفسه */
+      const all = db.supervisors;
+      db.supervisors = cur === 'gmanagers' ? gms() : sups(); ui.msub = 'supervisors';
+      try { h = baseMembers(); } finally { db.supervisors = all; ui.msub = cur; }
+      if (cur === 'gmanagers') h = h.split('data-act="addMember" data-k="supervisors">+ مشرف<').join('data-act="addGM">+ مدير عام<');
     } else if (cur === 'students') {
       /* سرعة: قالب القائمة يقارن اسم كل طالب بكل الحسابات (1,680 × 1,750 مقارنة) فيتجمد الهاتف؛
          تُقارن أسماء الطلاب بحسابات العاملين فقط (الطلاب المكررون لهم «مكرر للمراجعة» و«الأسماء المتشابهة») */
@@ -168,6 +180,10 @@
     if (!/value="placeadmins"/.test(s)) s = s.replace(/<option value="admins"/, `<option value="placeadmins">الإداريون (${n('placeadmins')})</option><option value="admins"`);
     else s = s.replace(/(<option value="placeadmins"[^>]*>الإداريون \()\d+/, (x, a) => a + n('placeadmins'));
     if (ui.msub === 'placeadmins') s = s.replace(/ selected(?=[ >])/g, '').replace('<option value="placeadmins"', '<option value="placeadmins" selected');
+    /* «المديرون العامون» قبل «المشرفون»، وعدد المشرفين بدونهم */
+    s = s.replace(/(<option value="supervisors"[^>]*>المشرفون \()\d+/, (x, a) => a + sups().length);
+    if (!/value="gmanagers"/.test(s)) s = s.replace(/<option value="supervisors"/, `<option value="gmanagers">المديرون العامون (${gms().length})</option><option value="supervisors"`);
+    if (ui.msub === 'gmanagers') s = s.replace(/ selected(?=[ >])/g, '').replace('<option value="gmanagers"', '<option value="gmanagers" selected');
     return s;
   }
 
@@ -206,9 +222,9 @@
       const opts = () => `<option value="">— اختر التصنيف —</option>${Object.entries(CLS_ROLES).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}`;
       const sug = un.map(e => [e, clsSuggest(e)]);
       const auto = sug.filter(([e, s]) => s && s.kind !== 'admin' && e.status !== 'متوقف').length;
-      const rows = sug.map(([e, s], i) => `<tr><td>${i + 1}</td><td>${esc(e.name)}${e.status === 'متوقف' ? ' <span class="tag">متوقف</span>' : ''}</td><td>${esc(e.role || '—')}</td><td class="muted" style="font-size:.85rem">${s ? (s.existing ? `يوجد ${CLS_ROLES[s.kind]} بنفس الاسم` : `المقترح: ${esc(CLS_ROLES[s.kind])}${s.kind === 'supervisor' && /عام/.test(e.role || '') ? ' عام' : ''}`) : ''}</td><td><select class="mini" data-cls="${esc(e.id)}" aria-label="تصنيف ${esc(e.name)}">${opts()}</select></td></tr>`).join('');
+      const rows = sug.map(([e, s], i) => `<tr><td>${i + 1}</td><td>${esc(e.name)}${e.status === 'متوقف' ? ' <span class="tag">متوقف</span>' : ''}</td><td>${esc(e.role || '—')}</td><td class="muted" style="font-size:.85rem">${s ? (s.existing ? `يوجد ${CLS_ROLES[s.kind]} بنفس الاسم` : `المقترح: ${s.kind === 'supervisor' && /عام/.test(e.role || '') ? 'مدير عام' : esc(CLS_ROLES[s.kind])}`) : ''}</td><td><select class="mini" data-cls="${esc(e.id)}" aria-label="تصنيف ${esc(e.name)}">${opts()}</select></td></tr>`).join('');
       return `<div class="card">${bar}
-        <div class="note">موظفو المرتبات يظهرون هنا تلقائيًا. اختر نوع حساب كل واحد: <b>معلم</b> أو <b>مشرف</b> أو <b>محاسب</b> أو <b>إداري</b> (في مكان) فيُنشأ له عضو بهذا النوع (أو يُربط بالموجود بنفس الاسم)، و<b>مدير</b> يأخذ صلاحيات كاملة. الوظيفة في المرتبات «مشرف عام» تجعله مشرفًا عامًا يرى كل الحلقات.</div>
+        <div class="note">موظفو المرتبات يظهرون هنا تلقائيًا. اختر نوع حساب كل واحد: <b>معلم</b> أو <b>مشرف</b> أو <b>محاسب</b> أو <b>إداري</b> (في مكان) فيُنشأ له عضو بهذا النوع (أو يُربط بالموجود بنفس الاسم)، و<b>مدير</b> يأخذ صلاحيات كاملة. الوظيفة في المرتبات «مشرف عام» أو «مدير عام» تجعله مديرًا عامًا يرى كل الحلقات.</div>
         ${un.length ? `<div class="bar"><span class="grow muted">${un.length} موظف بلا تصنيف</span><button class="btn" data-act="dupOpen">الأسماء المتشابهة</button>${auto ? `<button class="btn primary" data-act="clsAuto">تصنيف تلقائي حسب الوظيفة (${auto})</button>` : ''}</div>
         <div class="tbl"><table><tr><th>#</th><th>الاسم</th><th>الوظيفة في المرتبات</th><th></th><th>التصنيف</th></tr>${rows}</table></div>` : empty('كل موظفي المرتبات مصنّفون ✓')}</div>`;
     };
@@ -245,11 +261,11 @@
     function scopeDialog(k, m) {
       if (!m) return;
       if (k === 'supervisors') {
-        openForm('نطاق المشرف «' + m.name + '»', [{ name: 'scope', label: 'يرى', type: 'select', value: isGenSup(m) ? 'all' : '', options: [{ v: '', l: 'الحلقات المسندة إليه فقط' }, { v: 'all', l: 'كل الحلقات والأماكن (مشرف عام)' }] },
+        openForm('نطاق «' + m.name + '»', [{ name: 'scope', label: 'الفئة', type: 'select', value: isGenSup(m) ? 'all' : '', options: [{ v: '', l: 'مشرف: الحلقات المسندة إليه فقط' }, { v: 'all', l: 'مدير عام: كل الحلقات والأماكن' }] },
           { type: 'note', label: 'الحلقات المسندة تُحدَّد من «الأماكن والحلقات» ← تعديل ← المشرف.' }], v => {
           const info = { ...(m.info || {}) };
           if (v.scope === 'all') info.scope = 'all'; else delete info.scope;
-          m.info = info; toast(v.scope === 'all' ? `«${m.name}» مشرف عام` : `«${m.name}»: الحلقات المسندة فقط`);
+          m.info = info; toast(v.scope === 'all' ? `«${m.name}» مدير عام` : `«${m.name}» مشرف: الحلقات المسندة فقط`);
         });
         return;
       }
@@ -297,6 +313,27 @@
     }
 
     A.memScope = d => scopeDialog(d.k, byId(db[d.k] || [], d.id));
+    /* إضافة مدير عام: حساب مشرف نطاقه «الكل» */
+    A.addGM = () => openForm('إضافة مدير عام', [{ name: 'name', label: 'الاسم', required: true }, { type: 'note', label: 'ستُنشأ كلمة المرور تلقائيًا. يرى كل الحلقات والأماكن.' }], v => {
+      const name = v.name.trim(), id = uid(), pin = genPassK('supervisors');
+      if (db.supervisors.some(m => norm(m.name) === norm(name))) return 'يوجد مشرف أو مدير عام بالاسم نفسه';
+      db.supervisors.push({ id, name, phone: '', pin, info: { scope: 'all' } });
+      ui.shown[id] = true;
+      if (CLOUD) setTimeout(() => cloudMakeLogins([byId(db.supervisors, id)].filter(Boolean)), 0);
+      else toast('تم إنشاء الحساب — كلمة المرور: ' + pin);
+    });
+    /* اسم الفئة تحت اسم المستخدم في القائمة الجانبية: «مدير عام» لا «مشرف» */
+    const baseRender = render;
+    render = function () {
+      const r = baseRender.apply(this, arguments);
+      try {
+        if (session?.role === 'supervisor' && isGenSup(me())) {
+          const sm = document.querySelector('.side .brand small');
+          if (sm && sm.textContent.startsWith(ROLE_L.supervisor + ':')) sm.textContent = 'مدير عام' + sm.textContent.slice(ROLE_L.supervisor.length);
+        }
+      } catch (e) { /* ignore */ }
+      return r;
+    };
     /* جمهور الإعلانات: يضاف «الإداريون» */
     A.addNews = () => openForm('إعلان جديد', [{ name: 'text', label: 'النص', type: 'textarea' }, { name: 'audience', label: 'الجمهور', type: 'select', options: [{ v: 'all', l: 'الجميع' }, { v: 'teacher', l: 'المعلمون' }, { v: 'supervisor', l: 'المشرفون' }, { v: 'placeadmin', l: 'الإداريون' }, { v: 'student', l: 'الطلاب' }] }],
       v => { if (!v.text.trim()) return 'اكتب نص الإعلان'; db.news.push({ id: uid(), text: v.text.trim(), audience: v.audience, date: today() }); });
