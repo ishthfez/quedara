@@ -61,6 +61,8 @@
   /* نافذة الإشعار (noteDialog في mine.js): لطالب واحد «رسالة للطالب/ الاسم»، وخانة النص «النص» */
   function msgWords(m) {
     const h = m.querySelector('h2');
+    /* نوافذ الرسالة والإشعار والتذكير تُرسل لا تحفظ: زرها «إرسال» */
+    if (/^\s*(إشعار:|إشعار لطلاب|رسالة للطالب|تذكير بسداد الاشتراك|تذكير بالاشتراك)/.test(h?.textContent || '')) { const sv = m.querySelector('[data-save]'); if (sv && sv.textContent !== 'إرسال') sv.textContent = 'إرسال'; }
     const one = h && /^\s*إشعار:\s*/.test(h.textContent);
     if (one) h.textContent = 'رسالة للطالب/ ' + h.textContent.replace(/^\s*إشعار:\s*/, '');
     if (!one && !/^\s*(رسالة للطالب|إشعار لطلاب)/.test(h?.textContent || '')) return;
