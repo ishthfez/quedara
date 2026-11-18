@@ -3,14 +3,16 @@
    - منتظم/منقطع (data-stat): يُنفَّذ فورًا بلا سؤال، وتظهر أسفل الشاشة رسالة فيها «تراجع» لبضع ثوانٍ.
    - نقل الطالب: نافذة النقل باقية (لاختيار المكان والحلقة)، وبعد النقل رسالة فيها «تراجع» تعيده إلى حلقته السابقة.
    التراجع يعيد ما تغيّر وحده (الحالة وتاريخها، أو الحلقة) ثم يحفظ ويرسم. الحذف وما لا يُعكس يبقى بنافذة التأكيد.
-   يعمل في مرحلة الالتقاط، فيسبق معالج التأكيد القديم (toggleStatus في accountant.js) أيًّا كان ترتيب التحميل. */
+   يعمل في مرحلة الالتقاط، فيسبق معالج التأكيد القديم (toggleStatus في accountant.js) أيًّا كان ترتيب التحميل.
+   الشريط بعرض نصه في وسط أسفل الشاشة، وعلى الهاتف بعرض الشاشة (كان left:50% يحصر عرضه في نصف الشاشة فينكسر نصه أسطرًا). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./undo.js')) VFILES.push('./undo.js'); } catch (e) { /* ignore */ } });
   const css = document.createElement('style');
-  css.textContent = `.qundo{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);z-index:75;display:flex;align-items:center;gap:.8rem;max-width:min(92vw,34rem);padding:.5rem 1.1rem .5rem .5rem;border-radius:99px;background:var(--navy-d,#0d1d36);color:var(--on-navy,#fff);box-shadow:0 8px 24px rgba(10,18,35,.3);font-weight:700}
+  css.textContent = `.qundo{position:fixed;bottom:max(1rem,env(safe-area-inset-bottom));left:0;right:0;margin-inline:auto;width:max-content;z-index:75;display:flex;align-items:center;gap:.8rem;max-width:min(calc(100vw - 1.5rem),34rem);box-sizing:border-box;padding:.5rem 1.1rem .5rem .5rem;border-radius:99px;background:var(--navy-d,#0d1d36);color:var(--on-navy,#fff);box-shadow:0 8px 24px rgba(10,18,35,.3);font-weight:700}
     .qundo span{flex:1 1 auto;min-width:0}
     .qundo button{flex:none;border:0;border-radius:99px;padding:.35rem .95rem;background:var(--gold,#b08a3e);color:#fff;font:inherit;font-weight:700;cursor:pointer}
     .qundo button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+    @media (max-width:600px){.qundo{width:auto;left:.75rem;right:.75rem;max-width:none;border-radius:14px;padding:.55rem .6rem .55rem 1rem;font-size:.95rem;line-height:1.5}}
     @media print{.qundo{display:none!important}}`;
   document.head.appendChild(css);
 
