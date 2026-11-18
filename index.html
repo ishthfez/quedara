@@ -26,7 +26,9 @@
     /* شريط التحميل بـ transform لا بالعرض: يُرسم خارج الخيط الرئيسي فيبقى سلسًا أثناء تحميل التطبيق */
     .gbar i{width:100%!important;transform:scaleX(0);transform-origin:right;will-change:transform;animation-name:qfill!important}
     @keyframes qfill{to{transform:scaleX(1)}}
+    html.qdark,html.qdark body,html.qdark #splash{background:#0e141d}
   </style>
+  <script>try { if (localStorage.getItem('qdark') === '1') document.documentElement.classList.add('qdark'); } catch (e) { /* ignore */ }</script>
 </head>
 <body>
   <div id="splash"><img src="logo.png" alt="إدارة الحلقات القرآنية"><div class="gbar"><i></i></div></div>
@@ -117,6 +119,7 @@
   <script src="activity.js"></script>
   <script src="home.js"></script>
   <script src="delreq.js"></script>
+  <script src="darkmode.js"></script>
   <script>
     setTimeout(() => { const s = document.getElementById('splash'); if (s) { s.classList.add('hide'); setTimeout(() => s.remove(), 650); } }, 1100);
   </script>
