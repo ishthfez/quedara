@@ -1,11 +1,15 @@
 'use strict';
 /* ============ الوضع الداكن ============
-   خيار لكل مستخدم على جهازه (زر في أسفل القائمة الجانبية)، ويُحفظ في المتصفح (qdark).
+   يتبع إعداد الجهاز تلقائيًا، ولكل مستخدم أن يغيّره على جهازه (زر في أسفل القائمة الجانبية)، ويُحفظ اختياره في المتصفح (qdark).
    يبقى اللون الأساسي ولون التمييز من «المظهر» كما اختارهما المدير، وتُستبدل الألوان المحايدة
    (الخلفية والكروت والنص والإطارات) بدرجات داكنة. الطباعة تبقى فاتحة دائمًا. */
 (() => {
+  /* يتبع إعداد الجهاز (فاتح/داكن) ما لم يختر المستخدم بنفسه من الزر؛ واختيار ما يطابق الجهاز يعيده إلى المتابعة التلقائية */
   const KEY = 'qdark';
-  const isDark = () => { try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; } };
+  const MQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  const sysDark = () => !!MQ?.matches;
+  const stored = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
+  const isDark = () => { const v = stored(); return v === '1' ? true : v === '0' ? false : sysDark(); };
   const root = document.documentElement;
   /* متغيرات لا يضعها applyTheme: تُزال عند العودة للفاتح */
   const EXTRA = ['card', 'glass', 'glass-strong', 'glass-line', 'glass-shadow', 'grid', 'qnt'];
@@ -116,10 +120,13 @@
     return `<button type="button" class="btn" data-qdark title="${t}" aria-label="${t}" aria-pressed="${d}">${d ? ICON_SUN : ICON_MOON}<span class="lbl">${d ? 'فاتح' : 'داكن'}</span></button>`; };
 
   const set = on => {
-    try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) { /* ignore */ }
+    try { if (on === sysDark()) localStorage.removeItem(KEY); else localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) { /* ignore */ }
     root.classList.toggle('qdark', on);
     applyTheme(); render();
   };
+  /* تغيّر وضع الجهاز (مثلًا تلقائيًا ليلًا): يُتبع إن لم يختر المستخدم بنفسه */
+  const onSys = () => { if (stored() !== null) return; root.classList.toggle('qdark', isDark()); applyTheme(); if (typeof session !== 'undefined' && session) render(); };
+  try { MQ?.addEventListener ? MQ.addEventListener('change', onSys) : MQ?.addListener?.(onSys); } catch (e) { /* ignore */ }
 
   const baseRender = render;
   render = function () {
