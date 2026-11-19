@@ -131,7 +131,9 @@
       /* بصمة الجدول: تتغير متى أُضيف صف أو زر (بعض الملفات تحوّل الأزرار إلى أيقونات بعد العرض)، أو أُخفي عمود أو زر بالصلاحيات */
       const r1 = tbl.rows[1], rN = tbl.rows[tbl.rows.length - 1];
       const vis = r => (r ? [...r.querySelectorAll('td, td > *, button, select')].map(e => (hidden(e) ? 0 : 1)).join('') : '');
-      const wrap = tbl.parentElement, sig = [tbl.rows.length, H.join(','), r1?.innerHTML.length, rN?.innerHTML.length, vis(r1), (r1?.textContent || '').slice(0, 30)].join('|');
+      /* محتوى الخلايا دون سماتها: تثبيت عمود الاسم (stk-c وموضعه) يغيّر سمات الخلية فقط، فلا يعيد بناء البطاقات */
+      const inner = r => (r ? [...r.cells].reduce((a, c) => a + c.innerHTML.length, 0) : 0);
+      const wrap = tbl.parentElement, sig = [tbl.rows.length, H.join(','), inner(r1), inner(rN), vis(r1), (r1?.textContent || '').slice(0, 30)].join('|');
       /* البطاقات بعد الجدول، وقد يفصل بينهما سطر «عرض المزيد» (pager.js): يُبحث في الإخوة التالية حتى الجدول التالي،
          وتُحذف أي نسخة زائدة (كانت تُبنى نسخة ثانية فتظهر القائمة مرتين) */
       const found = [];
