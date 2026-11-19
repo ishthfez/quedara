@@ -112,7 +112,10 @@
   const curDay = D => (qday && D.includes(qday) ? qday : D[0] || '');
   const shiftDay = (d, n) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
   const dayLabel = d => d === today() ? 'اليوم' : d === shiftDay(today(), -1) ? 'أمس' : new Date(d + 'T12:00:00').toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
-  const dayHead = (D, cur) => `<div class="bar" style="margin:0 0 .8rem;flex-wrap:nowrap"><h3 class="grow" style="margin:0">${esc(cur ? dayLabel(cur) : 'اليوم')}</h3>${D.length > 1 ? `<select data-qday aria-label="اليوم المعروض" style="width:auto;margin:0">${D.slice(0, 120).map(d => `<option value="${d}" ${d === cur ? 'selected' : ''}>${esc(dayLabel(d))}</option>`).join('')}</select>` : ''}</div>`;
+  /* عنوان المربع هو قائمة الأيام نفسها (لا يتكرر التاريخ مرتين)، وإن لم يكن إلا يوم واحد فعنوان عادي */
+  const dayHead = (D, cur) => D.length > 1
+    ? `<div style="margin:0 0 .8rem"><select data-qday class="qdaysel" aria-label="اليوم المعروض">${D.slice(0, 120).map(d => `<option value="${d}" ${d === cur ? 'selected' : ''}>${esc(dayLabel(d))}</option>`).join('')}</select></div>`
+    : `<h3 style="margin:0 0 .8rem">${esc(cur ? dayLabel(cur) : 'اليوم')}</h3>`;
   document.addEventListener('change', e => { if (e.target.matches?.('[data-qday]')) { qday = e.target.value; render(); } });
   /* حضور اليوم المختار (كما في لوحة المدير: الحاضر والمتأخر من المسجَّلين)، والتسجيلات منذ سبعة أيام قبله حتى نهايته (الحساب نفسه في app.js) */
   const dayStats = d => { const att = (db.attendance || []).filter(a => a.date === d), ok = att.filter(a => a.status === 'present' || a.status === 'late').length, from = shiftDay(d, -7);
@@ -233,6 +236,7 @@
     @media (max-width:600px){.qnl-d{display:none}}
     .qhgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0 1rem;margin:0 0 1rem}.qhgrid>.card{margin:0 0 1rem}
     .qhgrid .qfrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:.5rem}
-    .qhgrid .qfpct{grid-column:1/-1}.feerow.qsoon{opacity:.6}`;
+    .qhgrid .qfpct{grid-column:1/-1}.feerow.qsoon{opacity:.6}
+    .qdaysel{width:auto;max-width:100%;margin:0;font-weight:800;font-size:1.05rem}`;
   document.head.appendChild(css);
 })();
