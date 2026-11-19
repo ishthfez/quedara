@@ -11,7 +11,7 @@
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./staff.js')) VFILES.push('./staff.js'); } catch (e) { /* ignore */ } });
   const tab = TABS.admin.find(t => t[0] === 'teachers'); if (tab) tab[1] = 'الموظفون';
-  const KINDS = [['admins', 'مدير'], ['supervisors', 'مشرف'], ['teachers', 'معلم'], ['accountants', 'محاسب'], ['placeadmins', 'إداري']];
+  const KINDS = [['admins', 'Admin'], ['supervisors', 'مشرف'], ['teachers', 'معلم'], ['accountants', 'محاسب'], ['placeadmins', 'إداري']];
   const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
   const st = { k: '', q: '' };
   const gen = m => window.isGenSup ? window.isGenSup(m) : m?.info?.scope === 'all';
@@ -59,7 +59,7 @@
   /* ===== الصفحة ===== */
   function view() {
     const all = people();
-    const F = [['', 'الكل'], ...KINDS.flatMap(([k, l]) => [...(k === 'supervisors' ? [['gm', 'المديرون العامون']] : []), [k, l === 'مدير' ? 'المديرون' : l === 'مشرف' ? 'المشرفون' : l === 'معلم' ? 'المعلمون' : l === 'محاسب' ? 'المحاسبون' : 'الإداريون']]), ['un', 'غير مصنف'], ['off', 'المتوقفون']];
+    const F = [['', 'الكل'], ...KINDS.flatMap(([k, l]) => [...(k === 'supervisors' ? [['gm', 'المديرون العامون']] : []), [k, l === 'Admin' ? 'Admin' : l === 'مشرف' ? 'المشرفون' : l === 'معلم' ? 'المعلمون' : l === 'محاسب' ? 'المحاسبون' : 'الإداريون']]), ['un', 'غير مصنف'], ['off', 'المتوقفون']];
     const inK = (x, k) => k === 'un' ? !x.m : k === 'off' ? stopped(x) : k === 'gm' ? !!x.gm : !k || (x.k === k && !x.gm);
     const list = all.filter(x => inK(x, st.k));
     const cnt = k => all.filter(x => inK(x, k)).length;
