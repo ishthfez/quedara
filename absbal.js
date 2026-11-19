@@ -18,6 +18,8 @@
 
   let adjAt = 0, adjBusy = false, ADJ = null;
   /* كل مزامنة تعيد بناء db.payroll للمشرف (cloud.js) بلا التعديلات، فتُعاد إليه بعدها */
+  /* «الغياب» قسم مستقل عند المشرف، وتبويب في «العاملون» عند المدير العام (nav.js: QLView) */
+  const onAbs = () => ui.tab === 'absence' || (typeof window.QLView === 'function' && window.QLView() === 'absence');
   const putAdj = () => { const s = db.payroll?.settings; if (ADJ && s && s.lvAdj !== ADJ) s.lvAdj = ADJ; };
   async function freshAdj() {
     if (typeof CLOUD === 'undefined' || !CLOUD || session?.role !== 'supervisor' || adjBusy || Date.now() - adjAt < 120000 || !window.Cloud?.signedIn) return;
@@ -26,14 +28,14 @@
       const r = await window.Cloud.rpc('leave_adj');
       if (r && typeof r === 'object') {
         const changed = JSON.stringify(r) !== JSON.stringify(ADJ || {}); ADJ = r; putAdj();
-        if (changed && ui.tab === 'absence' && !document.querySelector('.overlay')) render();   // الاستمارة تُعاد بمسودتها
+        if (changed && onAbs() && !document.querySelector('.overlay')) render();   // الاستمارة تُعاد بمسودتها
       }
     } catch (e) { /* قبل تنفيذ leave_adj.sql: القاعدة العامة وحدها */ }
     adjBusy = false;
   }
   document.addEventListener('DOMContentLoaded', () => {
     const base = render;
-    render = function () { try { if (session?.role === 'supervisor') { putAdj(); if (ui.tab === 'absence') freshAdj(); } } catch (e) { /* ignore */ } return base.apply(this, arguments); };
+    render = function () { try { if (session?.role === 'supervisor') { putAdj(); if (onAbs()) freshAdj(); } } catch (e) { /* ignore */ } return base.apply(this, arguments); };
   });
   let editing = false;
   const isAdm = () => typeof session !== 'undefined' && session?.role === 'admin';
