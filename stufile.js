@@ -2,7 +2,7 @@
 /* ============ ملف الطالب (التصميم الجديد) ============
    - الرأس: الصورة والاسم (بلا كبسولة «صغير / كبير»)، وأعلى يسار الملف زرّا «طباعة» و«تنزيل» (PDF أو Excel).
    - «البيانات»: ما سُجّل في استمارة التقديم فقط (الخانات الفارغة لا تظهر).
-   - «الحلقة»: اسمها ومكانها ووقتها ومشرفها، و«ملاحظات خاصة» يكتبها مشرف الحلقة (أو المدير العام) وحده،
+   - «الحلقة»: معلمها (بلا كبسولة «حلقة») ومكانها ووقتها ومشرفها، و«ملاحظات خاصة» يكتبها مشرف الحلقة (أو المدير العام) وحده،
      ويقرؤها العاملون على الحلقة دون الطالب (supabase/sup_notes.sql).
    - «الاشتراكات»: قيمة الاشتراك (ومعها الخصم وسببه إن وُجد)، والدفع «منتظم» أو «غير منتظم» (سقط منه أكثر من شهر)،
      وزر «سجل الاشتراكات» يفتح السجل في نافذة داخلية.
@@ -87,7 +87,7 @@
           <span class="sfdl"><button type="button" class="btn icon-only" data-sfdl title="تنزيل" aria-label="تنزيل" aria-haspopup="true">${ICON_DL}</button>
             <span class="sfmenu" hidden><button type="button" data-sfdlv="pdf">ملف PDF</button><button type="button" data-sfdlv="xls">ملف Excel</button></span></span></div>` : ''}</div>
       ${allow('s_own') ? `<section class="sfsec" data-sk="own"><h3 class="sf-h">البيانات</h3>${D.length ? `<div class="sfgrid">${D.map(row).join('')}</div>` : '<p class="muted">لم تُسجَّل بيانات في الاستمارة.</p>'}</section>` : ''}
-      ${allow('s_dec') ? `<section class="sfsec" data-sk="dec"><h3 class="sf-h">الحلقة</h3>${h ? `<div class="sfgrid">${[['الاسم', esc(String(halaqaLabel(h)).split(' — ')[0])], ['المكان', esc(placeName(h) || '—')], ['الوقت', esc(timeText(h) || '—')], ['المشرف', esc(h.supervisorId ? supName(h.supervisorId) : '—')]].map(row).join('')}</div>` : '<p class="muted">لم تُحدَّد حلقته بعد.</p>'}
+      ${allow('s_dec') ? `<section class="sfsec" data-sk="dec"><h3 class="sf-h">الحلقة</h3>${h ? `<div class="sfgrid">${[['المعلم', esc((h.teacherId && byId(db.teachers, h.teacherId)?.name) || String(halaqaLabel(h)).split(' — ')[0].replace(/^\s*حلقة\s+/, ''))], ['المكان', esc(placeName(h) || '—')], ['الوقت', esc(timeText(h) || '—')], ['المشرف', esc(h.supervisorId ? supName(h.supervisorId) : '—')]].map(row).join('')}</div>` : '<p class="muted">لم تُحدَّد حلقته بعد.</p>'}
         ${canSeeNote() && h ? `<div class="sfnote noprint" data-sfnote><div class="sfnote-h"><b>ملاحظات خاصة</b><span class="muted">يكتبها المشرف، ولا يراها الطالب</span></div><div class="sfnote-b muted">…</div></div>` : ''}</section>` : ''}
       ${allow('s_fee') ? `<section class="sfsec" data-sk="fee"><h3 class="sf-h">الاشتراكات</h3>
         <div class="sfgrid">${row(['قيمة الاشتراك', feeVal + discNote])}${row(['الدفع', `<span class="tag ${Rg.cls}" ${Rg.title ? `title="${esc(Rg.title)}"` : ''}>${esc(Rg.txt)}</span>`])}</div>
