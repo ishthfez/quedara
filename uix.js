@@ -11,7 +11,8 @@
    7) «الإعلانات» تُسمّى «الإشعارات» في الواجهة.
    8) إعادة تحميل الصفحة لا تعيد المستخدم إلى «الرئيسية»، بل إلى صفحته.
    9) زر «تحصيل» بعلامة صح خضراء لمن سدّد اشتراك الشهر المعروض (ويبقى قابلًا للضغط).
-   10) عدادات «الرئيسية» قابلة للضغط: نافذة بالتفاصيل أو الصفحة المعنية. */
+   10) عدادات «الرئيسية» قابلة للضغط: نافذة بالتفاصيل أو الصفحة المعنية.
+   11) «الطلاب»: المكان والحلقة لا يظهران لمن له مكان واحد أو حلقة واحدة. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./uix.js')) VFILES.push('./uix.js'); } catch (e) { /* ignore */ } });
 
@@ -219,6 +220,7 @@
   const css = document.createElement('style');
   css.textContent = `@media screen{main .bar > h2.qdupttl{display:none}}
     body.qtab-stu main .card.feecard{display:none!important}
+    main .qscopeoff{display:none!important}
     main .feerow[data-qgo]{cursor:pointer;transition:filter .15s}main .feerow[data-qgo]:hover{filter:brightness(.96)}main .feerow[data-qgo]:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
     main .btn.qpaid,main .btn.qpaid.primary{background:#e3f4e1!important;color:#1f7a2e!important;border-color:#9fd39a!important}
     html.qdark main .btn.qpaid,html.qdark main .btn.qpaid.primary{background:color-mix(in srgb,#2e9e45 28%,#0e141d)!important;color:#8fd18a!important;border-color:color-mix(in srgb,#2e9e45 55%,#0e141d)!important}
@@ -295,7 +297,27 @@
   document.addEventListener('click', e => { const f = e.target.closest?.('main .feerow[data-qgo]'); if (f) openGo(f); });
   document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('main .feerow[data-qgo]')) { e.preventDefault(); openGo(e.target); } });
 
-  const after = () => { try { titleIcon(); applyHome(); trimMonths(); dupTitle(); markPaid(); homeLinks(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
+  /* ===== 11) «الطلاب»: ما يفيد صاحبه فقط =====
+     من حلقاته كلها في مكان واحد لا تظهر له قائمة «كل الأماكن» ولا عمود «المكان»، ومن له حلقة واحدة لا تظهر له قائمة «كل الحلقات»
+     ولا عمود «الحلقة» (ولا «حلقة …» في بطاقات الهاتف). متى أُضيف له مكان أو حلقة أخرى ظهر ما يخصها. */
+  function scopeTrim() {
+    if (!session || ui.tab !== 'students') return;
+    const H = window.QLStuView?.scopeH?.() || db.halaqat;
+    const oneP = new Set(H.map(h => h.placeId || '')).size <= 1, oneH = H.length <= 1;
+    const real = s => [...s.options].filter(o => o.value).length;
+    const off = (s, on) => (s.closest('.qcombo') || s).classList.toggle('qscopeoff', on);   // القائمة المحسّنة (qcombo) تُخفى بغلافها
+    document.querySelectorAll('main select[data-fplace]').forEach(s => off(s, !ui.fp && (oneP || real(s) <= 1)));
+    document.querySelectorAll('main select[data-change="fh"]').forEach(s => off(s, !ui.fh && (oneH || real(s) <= 1)));
+    if (!oneP && !oneH) return;
+    document.querySelectorAll('main .card .tbl > table').forEach(tbl => {
+      const head = tbl.rows[0]; if (!head) return;
+      const H2 = [...head.cells].map(c => c.textContent.trim());
+      const ix = [oneP ? H2.indexOf('المكان') : -1, oneH ? H2.indexOf('الحلقة') : -1].filter(i => i > -1);
+      if (!ix.length) return;
+      [...tbl.rows].forEach(r => ix.forEach(i => { const c = r.cells[i]; if (c && c.style.display !== 'none') c.style.display = 'none'; }));
+    });
+  }
+  const after = () => { try { titleIcon(); applyHome(); trimMonths(); dupTitle(); markPaid(); homeLinks(); scopeTrim(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
   /* ===== 8) إعادة تحميل الصفحة تُبقي المستخدم في الصفحة نفسها =====
      التبويب محفوظ في المتصفح (halaqat_tab)، لكن أول عرض بعد التحميل يأتي قبل اكتمال قائمة الحساب (الصلاحيات، صفحة «الطلاب» للعاملين…)
      فيُعاد إلى «الرئيسية». يُحفظ هنا التبويب المطلوب ويُرجع إليه متى ظهر في القائمة، ما لم ينتقل المستخدم بنفسه أو تمضِ 20 ثانية. */
@@ -316,7 +338,7 @@
   };
   /* النوافذ والقوائم التي تُفتح بعد العرض (نموذج الدفعة، كشف التحصيل…) */
   let q = false;
-  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { trimMonths(); titleIcon(); applyHome(); dupTitle(); markPaid(); homeLinks(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
+  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { trimMonths(); titleIcon(); applyHome(); dupTitle(); markPaid(); homeLinks(); scopeTrim(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
     .observe(document.body, { childList: true, subtree: true });
   /* تكبير الشاشة أو تدويرها إلى العرض الضيق */
   window.matchMedia('(max-width:640px)').addEventListener?.('change', e => { if (e.matches) after(); });
