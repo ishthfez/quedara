@@ -106,10 +106,21 @@
     <div class="qfrow">${r1.join('')}</div>${r2 && r2.length ? `<div class="qfrow">${r2.join('')}</div>` : ''}</div>`;
   /* حلقات الحساب وطلابها (نطاقه كما في «الطلاب») */
   const scopeHal = () => { const H = window.QLStuView?.scopeH?.(); return H || db.halaqat; };
-  function scopeData() {
+  /* ===== مربع «اليوم»: يُختار منه يوم آخر للاطلاع، والقائمة أيام فيها تسجيل فعلًا (حضور أو تسميع) فقط ===== */
+  let qday = '';
+  const dataDays = () => { const s = new Set(); (db.attendance || []).forEach(a => a.date && s.add(a.date)); (db.records || []).forEach(r => r.date && s.add(r.date)); return [...s].filter(d => d <= today()).sort().reverse(); };
+  const curDay = D => (qday && D.includes(qday) ? qday : D[0] || '');
+  const shiftDay = (d, n) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+  const dayLabel = d => d === today() ? 'اليوم' : d === shiftDay(today(), -1) ? 'أمس' : new Date(d + 'T12:00:00').toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
+  const dayHead = (D, cur) => `<div class="bar" style="margin:0 0 .8rem;flex-wrap:nowrap"><h3 class="grow" style="margin:0">${esc(cur ? dayLabel(cur) : 'اليوم')}</h3>${D.length > 1 ? `<select data-qday aria-label="اليوم المعروض" style="width:auto;margin:0">${D.slice(0, 120).map(d => `<option value="${d}" ${d === cur ? 'selected' : ''}>${esc(dayLabel(d))}</option>`).join('')}</select>` : ''}</div>`;
+  document.addEventListener('change', e => { if (e.target.matches?.('[data-qday]')) { qday = e.target.value; render(); } });
+  /* حضور اليوم المختار (كما في لوحة المدير: الحاضر والمتأخر من المسجَّلين)، والتسجيلات منذ سبعة أيام قبله حتى نهايته (الحساب نفسه في app.js) */
+  const dayStats = d => { const att = (db.attendance || []).filter(a => a.date === d), ok = att.filter(a => a.status === 'present' || a.status === 'late').length, from = shiftDay(d, -7);
+    return { pct: att.length ? Math.round(ok * 100 / att.length) : null, week: (db.records || []).filter(r => r.date >= from && r.date <= d).length }; };
+  function scopeData(onDay) {
     const H = scopeHal(), ids = new Set(H.map(h => h.id));
     const S = db.students.filter(s => ids.has(s.halaqaId)), on = S.filter(s => !stOff(s)), onIds = new Set(on.map(s => s.id));
-    const t = today(), mon = t.slice(0, 7);
+    const t = onDay || today(), mon = today().slice(0, 7);
     /* حضور اليوم: حالة واحدة لكل طالب (آخر ما سُجّل له) */
     const day = new Map(); (db.attendance || []).forEach(a => { if (a.date === t && onIds.has(a.studentId)) day.set(a.studentId, a); });
     const attT = [...day.values()];
@@ -154,12 +165,14 @@
       const ab = ((db.payroll || {}).absences || []).filter(a => String(a.date || '').startsWith(d.mon)).length;
       /* المدير العام: مربعات كما عند Admin («الحلقات» و«الطلاب» و«اليوم») على نطاقه (كل الحلقات) */
       if (isGM() || me()?.info?.scope === 'all') {
+        const D = dataDays(), cur = curDay(D), g = cur ? scopeData(cur) : d;
+        const gatt = g.attT.length ? pctRow('حضور اليوم', Math.round(g.here / g.attT.length * 100)) : row('fr-plain', 'حضور اليوم', '—');
         const offN = d.S.length - d.on.length, ids = new Set(d.H.map(h => h.teacherId).filter(Boolean)), sups = new Set(d.H.map(h => h.supervisorId).filter(Boolean));
         const tN = (db.teachers || []).filter(x => ids.has(x.id) && (x.admin || {}).status !== 'موقوف').length || ids.size;
         const b = (title, rows) => `<div class="card qdashcard qhomecnt"><h3 style="margin:0 0 .8rem">${esc(title)}</h3><div class="qfrow">${rows.join('')}</div></div>`;
         return `<div class="qhgrid">${b('الحلقات', [row('fr-plain', 'المعلمون', tN), row('fr-plain', 'المشرفون', Math.max(sups.size, (db.supervisors || []).length)), row('fr-plain', 'الحلقات', d.H.length), row('fr-plain', 'الأماكن', new Set(d.H.map(h => h.placeId).filter(Boolean)).size)])}
           ${b('الطلاب', [row('fr-ok', 'منتظمون', d.on.length), row(offN ? 'fr-no' : 'fr-plain', 'منقطعون', offN), row('fr-plain qsoon', 'برنامج الإتقان', '—')])}
-          ${b('اليوم', [att, row(d.halDone < d.H.length ? 'fr-no' : 'fr-ok', 'حلقات سُجّل حضورها اليوم', `${d.halDone} من ${d.H.length}`), row('fr-info', 'تسميع اليوم', d.recT), row('fr-plain', 'غياب المعلمين هذا الشهر', ab), row(wait ? 'fr-no' : 'fr-ok', 'طلبات نقل بانتظار موافقتك', wait)])}</div>`;
+          <div class="card qdashcard qhomecnt">${dayHead(D, cur)}<div class="qfrow">${[gatt, row(g.halDone < g.H.length ? 'fr-no' : 'fr-ok', 'حلقات سُجّل حضورها اليوم', `${g.halDone} من ${g.H.length}`), row('fr-info', 'تسميع اليوم', g.recT), row('fr-plain', 'غياب المعلمين هذا الشهر', ab), row(wait ? 'fr-no' : 'fr-ok', 'طلبات نقل بانتظار موافقتك', wait)].join('')}</div></div></div>`;
       }
       return card('حلقاتي', [row('fr-plain', 'الحلقات', d.H.length), row('fr-plain', 'الطلاب المنتظمون', d.on.length), att],
         [row(d.halDone < d.H.length ? 'fr-no' : 'fr-ok', 'حلقات سُجّل حضورها اليوم', `${d.halDone} من ${d.H.length}`), row('fr-info', 'تسميع اليوم', d.recT), row('fr-plain', 'غياب المعلمين هذا الشهر', ab), row(wait ? 'fr-no' : 'fr-ok', 'طلبات نقل بانتظار موافقتك', wait)]);
@@ -198,7 +211,8 @@
         const grid = document.createElement('div'); grid.className = 'qhgrid';
         grid.innerHTML = box3('الحلقات', [row('fr-plain', 'المعلمون', SET['المعلمون'][1]), row('fr-plain', 'المشرفون', (db.supervisors || []).length), row('fr-plain', 'الحلقات', db.halaqat.length), row('fr-plain', 'الأماكن', db.places.length)])
           + box3('الطلاب', [row('fr-ok', 'منتظمون', SET['الطلاب'][1]), row(offN ? 'fr-no' : 'fr-plain', 'منقطعون', offN), row('fr-plain qsoon', 'برنامج الإتقان', '—')])
-          + (keep('حضور اليوم') || keep('تسجيلات الأسبوع') ? box3('اليوم', [keep('حضور اليوم'), keep('تسجيلات الأسبوع')]) : '');
+          + (() => { const D = dataDays(), cur = curDay(D), s = cur ? dayStats(cur) : { pct: null, week: 0 };
+            return `<div class="card qdashcard qhomecnt">${dayHead(D, cur)}<div class="qfrow">${s.pct == null ? row('fr-plain', 'حضور اليوم', '—') : pctRow('حضور اليوم', s.pct)}${row('fr-plain', 'تسجيلات الأسبوع', s.week)}</div></div>`; })();
         old.replaceWith(grid);
       }
       return box('admin') + t.innerHTML;
