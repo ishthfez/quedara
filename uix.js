@@ -249,6 +249,7 @@
     /* العدادات: لا ينكسر اسم العداد أبدًا؛ ما لا يتسع في صفه ينزل إلى سطر وحده بعرض المربع */
     main .qfrow,main .qhgrid .qfrow{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--qmin,150px)),1fr))!important;gap:.5rem}main .qfrow>.feerow{min-width:0;margin:0}
     main .feerow>span,main .feerow>b{white-space:nowrap}main .qfrow>.feerow.qfpct{grid-column:1/-1}
+    main .feerow.qstack{flex-direction:column;align-items:flex-start;gap:.2rem}main .feerow.qstack>*{max-width:100%}
     main .qscopeoff{display:none!important}
     main .feerow[data-qgo]{cursor:pointer;transition:filter .15s}main .feerow[data-qgo]:hover{filter:brightness(.96)}main .feerow[data-qgo]:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
     main .btn.qpaid,main .btn.qpaid.primary{background:#e3f4e1!important;color:#1f7a2e!important;border-color:#9fd39a!important}
@@ -319,9 +320,12 @@
     document.querySelectorAll('main .qfrow').forEach(row => {
       const F = [...row.children].filter(f => f.classList.contains('feerow') && !f.classList.contains('qfpct') && f.style.display !== 'none');
       if (!F.length) return;
-      let w = 0;
-      F.forEach(f => { const cs = getComputedStyle(f); let s = parseFloat(cs.paddingInlineStart || cs.paddingLeft) + parseFloat(cs.paddingInlineEnd || cs.paddingRight) + 2;
-        [...f.children].forEach(c => { s += c.scrollWidth; }); s += (f.children.length - 1) * (parseFloat(cs.columnGap) || 8) + 12; w = Math.max(w, s); });
+      let w = 0; const RW = row.clientWidth;
+      F.forEach(f => { f.classList.remove('qstack'); const cs = getComputedStyle(f); let s = parseFloat(cs.paddingInlineStart || cs.paddingLeft) + parseFloat(cs.paddingInlineEnd || cs.paddingRight) + 2;
+        [...f.children].forEach(c => { s += c.scrollWidth; }); s += (f.children.length - 1) * (parseFloat(cs.columnGap) || 8) + 12;
+        /* عداد أطول من عرض المربع: الرقم تحت الاسم (لا يخرج عن المربع ولا ينكسر الاسم) */
+        if (s > RW) { f.classList.add('qstack'); s = RW; }
+        w = Math.max(w, s); });
       /* عدد الأعمدة صريحًا: ما يتسع من أعرض عداد (ولا يزيد على عدد العدادات)، فتمتلئ الأعمدة العرض كله */
       const gap = parseFloat(getComputedStyle(row).columnGap) || 8;
       const cols = Math.max(1, Math.min(F.length, Math.floor((row.clientWidth + gap) / (Math.ceil(w) + gap))));
