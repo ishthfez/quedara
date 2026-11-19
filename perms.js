@@ -7,14 +7,16 @@
    - الحسابات الموقوفة: الطالب «منقطع» والمعلم «موقوف» يرى عند الدخول صفحة بيضاء برسالة يحررها المدير من «الإعدادات». */
 (() => {
   const DEFS = [];
-  const ROLE_COLS = [['teacher', 'المعلمون', 'teachers'], ['supervisor', 'المشرفون', 'supervisors'], ['accountant', 'المحاسبون', 'accountants']];
+  /* [الفئة كما على الخادم، العنوان، المجموعة في التطبيق، من يدخل فيها منها] — المدير العام مشرف نطاقه «الكل» في التطبيق و'gmanager' على الخادم */
+  const isGM = m => m?.info?.scope === 'all';
+  const ROLE_COLS = [['teacher', 'المعلمون', 'teachers'], ['gmanager', 'المدير العام', 'supervisors', isGM], ['supervisor', 'المشرفون', 'supervisors', m => !isGM(m)], ['accountant', 'المحاسبون', 'accountants'], ['placeadmin', 'الإداريون', 'placeadmins']];
   /* مهام التطبيق الثابتة: [المجموعة، المهمة، الفئات التي تملكها أساسًا] — وما لا فئة له فهو للمدير فقط */
   const FIXED = [
-    ['الحلقات والطلاب', 'تسجيل حضور طلاب حلقاته', ['teacher', 'supervisor']],
-    ['الحلقات والطلاب', 'تسجيل التسميع وسجل الطالب', ['teacher', 'supervisor']],
+    ['الحلقات والطلاب', 'تسجيل حضور طلاب حلقاته', ['teacher', 'supervisor', 'gmanager']],
+    ['الحلقات والطلاب', 'تسجيل التسميع وسجل الطالب', ['teacher', 'supervisor', 'gmanager']],
     ['الحلقات والطلاب', 'تعديل استمارة الطالب كاملة وحذفه', []],
     ['المعلمون والعاملون', 'تعديل ملفه الشخصي والفني', ['teacher']],
-    ['المعلمون والعاملون', 'تسجيل غياب المعلمين', ['supervisor']],
+    ['المعلمون والعاملون', 'تسجيل غياب المعلمين', ['supervisor', 'gmanager']],
     ['المعلمون والعاملون', 'بيانات المعلمين الإدارية', []],
     ['المعلمون والعاملون', 'المرتبات وكشوفها', []],
     ['الحسابات والإدارة', 'الأعضاء وحسابات الدخول وكلمات المرور', []],
@@ -36,8 +38,8 @@
 
   const cfg = () => { const c = db.settings.priv_perms || {}; return { roles: c.roles || {}, members: c.members || {} }; };
   const setCfg = c => { db.settings.priv_perms = { roles: c.roles, members: c.members }; save(); };
-  const staff = () => ROLE_COLS.flatMap(([r, , coll]) => (db[coll] || []).map(m => ({ m, role: r })));
-  const roleL = r => ({ teacher: 'معلم', supervisor: 'مشرف', accountant: 'محاسب' })[r] || r;
+  const staff = () => ROLE_COLS.flatMap(([r, , coll, f]) => (db[coll] || []).filter(m => !f || f(m)).map(m => ({ m, role: r })));
+  const roleL = r => ({ teacher: 'معلم', supervisor: 'مشرف', gmanager: 'مدير عام', accountant: 'محاسب', placeadmin: 'إداري' })[r] || r;
   /* صلاحية الفئة: اختيار المدير إن وُجد، وإلا الافتراضي المعرَّف مع الصلاحية (مثل صلاحيات المحاسب) */
   const roleHas = (c, r, p) => { const v = (c.roles[r] || {})[p]; return v !== undefined ? !!v : !!DEFS.find(d => d.key === p)?.defaults?.includes(r); };
   const personHas = (c, id, r, p) => { const o = (c.members[id] || {})[p]; return o !== undefined ? !!o : roleHas(c, r, p); };
@@ -46,7 +48,7 @@
   function can(p) {
     if (!session) return false;
     if (session.role === 'admin') return true;
-    if (!CLOUD) return personHas(cfg(), session.id, session.role, p);
+    if (!CLOUD) return personHas(cfg(), session.id, session.role === 'supervisor' && isGM(me()) ? 'gmanager' : session.role, p);
     return (db.myPerms || []).includes(p);
   }
 
@@ -90,7 +92,7 @@
         <div class="bar" style="margin:0 0 .6rem"><button type="button" class="btn ${target.kind === 'role' ? 'on' : ''}" data-tk="role">لفئة كاملة</button><button type="button" class="btn ${target.kind === 'person' ? 'on' : ''}" data-tk="person">لشخص بعينه</button></div>
         ${target.kind === 'role'
           ? `<label>الفئة<select data-trole>${ROLE_COLS.map(([r, l]) => `<option value="${r}" ${target.id === r ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`
-          : `<div class="combo"><label>الشخص<input type="search" data-tq value="${esc(p ? p.m.name : st.q)}" placeholder="اكتب اسم معلم أو مشرف أو محاسب" autocomplete="off"></label>
+          : `<div class="combo"><label>الشخص<input type="search" data-tq value="${esc(p ? p.m.name : st.q)}" placeholder="اكتب اسم أحد العاملين" autocomplete="off"></label>
               ${!p && cand.length ? `<div class="results" style="position:static">${cand.map(x => `<button type="button" class="opt" data-tpick="${esc(x.m.id)}">${esc(x.m.name)} <small class="muted">— ${roleL(x.role)}</small></button>`).join('')}</div>` : ''}</div>
              ${p ? `<p class="muted" style="margin:.3rem 0">${esc(p.m.name)} — ${roleL(p.role)} <button type="button" class="btn sm" data-tclear>تغيير</button></p>` : ''}`}
         ${target.kind === 'role' || p ? `<div class="lbl-s" style="margin-top:.6rem">الصلاحيات</div>
