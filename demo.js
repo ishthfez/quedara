@@ -140,7 +140,7 @@
   SS.setItem('halaqat_session', JSON.stringify({ role: 'admin', id: admins[0].id }));
 
   /* ===== الواجهة: شريط ثابت، واختيار الفئة ===== */
-  const ROLES = [['admin', 'المدير', 'admins'], ['accountant', 'المحاسب', 'accountants'], ['teacher', 'المعلم', 'teachers'], ['gmanager', 'المدير العام', 'supervisors'], ['supervisor', 'المشرف', 'supervisors'], ['placeadmin', 'الإداري', 'placeadmins'], ['student', 'الطالب', 'students']];
+  const ROLES = [['admin', 'Admin', 'admins'], ['accountant', 'المحاسب', 'accountants'], ['teacher', 'المعلم', 'teachers'], ['gmanager', 'المدير العام', 'supervisors'], ['supervisor', 'المشرف', 'supervisors'], ['placeadmin', 'الإداري', 'placeadmins'], ['student', 'الطالب', 'students']];
   const pickMember = role => {
     if (role === 'teacher') return teachers[0].id;            // معلم له حلقتان
     if (role === 'student') return active[0].id;
