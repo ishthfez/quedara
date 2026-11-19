@@ -700,8 +700,10 @@
         const caret = box.selectionStart ?? box.value.length;
         render();
         /* بعد أن يُدمج الشريط في صف الأدوات (يتم في الإطار التالي) */
-        const refocus = () => { const b = document.querySelector('main [data-sq]'); if (b && document.activeElement !== b) { b.focus({ preventScroll: true }); try { b.setSelectionRange(caret, caret); } catch (err) { /* ignore */ } } };
-        refocus(); requestAnimationFrame(() => requestAnimationFrame(refocus)); setTimeout(refocus, 80);
+        const refocus = () => { const b = document.querySelector('main [data-sq]'); if (b && document.activeElement !== b) { b.focus({ preventScroll: true }); const c = Math.min(caret, b.value.length); try { b.setSelectionRange(c, c); } catch (err) { /* ignore */ } } };
+        /* toolbar.js ينقل الشريط في الإطار التالي فيفقد المربع التركيز؛ يُعاد التركيز في الإطار نفسه بعد النقل مباشرة
+           (طلب الإطار بعد مراقب التغييرات) فلا تضيع حروف تُكتب بينهما */
+        refocus(); queueMicrotask(() => requestAnimationFrame(refocus)); requestAnimationFrame(() => requestAnimationFrame(refocus)); setTimeout(refocus, 80);
       }, 250);
     });
     /* ===== التحديد والحذف الجماعي للطلاب (كان في «الحسابات») =====
