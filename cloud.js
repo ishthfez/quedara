@@ -131,8 +131,20 @@ async function signOut() {
   try { if (auth) await req('/auth/v1/logout', { method: 'POST', retry: false }); } catch (e) { /* ignore */ }
   auth = null; snap = null; LS.del(AKEY); resetSync(); emit();
 }
-const lookup = q => rpc('login_lookup', { q }, true);
-const setMember = m => { if (auth) { if (auth.member?.id !== m?.id) raw = null; auth.member = m; LS.set(AKEY, auth); } };
+/* «المدير العام»: على الخادم نوع حساب مستقل (role = 'gmanager'، supabase/gmanager_role.sql)، وفي واجهة التطبيق
+   «مشرف نطاقه الكل» كما كان (info.scope = 'all') فتبقى كل صفحات المشرف وفحوصه كما هي. الترجمة بينهما هنا وحدها:
+   الواجهة ترى 'supervisor'، والمزامنة تعمل بنوعه الحقيقي (srvRole) فتجلب ما يخصه وترسل ما يحق له. */
+const GM_IDS = new Set();
+let gmReady = null;   // هل يعرف الخادم النوع 'gmanager'؟ (بعد gmanager_role.sql) — يُفحص مرة في كل تشغيل قبل أي إرسال
+const lookup = q => rpc('login_lookup', { q }, true).then(rows => (rows || []).map(r => (r.role === 'gmanager' ? (GM_IDS.add(r.member_id), { ...r, role: 'supervisor' }) : r)));
+const setMember = m => {
+  if (!auth) return;
+  if (m && m.role === 'supervisor' && GM_IDS.has(m.id)) m = { ...m, srvRole: 'gmanager' };
+  if (auth.member?.id !== m?.id) raw = null;
+  auth.member = m; LS.set(AKEY, auth);
+};
+/* نوع الحساب كما هو على الخادم (للمزامنة)، ونوعه في الواجهة */
+const srvRole = () => auth?.member?.srvRole || auth?.member?.role;
 /* بدء مزامنة جديدة من الصفر (حساب آخر أو خروج): لا تُخلط بيانات جلستين */
 /* ويُعاد فحص المزامنة بالتغييرات (inc): فشلٌ عابر عند فتح التطبيق (جلسة منتهية مثلًا) لا يبقى جلبًا كاملًا طوال الجلسة التالية */
 function resetSync() { raw = null; since = null; lastFull = 0; inc = null; scoped = false; photoCache.clear(); photoSent.clear(); }
@@ -160,7 +172,9 @@ async function provision(items, onProgress) {
 /* ---------------- التحويل بين بيانات التطبيق وجداول الخادم ---------------- */
 const nz = v => (v === '' || v === undefined ? null : v);
 const num = v => (v === '' || v === undefined || v === null || isNaN(+v) ? null : +v);
-const ROLE_COLL = { admin: 'admins', supervisor: 'supervisors', teacher: 'teachers', student: 'students', accountant: 'accountants', placeadmin: 'placeadmins' };
+const ROLE_COLL = { admin: 'admins', supervisor: 'supervisors', gmanager: 'supervisors', teacher: 'teachers', student: 'students', accountant: 'accountants', placeadmin: 'placeadmins' };
+/* المدير العام في مجموعة المشرفين بالتطبيق: يُرسل بنوعه 'gmanager' متى عرفه الخادم، وإلا 'supervisor' كما كان */
+const staffRole = (m, r) => (r === 'supervisor' && gmReady === true && m?.info?.scope === 'all' ? 'gmanager' : r);
 
 function memberRow(m, role) {
   return {
@@ -179,7 +193,7 @@ function groups(db) {
   /* priv_*: إعدادات خاصة بالمدير (مثل فئات الاشتراكات وخصوماتها) لا يقرؤها غيره على الخادم */
   add('settings', 'settings', ['key'], ['org', 'theme', 'logo', 'block_msgs', 'col_labels', 'session_policy', 'priv_fees', 'priv_perms', 'priv_dups'].filter(k => db.settings?.[k] !== undefined).map(k => ({ key: k, value: db.settings[k] ?? null })));
   add('places', 'places', ['id'], (db.places || []).map(p => ({ id: p.id, name: p.name, type: p.type || 'مسجد', address: p.address || '' })));
-  add('staff', 'members', ['id'], ['admin', 'supervisor', 'teacher', 'accountant', 'placeadmin'].flatMap(r => (db[ROLE_COLL[r]] || []).map(m => memberRow(m, r))));
+  add('staff', 'members', ['id'], ['admin', 'supervisor', 'teacher', 'accountant', 'placeadmin'].flatMap(r => (db[ROLE_COLL[r]] || []).map(m => memberRow(m, staffRole(m, r)))));
   add('halaqat', 'halaqat', ['id'], (db.halaqat || []).map(h => ({ id: h.id, name: h.name || '', teacher_id: nz(h.teacherId), supervisor_id: nz(h.supervisorId), place_id: nz(h.placeId), time: h.time || null })));
   add('students', 'members', ['id'], (db.students || []).map(m => memberRow(m, 'student')));
   add('member_admin', 'member_admin', ['member_id'], (db.teachers || []).filter(t => t.admin && Object.keys(t.admin).length).map(t => ({ member_id: t.id, data: t.admin })));
@@ -273,6 +287,8 @@ function tablesFor(role) {
   if (role === 'placeadmin') return ['settings', 'places', 'members', 'halaqat', 'attendance', 'records', 'news', 'custom_fields', 'collections'];
   const t = ['settings', 'places', 'members', 'member_admin', 'halaqat', 'attendance', 'records', 'news', 'custom_fields'];
   if (role === 'admin') t.push('pay_settings', 'pay_employees', 'pay_rows', 'pay_closed', 'absences', 'pending_columns', 'fees', 'collections');
+  /* المدير العام: يطّلع على كل شيء (والخادم يمنحه القراءة فقط إلا الغياب والإشعارات وحلقاته) */
+  else if (role === 'gmanager') t.push('pay_settings', 'pay_employees', 'pay_rows', 'pay_closed', 'absences', 'fees', 'collections');
   else if (role === 'supervisor') t.push('absences');
   else if (role === 'teacher') t.push('collections');
   return t;
@@ -306,7 +322,9 @@ async function fetchTables(tables, filter = '', chk = null) {
 }
 const backMinute = ts => new Date(new Date(ts).getTime() - 60000).toISOString();
 async function pull() {
-  const role = auth?.member?.role, tables = tablesFor(role);
+  /* هل يعرف الخادم نوع «المدير العام»؟ يُفحص مرة قبل أول إرسال (حتى لا يُرجَع المدير العام مشرفًا على الخادم ولا يُرسل نوع لا يقبله) */
+  if (gmReady === null) { try { await rpc('gmanager_ready'); gmReady = true; } catch (e) { if (e instanceof HttpError) gmReady = false; } }
+  const role = srvRole(), tables = tablesFor(role);
   if (inc === null) {
     /* لا يُحكم بغياب الدالة على الخادم إلا برفض صريح منه؛ انقطاع الاتصال أو انتهاء الجلسة يُعاد فحصه في المزامنة التالية */
     const gone = e => e instanceof HttpError && e.status >= 400 && e.status < 500 && e.status !== 401;
@@ -357,8 +375,12 @@ async function pull() {
     const base = { id: m.id, name: m.name, phone: m.phone || '', userId: m.user_id || null, hasLogin: !!m.login_email, extra: m.extra || {} };
     if (m.role === 'teacher') db.teachers.push({ ...base, personal: m.info?.personal || {}, tech: m.info?.tech || {}, admin: adm.get(m.id) || {} });
     else if (m.role === 'student') db.students.push({ ...base, halaqaId: m.halaqa_id || '', cat: m.cat || 'child', info: m.info || {}, hasPhoto: inc ? !!m.has_photo : !!m.photo, photo: photoCache.get(m.id) });
-    else db[ROLE_COLL[m.role]].push({ ...base, info: m.info || {} }); // المدير والمشرف والمحاسب: بياناتهم الإضافية (مثل مسمى الموظف) تبقى ولا تُمسح عند التعديل
+    /* المدير العام: في مجموعة المشرفين بنطاق «الكل» */
+    else if (m.role === 'gmanager') { db.supervisors.push({ ...base, info: { ...(m.info || {}), scope: 'all' } }); GM_IDS.add(m.id); }
+    else if (db[ROLE_COLL[m.role]]) db[ROLE_COLL[m.role]].push({ ...base, info: m.info || {} }); // المدير والمشرف والمحاسب: بياناتهم الإضافية (مثل مسمى الموظف) تبقى ولا تُمسح عند التعديل
   });
+  /* حساب محفوظ من قبل أن يصير صاحبه «مديرًا عامًا» على الخادم: يُعرف نوعه الحقيقي فتجلب المزامنة التالية ما يخصه */
+  if (auth?.member && auth.member.role === 'supervisor' && !auth.member.srvRole && GM_IDS.has(auth.member.id)) { auth.member = { ...auth.member, srvRole: 'gmanager' }; LS.set(AKEY, auth); raw = null; }
   db.halaqat = halaqat.map(h => ({ id: h.id, name: h.name || '', teacherId: h.teacher_id || '', supervisorId: h.supervisor_id || '', placeId: h.place_id || '', time: h.time || undefined }));
   db.attendance = attendance.map(a => ({ id: a.id, studentId: a.student_id, date: a.date, status: a.status }));
   db.records = records.map(r => ({ id: r.id, studentId: r.student_id, date: r.date, type: r.type, surah: r.surah, from: r.from_ayah, to: r.to_ayah, grade: r.grade || '', note: r.note || '' }));
@@ -366,9 +388,9 @@ async function pull() {
   db.news = news.slice().sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))).map(n => ({ id: n.id, text: n.text, audience: n.audience, date: n.date, author: n.author || '', authorId: n.author_id || '', prio: n.prio || '', until: n.until || '' }));
   fields.forEach(f => { (db.fields[f.kind] = db.fields[f.kind] || []).push({ key: f.key, label: f.label, type: f.type }); });
   db.collections = rows('collections').map(c => ({ id: c.id, teacherId: c.teacher_id, teacherName: c.teacher_name || '', halaqaId: c.halaqa_id || '', y: c.y, m: c.m, status: c.status, lines: c.lines || [], accNote: c.acc_note || '', sentAt: c.sent_at || '', reviewedBy: c.reviewed_by || '' }));
-  if (role === 'admin') {
+  if (role === 'admin' || role === 'gmanager') {
     const [ps, emps, prow, closed, abs, pend] = ['pay_settings', 'pay_employees', 'pay_rows', 'pay_closed', 'absences', 'pending_columns'].map(rows);
-    db.pending = pend.map(p => ({ id: p.id, kind: p.kind, header: p.header, values: p.values || [], date: p.date }));
+    if (role === 'admin') db.pending = pend.map(p => ({ id: p.id, kind: p.kind, header: p.header, values: p.values || [], date: p.date }));
     db.fees = feeRows(rows('fees'));
     db.payroll = {
       settings: ps[0]?.data || {},
@@ -380,6 +402,8 @@ async function pull() {
     /* هل نُفّذ supabase/absence_proof.sql؟ (الإثبات «خصم» لا يُرسل قبله فيرفضه الخادم) */
     if (mode === 'full' || raw.leaveOK === undefined) { try { await rpc('leave_rules'); raw.leaveOK = true; } catch (e) { raw.leaveOK = false; } }
     db.payroll.leaveOK = !!raw.leaveOK;
+    /* المدير العام يطّلع على المرتبات ولا يعدّلها (يسجّل الغياب وحده) */
+    if (role === 'gmanager') { db.payroll.readOnly = true; const n = new Date(); db.payroll.curMonth = { y: n.getFullYear(), m: n.getMonth() + 1 }; }
   } else if (role === 'accountant') {
     db.fees = feeRows(rows('fees'));
     /* أسماء المعلمين والمشرفين لتسمية الحلقات فقط: تُجلب عند الجلب الكامل أو تغيّر الأعضاء */
@@ -390,12 +414,15 @@ async function pull() {
   } else if (role === 'supervisor') {
     /* قائمة العاملين وشهر المرتبات الحالي: تُجلب عند الجلب الكامل أو إن تغيّرت فقط */
     /* معلومات الرصيد (بعد absence_proof.sql) تُطلب كذلك إن لم تكن في النسخة المحفوظة، مرة في كل فتح للتطبيق */
-    const needRules = !raw.extras || raw.extras.length < 3 || (raw.extras[2] == null && !leaveTried);
-    if (mode === 'full' || needRules || !scoped || chk.tables.includes('staff')) { leaveTried = true; raw.extras = await Promise.all([rpc('staff_list'), rpc('current_pay_month').catch(() => null), rpc('leave_rules').catch(() => null)]); lastChanged = true; }
-    const abs = rows('absences'), [staff, cur, rules] = raw.extras;
+    /* وكشوف الأشهر المغلقة (بعد supabase/sup_payroll.sql؛ قبله تصل فارغة): إغلاق شهر أو إعادة فتحه يغيّر pay_closed فيُعاد جلبها */
+    const needRules = !raw.extras || raw.extras.length < 5 || (raw.extras[2] == null && !leaveTried);
+    if (mode === 'full' || needRules || !scoped || chk.tables.includes('staff')) { leaveTried = true; raw.extras = await Promise.all([rpc('staff_list'), rpc('current_pay_month').catch(() => null), rpc('leave_rules').catch(() => null), selectAll('pay_closed', 'y,m').catch(() => []), selectAll('pay_rows', 'id').catch(() => [])]); lastChanged = true; }
+    const abs = rows('absences'), [staff, cur, rules, pclosed, prows] = raw.extras;
     const c = Array.isArray(cur) ? cur[0] : cur, lv = Array.isArray(rules) ? rules[0] : rules;
     /* بعد supabase/absence_proof.sql: نظام العمل وأيام الرصيد لحساب رصيد الإجازات، والإثبات (بلا أي مبالغ) */
-    db.payroll = { settings: lv ? { lv3: lv.lv3, lv6: lv.lv6 } : {}, employees: (staff || []).map(e => ({ id: e.id, code: e.code || '', name: e.name, place: e.place || '', status: e.status, sys: e.sys || '' })), rows: [], closed: [], absences: abs.map(absFromRow), curMonth: c && c.y ? { y: c.y, m: c.m } : null, readOnly: true, leaveOK: !!lv };
+    db.payroll = { settings: lv ? { lv3: lv.lv3, lv6: lv.lv6 } : {}, employees: (staff || []).map(e => ({ id: e.id, code: e.code || '', name: e.name, place: e.place || '', status: e.status, sys: e.sys || '' })),
+      rows: (prows || []).map(r => ({ id: r.id, y: r.y, m: r.m, eid: r.emp_id, name: r.name || '', role: r.role || '', base: r.base, extra: r.extra, exc: r.exc, absP: r.abs_p, absN: r.abs_n, mtgP: r.mtg_p, mtgN: r.mtg_n, dTest: r.d_test, dRec: r.d_rec, dBooks: r.d_books, basic: r.basic, rate: r.rate, incentive: r.incentive, transport: r.transport, note: r.note || '' })),
+      closed: (pclosed || []).map(x => x.y + '-' + x.m), absences: abs.map(absFromRow), curMonth: c && c.y ? { y: c.y, m: c.m } : null, readOnly: true, leaveOK: !!lv };
   }
   /* صلاحيات المستخدم (غير المدير) كما يحسبها الخادم: تُجلب عند الجلب الكامل أو تغيّر الإعدادات فقط */
   if (role !== 'admin') {
@@ -450,6 +477,7 @@ const ALLOWED = {
   admin: null, // الكل
   teacher: ['attendance', 'records'],
   supervisor: ['attendance', 'records', 'absences'],
+  gmanager: ['attendance', 'records', 'absences', 'news'], // حضور حلقاته وتسميعها، وغياب أي شخص، والإشعارات
   accountant: ['students', 'fees'],
   placeadmin: [], // يطّلع فقط؛ والتحصيل عبر دالة الخادم
   student: []
@@ -461,7 +489,7 @@ const PERM_GROUPS = { places: 'halaqat.manage', halaqat: 'halaqat.manage' };
 const canon = v => (Array.isArray(v) ? '[' + v.map(canon).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}' : JSON.stringify(v === undefined ? null : v));
 const sameRow = (prevJ, r) => { try { return canon(JSON.parse(prevJ)) === canon(JSON.parse(JSON.stringify(r))); } catch (e) { return false; } };
 function diff(db) {
-  const role = auth?.member?.role, allow = ALLOWED[role];
+  const role = srvRole(), allow = ALLOWED[role];
   const out = [];
   for (const gr of groups(db)) {
     if (allow && !allow.includes(gr.name) && !(PERM_GROUPS[gr.name] && (db.myPerms || []).includes(PERM_GROUPS[gr.name]))) continue;
@@ -598,6 +626,7 @@ window.Cloud = {
   signIn, reauth, signOut, lookup, setMember, pull, push, schedule, pendingCount, cached, saveLocal, loadLocal, ready, publicSettings,
   provision, fn, rpc, req, selectAll,
   get lastChanged() { return lastChanged; },
+  get gmReady() { return gmReady; },
   get incremental() { return inc; },
   get feesReady() { return feesOk; },
   get newsExt() { return newsExt; },
