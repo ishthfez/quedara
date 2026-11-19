@@ -123,6 +123,21 @@
      تُبنى من صفوف الجدول نفسه بعد تطبيق «صلاحيات صفحة الطلاب» (stuperm.js): العمود المخفي لا يظهر، والزر المخفي لا يُنسخ،
      و«يظهر بلا ضغط» يبقى كذلك. الجدول يبقى للحاسوب وللطباعة والتنزيل. */
   const NARROW = () => window.matchMedia('(max-width:640px)').matches;
+  const KEBAB = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
+  /* قائمة «خيارات» في بطاقة الطالب: تبقى داخل الشاشة، وتُغلق بالاختيار منها أو بالضغط خارجها، وواحدة مفتوحة فقط */
+  document.addEventListener('toggle', e => {
+    const d = e.target; if (!d.matches?.('details.qsc-more') || !d.open) return;
+    document.querySelectorAll('details.qsc-more[open]').forEach(x => { if (x !== d) x.open = false; });
+    const m = d.querySelector('.qsc-menu'); m.style.transform = '';
+    const r = m.getBoundingClientRect(), W = document.documentElement.clientWidth, H = window.innerHeight;
+    const dx = r.right > W - 8 ? W - 8 - r.right : r.left < 8 ? 8 - r.left : 0;
+    const dy = r.bottom > H - 8 ? -(r.height + d.offsetHeight + 8) : 0;
+    if (dx || dy) m.style.transform = `translate(${dx}px,${dy}px)`;
+  }, true);
+  document.addEventListener('click', e => {
+    if (e.target.closest?.('.qsc-menu > *')) { const d = e.target.closest('details.qsc-more'); if (d) setTimeout(() => { d.open = false; }, 0); return; }
+    document.querySelectorAll('details.qsc-more[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
+  });
   const hidden = el => !el || getComputedStyle(el).display === 'none' || el.style.display === 'none';
   const cloneLive = el => {   // نسخة تحمل حالة «يظهر بلا ضغط» كما هي في الجدول
     const c = el.cloneNode(true), cs = getComputedStyle(el);
@@ -159,8 +174,19 @@
         const card = document.createElement('div'); card.className = 'qsc';
         const top = document.createElement('div'); top.className = 'qsc-t';
         const name = document.createElement('div'); name.className = 'qsc-n'; [...nm.childNodes].forEach(n => name.appendChild(n.nodeType === 1 ? cloneLive(n) : n.cloneNode(true)));
+        /* أزرار الصف كلها في زر «خيارات» واحد (⋮) يفتح قائمة بأسمائها، بدل صف أزرار بجانب الاسم */
         const btns = document.createElement('div'); btns.className = 'qsc-a';
-        if (H[act] === '' && r.cells[act] && !hidden(r.cells[act])) [...r.cells[act].children].forEach(b => { if (!hidden(b)) btns.appendChild(cloneLive(b)); });
+        const all = H[act] === '' && r.cells[act] && !hidden(r.cells[act]) ? [...r.cells[act].children].filter(b => !hidden(b)).map(cloneLive) : [];
+        /* «تحصيل» خارج القائمة، عن يمين زر الخيارات (أول الصف في الاتجاه من اليمين) */
+        const pay = all.find(b => b.matches('[data-fee-pay2]')), list = all.filter(b => b !== pay);
+        if (pay) btns.appendChild(pay);
+        if (list.length) {
+          const dt = document.createElement('details'); dt.className = 'qsc-more';
+          dt.innerHTML = `<summary class="btn qsc-mbtn" title="خيارات" aria-label="خيارات">${KEBAB}</summary>`;
+          const menu = document.createElement('div'); menu.className = 'qsc-menu';
+          list.forEach(b => { const l = (b.getAttribute('title') || b.getAttribute('aria-label') || '').trim(); if (l && !b.textContent.trim()) b.insertAdjacentHTML('beforeend', `<span class="qsc-ml">${esc(l)}</span>`); menu.appendChild(b); });
+          dt.appendChild(menu); btns.appendChild(dt);
+        }
         top.append(name, btns); card.appendChild(top);
         const l2 = document.createElement('div'); l2.className = 'qsc-m';
         const hal = cell(r, 'الحلقة'), st = cell(r, 'الحالة');
@@ -220,6 +246,9 @@
   const css = document.createElement('style');
   css.textContent = `@media screen{main .bar > h2.qdupttl{display:none}}
     body.qtab-stu main .card.feecard{display:none!important}
+    /* العدادات: لا ينكسر اسم العداد أبدًا؛ ما لا يتسع في صفه ينزل إلى سطر وحده بعرض المربع */
+    main .qfrow,main .qhgrid .qfrow{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--qmin,150px)),1fr))!important;gap:.5rem}main .qfrow>.feerow{min-width:0;margin:0}
+    main .feerow>span,main .feerow>b{white-space:nowrap}main .qfrow>.feerow.qfpct{grid-column:1/-1}
     main .qscopeoff{display:none!important}
     main .feerow[data-qgo]{cursor:pointer;transition:filter .15s}main .feerow[data-qgo]:hover{filter:brightness(.96)}main .feerow[data-qgo]:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
     main .btn.qpaid,main .btn.qpaid.primary{background:#e3f4e1!important;color:#1f7a2e!important;border-color:#9fd39a!important}
@@ -234,6 +263,12 @@
       .qsc-t{display:flex;align-items:flex-start;gap:.5rem}.qsc-n{flex:1;min-width:0;font-weight:700}.qsc-n .who{gap:.45rem}
       .qsc-a{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.3rem;max-width:58%}.qsc-a .btn{padding:.22rem .55rem!important;min-height:0!important;font-size:.8rem;margin:0!important}
       .qsc-a .btn.qri{display:inline-flex;align-items:center;justify-content:center;height:31px}.qsc-a .btn.qri svg{width:17px;height:17px;display:block;flex:none}
+      .qsc-more{position:relative}.qsc-more>summary{list-style:none;cursor:pointer}.qsc-more>summary::-webkit-details-marker{display:none}
+      .qsc-a .qsc-mbtn{width:38px;height:34px;padding:0!important;display:inline-flex;align-items:center;justify-content:center;border-radius:10px}
+      .qsc-a{flex-wrap:nowrap!important;align-items:center}.qsc-a>.btn[data-fee-pay2]{width:38px;height:34px;padding:0!important;border-radius:10px}
+      .qsc-menu{position:absolute;z-index:30;inset-inline-end:0;top:calc(100% + 4px);min-width:12rem;display:flex;flex-direction:column;gap:.25rem;padding:.4rem;background:var(--card,#fff);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(10,18,35,.18)}
+      .qsc-a .qsc-menu .btn{width:100%;justify-content:flex-start;gap:.55rem;display:flex!important;align-items:center;height:auto!important;padding:.5rem .65rem!important;font-size:.9rem!important;text-align:start}
+      .qsc-a .qsc-menu .btn svg{flex:none}.qsc-ml{flex:1;white-space:nowrap}.qsc-menu{width:max-content;max-width:calc(100vw - 24px)}
       .qsc-m{font-size:.85rem;color:var(--muted);margin-top:.25rem;line-height:1.6}.qsc-m .btn{padding:.05rem .5rem!important;min-height:0!important;font-size:.78rem;margin:0!important}
     }`;
   document.head.appendChild(css);
@@ -279,8 +314,27 @@
     ov.querySelector('[data-close]').onclick = () => ov.remove();
     ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
   }
+  /* العدادات المتجاورة بعرض واحد: عرض العمود = عرض أعرض عداد في مجموعته (لا ينكسر اسمه)، وما لا يتسع ينزل إلى سطر وحده */
+  function evenCounters() {
+    document.querySelectorAll('main .qfrow').forEach(row => {
+      const F = [...row.children].filter(f => f.classList.contains('feerow') && !f.classList.contains('qfpct') && f.style.display !== 'none');
+      if (!F.length) return;
+      let w = 0;
+      F.forEach(f => { const cs = getComputedStyle(f); let s = parseFloat(cs.paddingInlineStart || cs.paddingLeft) + parseFloat(cs.paddingInlineEnd || cs.paddingRight) + 2;
+        [...f.children].forEach(c => { s += c.scrollWidth; }); s += (f.children.length - 1) * (parseFloat(cs.columnGap) || 8) + 12; w = Math.max(w, s); });
+      /* عدد الأعمدة صريحًا: ما يتسع من أعرض عداد (ولا يزيد على عدد العدادات)، فتمتلئ الأعمدة العرض كله */
+      const gap = parseFloat(getComputedStyle(row).columnGap) || 8;
+      const cols = Math.max(1, Math.min(F.length, Math.floor((row.clientWidth + gap) / (Math.ceil(w) + gap))));
+      const tpl = `repeat(${cols},minmax(0,1fr))`; if (row.style.gridTemplateColumns !== tpl) row.style.setProperty('grid-template-columns', tpl, 'important');
+      /* آخر عداد إن بقي وحده في سطره يمتد ليملأه؛ اثنان فأكثر يبقون بعرض واحد */
+      F.forEach(f => { f.style.gridColumn = ''; });
+      if (cols > 1 && F.length % cols === 1) F[F.length - 1].style.gridColumn = '1 / -1';
+    });
+  }
+  let evT = 0; window.addEventListener('resize', () => { clearTimeout(evT); evT = setTimeout(() => { try { evenCounters(); } catch (e) { /* ignore */ } }, 120); });
   function homeLinks() {
     if (!session || !['home', 'dash'].includes(ui.tab)) return;
+    evenCounters();
     document.querySelectorAll('main .feerow:not([data-qgo])').forEach(f => {
       const l = (f.querySelector('span')?.textContent || '').trim();
       if (!usable(target(l))) return;
