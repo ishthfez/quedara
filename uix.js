@@ -10,7 +10,8 @@
    6) مواعيد الحلقات مختصرة في كل التطبيق (timeText).
    7) «الإعلانات» تُسمّى «الإشعارات» في الواجهة.
    8) إعادة تحميل الصفحة لا تعيد المستخدم إلى «الرئيسية»، بل إلى صفحته.
-   9) زر «تحصيل» بعلامة صح خضراء لمن سدّد اشتراك الشهر المعروض (ويبقى قابلًا للضغط). */
+   9) زر «تحصيل» بعلامة صح خضراء لمن سدّد اشتراك الشهر المعروض (ويبقى قابلًا للضغط).
+   10) عدادات «الرئيسية» قابلة للضغط: نافذة بالتفاصيل أو الصفحة المعنية. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./uix.js')) VFILES.push('./uix.js'); } catch (e) { /* ignore */ } });
 
@@ -53,7 +54,7 @@
   /* ===== 3) عدادات الرئيسية لكل فئة ===== */
   const FEE = ['عدد الطلاب', 'مسدَّد', 'لم يسدّد', 'معفى', 'بلا اشتراك محدد', 'المتوقع', 'المحصّل', 'الباقي', 'نسبة التحصيل'];
   const CATS = [
-    ['admin', 'Admin', ['المعلمون العاملون', 'المشرفون', 'الأماكن', 'الحلقات', 'الطلاب المنتظمون', 'حضور اليوم', 'تسجيلات الأسبوع', ...FEE]],
+    ['admin', 'Admin', ['المعلمون', 'المشرفون', 'الحلقات', 'الأماكن', 'منتظمون', 'منقطعون', 'حضور اليوم', 'تسجيلات الأسبوع', ...FEE]],
     ['supervisor', 'المشرفون والمديرون العامون', ['الحلقات', 'الطلاب المنتظمون', 'حضور اليوم', 'حلقات سُجّل حضورها اليوم', 'تسميع اليوم', 'غياب المعلمين هذا الشهر', 'طلبات نقل بانتظار موافقتك']],
     ['teacher', 'المعلمون', ['الطلاب المنتظمون', 'حضور اليوم', 'لم يُسجَّل حضورهم اليوم', 'تسميع اليوم', 'غياب هذا الشهر', 'بانتظار موافقة النقل']],
     ['accountant', 'المحاسبون', ['الطلاب المنتظمون', 'كشوف بانتظار المراجعة', ...FEE]],
@@ -218,6 +219,7 @@
   const css = document.createElement('style');
   css.textContent = `@media screen{main .bar > h2.qdupttl{display:none}}
     body.qtab-stu main .card.feecard{display:none!important}
+    main .feerow[data-qgo]{cursor:pointer;transition:filter .15s}main .feerow[data-qgo]:hover{filter:brightness(.96)}main .feerow[data-qgo]:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
     main .btn.qpaid,main .btn.qpaid.primary{background:#e3f4e1!important;color:#1f7a2e!important;border-color:#9fd39a!important}
     html.qdark main .btn.qpaid,html.qdark main .btn.qpaid.primary{background:color-mix(in srgb,#2e9e45 28%,#0e141d)!important;color:#8fd18a!important;border-color:color-mix(in srgb,#2e9e45 55%,#0e141d)!important}
     .content .top .ttl{display:flex;align-items:center;gap:.5rem}.qttlico{display:inline-flex;flex:none}.qttlico svg{width:22px;height:22px}
@@ -247,7 +249,53 @@
       b.title = 'مسدَّد — اضغط لتحصيل شهر آخر'; b.setAttribute('aria-label', b.title);
     });
   }
-  const after = () => { try { titleIcon(); applyHome(); trimMonths(); dupTitle(); markPaid(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
+  /* ===== 10) عدادات «الرئيسية» قابلة للضغط: نافذة بالتفاصيل (المشرفون) أو الانتقال إلى الصفحة المعنية ===== */
+  const STU = ['عدد الطلاب', 'تسميع اليوم', 'غياب هذا الشهر', 'تسجيلات الأسبوع', 'بانتظار موافقة النقل', 'طلبات نقل بانتظار موافقتك', 'طلبات النقل', ...FEE.slice(1)];
+  const ATT = ['حضور اليوم', 'لم يُسجَّل حضورهم اليوم', 'حلقات سُجّل حضورها اليوم'];
+  const hasTab = v => (TABS[session?.role] || []).some(t => t[0] === v);
+  function target(l) {
+    if (l === 'منقطعون') return { tab: 'students', sel: '[data-sstfv="off"]' };
+    if (l === 'منتظمون' || l === 'الطلاب المنتظمون') return { tab: 'students', sel: '[data-sstfv="on"]' };
+    if (ATT.includes(l)) return { tab: 'students', sel: 'main [data-attopen]' };
+    if (STU.includes(l)) return { tab: 'students' };
+    if (l === 'المعلمون' || l === 'المعلمون العاملون') return { tab: 'teachers' };
+    if (l === 'الحلقات' || l === 'الأماكن') return { tab: hasTab('halaqat') ? 'halaqat' : 'students' };
+    if (l === 'المشرفون') return { modal: supModal };
+    if (l === 'غياب المعلمين هذا الشهر') return { tab: 'absence' };
+    if (l === 'كشوف بانتظار المراجعة') { const t = (TABS[session.role] || []).find(x => /تحصيل المعلمين/.test(x[1])); return t ? { tab: t[0] } : null; }
+    if (['نسبة حضوري', 'أيام الغياب', 'تسميعاتي', 'آخر حفظ'].includes(l)) return { tab: hasTab('hist') ? 'hist' : 'me' };
+    return null;
+  }
+  const usable = g => g && (g.modal || hasTab(g.tab) || (session.role === 'admin' && g.tab === 'teachers'));
+  function supModal() {
+    const S = (db.supervisors || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+    const rows = S.map(s => { const H = db.halaqat.filter(h => h.supervisorId === s.id), ids = new Set(H.map(h => h.id));
+      return `<tr><td>${esc(s.name)}${s.info?.scope === 'all' ? ' <span class="tag tag-ok">مدير عام</span>' : ''}</td><td>${H.length}</td><td>${new Set(H.map(h => h.placeId).filter(Boolean)).size}</td><td>${db.students.filter(x => ids.has(x.halaqaId) && !stOff(x)).length}</td></tr>`; }).join('');
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    ov.innerHTML = `<div class="modal wide"><h2>المشرفون (${S.length})</h2>${S.length ? `<div class="tbl"><table><tr><th>المشرف</th><th>الحلقات</th><th>الأماكن</th><th>الطلاب المنتظمون</th></tr>${rows}</table></div>` : empty('لا يوجد مشرفون.')}<div class="row"><button type="button" class="btn" data-close>إغلاق</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('[data-close]').onclick = () => ov.remove();
+    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  }
+  function homeLinks() {
+    if (!session || !['home', 'dash'].includes(ui.tab)) return;
+    document.querySelectorAll('main .feerow:not([data-qgo])').forEach(f => {
+      const l = (f.querySelector('span')?.textContent || '').trim();
+      if (!usable(target(l))) return;
+      f.dataset.qgo = l; f.setAttribute('role', 'button'); f.tabIndex = 0; f.title = 'عرض التفاصيل';
+    });
+  }
+  const openGo = f => {
+    const g = target(f.dataset.qgo); if (!usable(g)) return;
+    if (g.modal) { g.modal(); return; }
+    want = null; ui.tab = g.tab; ui.nav = false; try { saveTab(); } catch (e) { /* ignore */ }
+    render(); window.scrollTo(0, 0);
+    if (g.sel) setTimeout(() => { const b = document.querySelector(g.sel); if (b && !b.classList.contains('on')) b.click(); }, 80);
+  };
+  document.addEventListener('click', e => { const f = e.target.closest?.('main .feerow[data-qgo]'); if (f) openGo(f); });
+  document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('main .feerow[data-qgo]')) { e.preventDefault(); openGo(e.target); } });
+
+  const after = () => { try { titleIcon(); applyHome(); trimMonths(); dupTitle(); markPaid(); homeLinks(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
   /* ===== 8) إعادة تحميل الصفحة تُبقي المستخدم في الصفحة نفسها =====
      التبويب محفوظ في المتصفح (halaqat_tab)، لكن أول عرض بعد التحميل يأتي قبل اكتمال قائمة الحساب (الصلاحيات، صفحة «الطلاب» للعاملين…)
      فيُعاد إلى «الرئيسية». يُحفظ هنا التبويب المطلوب ويُرجع إليه متى ظهر في القائمة، ما لم ينتقل المستخدم بنفسه أو تمضِ 20 ثانية. */
@@ -268,7 +316,7 @@
   };
   /* النوافذ والقوائم التي تُفتح بعد العرض (نموذج الدفعة، كشف التحصيل…) */
   let q = false;
-  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { trimMonths(); titleIcon(); applyHome(); dupTitle(); markPaid(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
+  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { trimMonths(); titleIcon(); applyHome(); dupTitle(); markPaid(); homeLinks(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
     .observe(document.body, { childList: true, subtree: true });
   /* تكبير الشاشة أو تدويرها إلى العرض الضيق */
   window.matchMedia('(max-width:640px)').addEventListener?.('change', e => { if (e.matches) after(); });
