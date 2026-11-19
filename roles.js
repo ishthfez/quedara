@@ -99,7 +99,9 @@
     .replace(/<details class="pltools (pladd|plmore)">[\s\S]*?<\/details>/g, '')
     .replace(/<button[^>]*data-fee-place[^>]*>[\s\S]*?<\/button>/g, '')
     .replace(/<input type="checkbox" data-pl(sel|all)[^>]*>/g, '');
-  Object.assign(supervisorViews, { halaqat: gmHalaqat, teachers: gmTeachers });
+  /* المشرف: «العاملون» فيه تبويب «الغياب» وحده (العاملون والمرتبات للمدير والمدير العام) */
+  const supTeachers = () => `<div class="card subnav"><div class="bar" style="margin:0"><button type="button" class="btn on" data-subtab="absence" data-g="teachers">الغياب</button></div></div>` + supervisorViews.absence();
+  Object.assign(supervisorViews, { halaqat: gmHalaqat, teachers: () => (isGM() ? gmTeachers() : supTeachers()) });
   /* الإشعارات: زر «+ إشعار» للمدير العام متى أمكن الإرسال فعلًا (بلا خادم، أو بعد gmanager_role.sql) */
   const gmCanSend = () => !CLOUD || window.Cloud?.gmReady === true;
   document.addEventListener('DOMContentLoaded', () => {
