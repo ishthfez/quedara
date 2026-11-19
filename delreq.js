@@ -4,6 +4,7 @@
      وكذلك الطالب: زر «طلب حذف الطالب» في ملفه.
    - المدير: بطاقة «طلبات حذف بانتظار موافقتك» في الرئيسية (تظهر حين توجد طلبات)، لكل طلب «موافقة وحذف» و«رفض».
      الموافقة تفتح نافذة الحذف المعتادة، وبعد الحذف يُسجَّل القرار؛ والرفض بملاحظة اختيارية.
+   - المدير العام: البطاقة نفسها في رئيسيته للاطلاع (بلا موافقة ولا رفض)، ومعها بطاقة «الاشتراكات» كما في رئيسية المدير.
    - يصل المحاسبَ القرار في «الإعلانات». الخادم: supabase/del_requests.sql (والحذف المباشر فيه للمدير وحده).
    يُحمَّل بعد home.js. */
 (() => {
@@ -11,6 +12,9 @@
   const KIND = { place: 'المكان', halaqa: 'الحلقة', student: 'الطالب' };
   const isReq = () => session?.role === 'accountant';
   const isAdm = () => session?.role === 'admin' && !window.QLActAs?.();
+  /* المدير العام يطّلع على الطلبات في رئيسيته (القرار للمدير وحده): supabase/gmanager_role.sql يسمح له بقراءتها */
+  const isGM = () => session?.role === 'supervisor' && !!window.isGenSup?.(me());
+  const canSee = () => isAdm() || isGM();
   const L = () => (Array.isArray(db.delreqs) ? db.delreqs : (db.delreqs = []));
   const findT = (k, id) => (k === 'place' ? byId(db.places, id) : k === 'halaqa' ? byId(db.halaqat, id) : byId(db.students, id));
   const nameOf = (k, id) => { const t = findT(k, id); return !t ? '' : k === 'halaqa' ? halaqaLabel(t) : t.name; };
@@ -90,11 +94,12 @@
   async function load(force) {
     const who = session ? session.role + ':' + session.id : '';
     if (who !== R.who) { R.who = who; R.at = 0; R.list = []; }   // تبديل الحساب يعيد التحميل
-    if (!isAdm() || R.busy || (!force && Date.now() - R.at < 60000)) return;
+    if (!canSee() || R.busy || (!force && Date.now() - R.at < 60000)) return;
     R.busy = true;
+    const before = JSON.stringify(R.list);
     try { R.list = await api.list(); } catch (e) { R.list = []; }
     R.at = Date.now(); R.busy = false;
-    if (ui.tab === 'dash' && !document.querySelector('.overlay,.qinner')) render();
+    if (['dash', 'home'].includes(ui.tab) && !document.querySelector('.overlay,.qinner') && (isAdm() || JSON.stringify(R.list) !== before)) render();
   }
   /* بعد الموافقة: إذا حُذف العنصر فعلًا يُسجَّل القرار */
   async function settle() {
@@ -106,13 +111,14 @@
     }
   }
   const dt = s => String(s || '').slice(0, 10);
-  function card() {
+  /* view: للاطلاع (المدير العام): بلا «موافقة وحذف» و«رفض» */
+  function card(view) {
     if (!R.list.length) return '';
-    return `<div class="card qdelreq"><h3 style="margin:0 0 .6rem">طلبات حذف بانتظار موافقتك <span class="count">${R.list.length}</span></h3>
+    return `<div class="card qdelreq"><h3 style="margin:0 0 .6rem">${view ? 'طلبات حذف بانتظار موافقة المدير' : 'طلبات حذف بانتظار موافقتك'} <span class="count">${R.list.length}</span></h3>
       ${R.list.map(r => { const gone = !findT(r.kind, r.targetId);
         return `<div class="qdr"><div class="qdr-b"><b>${KIND[r.kind]} «${esc(r.targetName)}»</b>${gone ? ' <span class="tag">لم يعد موجودًا</span>' : ''}
           <div class="qdr-why">${esc(r.reason)}</div><small class="muted">من ${esc(r.requestedName || '—')} · ${dt(r.createdAt)}</small></div>
-          <div class="qdr-a"><button type="button" class="btn sm danger" data-drok="${esc(r.id)}">${gone ? 'إغلاق الطلب' : 'موافقة وحذف'}</button><button type="button" class="btn sm" data-drno="${esc(r.id)}">رفض</button></div></div>`; }).join('')}</div>`;
+          ${view ? '' : `<div class="qdr-a"><button type="button" class="btn sm danger" data-drok="${esc(r.id)}">${gone ? 'إغلاق الطلب' : 'موافقة وحذف'}</button><button type="button" class="btn sm" data-drno="${esc(r.id)}">رفض</button></div>`}</div>`; }).join('')}</div>`;
   }
   document.addEventListener('click', e => {
     if (!isAdm()) return;
@@ -139,6 +145,18 @@
       load(R.prevTab !== 'admin:dash'); setTimeout(settle, 0);   // عند فتح الرئيسية من صفحة أخرى: من الخادم مباشرة
       const c = card(); if (!c) return h;
       /* بعد مربع الإعلانات */
+      const i = h.indexOf('<div class="card qnhome">');
+      const end = i < 0 ? -1 : (() => { let d = 0, m; const re = /<div\b|<\/div>/g; re.lastIndex = i; while ((m = re.exec(h))) { d += m[0] === '</div>' ? -1 : 1; if (!d) return m.index + 6; } return -1; })();
+      return end > -1 ? h.slice(0, end) + c + h.slice(end) : c + h;
+    };
+    /* المدير العام: رئيسيته كرئيسية المدير في الاطلاع: بطاقة «الاشتراكات» بعد مربعات العدادات، وطلبات الحذف بعد الإشعارات */
+    const supHome = VIEWS.supervisor?.home;
+    if (supHome) VIEWS.supervisor.home = function () {
+      let h = supHome.apply(this, arguments);
+      if (!isGM() || typeof h !== 'string') return h;
+      try { if (window.QLFeeSummary) h += window.QLFeeSummary(db.students); } catch (e) { /* ignore */ }
+      load(false);
+      const c = card(true); if (!c) return h;
       const i = h.indexOf('<div class="card qnhome">');
       const end = i < 0 ? -1 : (() => { let d = 0, m; const re = /<div\b|<\/div>/g; re.lastIndex = i; while ((m = re.exec(h))) { d += m[0] === '</div>' ? -1 : 1; if (!d) return m.index + 6; } return -1; })();
       return end > -1 ? h.slice(0, end) + c + h.slice(end) : c + h;

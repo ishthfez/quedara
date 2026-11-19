@@ -235,8 +235,12 @@
   });
 
   /* ===== التطبيق على صفحة «الطلاب» لغير المدير ===== */
+  /* المدير العام: يرى ما يراه المدير في الصفحة (ومنه الاشتراكات: عمود «المستحق» وقسماها في ملف الطالب)،
+     بلا ما يكتب أو يغيّر (التحصيل والتذكير والإضافة والتعديل والحذف وحساب الدخول)؛ والحضور والتسميع للاطلاع (roles.js) */
+  const GM_HIDE = new Set(['colbtn', 'remindall', 'add', 'heads', 'r_pay', 'r_edit', 'r_extra', 'a_add', 'm_rem', 's_del', 's_edit', 's_assign', 's_login']);
   const myOn = it => {
     if (!session || session.role === 'admin') return true;
+    if (session.role === 'supervisor' && window.isGenSup?.(me())) return !GM_HIDE.has(it[0]);
     if (!CLOUD || window.QLActAs?.()) { const o = personOv(session.id, it); return o !== undefined ? o : roleOn(session.role, it); }   // «العمل بصفة»: المدير يقرأ الاختيارات كلها
     const mp = db.myPerms || [];
     return mp.includes(SET) ? mp.includes(PK(it[0])) : it[3].includes(session.role);
