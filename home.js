@@ -179,6 +179,19 @@
       /* «الحلقات والطلاب»: الطلاب المنتظمون وحدهم، والمعلمون العاملون وحدهم */
       const SET = { 'المعلمون': ['المعلمون العاملون', (db.teachers || []).filter(x => (x.admin || {}).status !== 'موقوف').length], 'الطلاب': ['الطلاب المنتظمون', db.students.filter(x => !stOff(x)).length] };
       t.content.querySelectorAll('.qdashcard .feerow').forEach(f => { const sp = f.querySelector('span'), b = f.querySelector('b'), v = sp && SET[sp.textContent.trim()]; if (v && b) { sp.textContent = v[0]; b.textContent = v[1]; } });
+      /* كل مجموعة عدادات في مربع: «الحلقات» (المعلمون والمشرفون والحلقات والأماكن)، و«الطلاب» (منتظمون ومنقطعون وبرنامج الإتقان)،
+         و«اليوم» (حضور اليوم وتسجيلات الأسبوع كما كانت) */
+      const old = [...t.content.children].find(c => c.classList.contains('qdashcard'));
+      if (old) {
+        const keep = l => [...old.querySelectorAll('.feerow')].find(f => f.querySelector('span')?.textContent.trim() === l)?.outerHTML || '';
+        const box3 = (title, rows) => `<div class="card qdashcard qhomecnt"><h3 style="margin:0 0 .8rem">${esc(title)}</h3><div class="qfrow">${rows.join('')}</div></div>`;
+        const offN = db.students.filter(x => stOff(x)).length;
+        const grid = document.createElement('div'); grid.className = 'qhgrid';
+        grid.innerHTML = box3('الحلقات', [row('fr-plain', 'المعلمون', SET['المعلمون'][1]), row('fr-plain', 'المشرفون', (db.supervisors || []).length), row('fr-plain', 'الحلقات', db.halaqat.length), row('fr-plain', 'الأماكن', db.places.length)])
+          + box3('الطلاب', [row('fr-ok', 'منتظمون', SET['الطلاب'][1]), row(offN ? 'fr-no' : 'fr-plain', 'منقطعون', offN), row('fr-plain qsoon', 'برنامج الإتقان', '—')])
+          + (keep('حضور اليوم') || keep('تسجيلات الأسبوع') ? box3('اليوم', [keep('حضور اليوم'), keep('تسجيلات الأسبوع')]) : '');
+        old.replaceWith(grid);
+      }
       return box('admin') + t.innerHTML;
     };
   });
@@ -194,6 +207,9 @@
     .qnl .qn-tag{flex:none;margin:0}.qnl .tag-ok{flex:none}
     .qnl-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .qnl-d{flex:none;color:var(--muted,#777);font-size:.8rem}
-    @media (max-width:600px){.qnl-d{display:none}}`;
+    @media (max-width:600px){.qnl-d{display:none}}
+    .qhgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:0 1rem;margin:0 0 1rem}.qhgrid>.card{margin:0 0 1rem}
+    .qhgrid .qfrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:.5rem}
+    .qhgrid .qfpct{grid-column:1/-1}.feerow.qsoon{opacity:.6}`;
   document.head.appendChild(css);
 })();
