@@ -94,8 +94,8 @@
   const css = document.createElement('style');
   css.textContent = '.memview .ttltag{display:none}'; // لا مسميات أخرى بجانب أسماء المحاسبين
   document.head.appendChild(css);
-  const KINDS = [['teachers', 'المعلمون'], ['students', 'الطلاب'], ['supervisors', 'المشرفون'], ['accountants', 'المحاسبون'], ['placeadmins', 'الإداريون'], ['admins', 'المديرون']];
-  const STAFF_KINDS = [['admins', 'مدير'], ['supervisors', 'مشرف'], ['teachers', 'معلم'], ['accountants', 'محاسب'], ['placeadmins', 'إداري']];
+  const KINDS = [['teachers', 'المعلمون'], ['students', 'الطلاب'], ['supervisors', 'المشرفون'], ['accountants', 'المحاسبون'], ['placeadmins', 'الإداريون'], ['admins', 'Admin']];
+  const STAFF_KINDS = [['admins', 'Admin'], ['supervisors', 'مشرف'], ['teachers', 'معلم'], ['accountants', 'محاسب'], ['placeadmins', 'إداري']];
   const empOfMember = id => { const c = clsRead(); const eid = Object.keys(c).find(k => c[k]?.memberId === id); return eid ? payEmps().find(e => e.id === eid) : null; };
   const typeOf = (k, l, m) => k === 'supervisors' && isGenSup(m) ? 'مدير عام' : l;
   /* «مدير عام»: فئة مستقلة أعلى من المشرفين (على الخادم: مشرف نطاقه «الكل»، فصلاحياته صلاحيات المشرف العام نفسها) */
@@ -125,7 +125,7 @@
         <td>${x.k === 'supervisors' || x.k === 'placeadmins' ? `<button type="button" class="btn sm" data-act="memScope" data-id="${esc(x.m.id)}" data-k="${x.k}">النطاق</button>` : ''}<button type="button" class="btn sm" data-act="editName" data-id="${esc(x.m.id)}" data-k="${x.k}">الاسم</button></td></tr>`; }).join('');
     const cnt = k => list.filter(x => x.k === k).length;
     const gmN = list.filter(x => x.k === 'supervisors' && isGenSup(x.m)).length;
-    return `<div class="note">كل العاملين عدا الطلاب${cnt('admins') ? `: ${cnt('admins')} مدير،` : ':'} ${gmN ? `${gmN} مدير عام، ` : ''}${cnt('supervisors') - gmN} مشرف، ${cnt('teachers')} معلم، ${cnt('accountants')} محاسب، ${cnt('placeadmins')} إداري. للإضافة والحذف والإجراءات الجماعية اختر الفئة من القائمة. حساب المدير (حساب النظام) في «المديرون».</div>
+    return `<div class="note">كل العاملين عدا الطلاب${cnt('admins') ? `: ${cnt('admins')} Admin،` : ':'} ${gmN ? `${gmN} مدير عام، ` : ''}${cnt('supervisors') - gmN} مشرف، ${cnt('teachers')} معلم، ${cnt('accountants')} محاسب، ${cnt('placeadmins')} إداري. للإضافة والحذف والإجراءات الجماعية اختر الفئة من القائمة. حساب Admin (حساب النظام) في «Admin».</div>
       ${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الاسم</th><th>الصفة</th><th>الوظيفة في المرتبات</th><th>المكان</th><th>الحساب</th><th></th></tr>${rows}</table></div>` : empty('لا يوجد موظفون بعد.')}`;
   }
   function withScope(h, kind0) {
@@ -192,7 +192,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     /* أنواع التصنيف بالترتيب، و«مدير» آخرها */
     delete CLS_ROLES.admin;
-    Object.assign(CLS_ROLES, { accountant: 'محاسب', placeadmin: 'إداري', admin: 'مدير' });
+    Object.assign(CLS_ROLES, { accountant: 'محاسب', placeadmin: 'إداري', admin: 'Admin' });
     Object.assign(PASS_PREFIX, { placeadmin: 'padm', placeadmins: 'padm' });
     KIND_TITLE.placeadmins = 'الإداريون';
 
@@ -224,7 +224,7 @@
       const auto = sug.filter(([e, s]) => s && s.kind !== 'admin' && e.status !== 'متوقف').length;
       const rows = sug.map(([e, s], i) => `<tr><td>${i + 1}</td><td>${esc(e.name)}${e.status === 'متوقف' ? ' <span class="tag">متوقف</span>' : ''}</td><td>${esc(e.role || '—')}</td><td class="muted" style="font-size:.85rem">${s ? (s.existing ? `يوجد ${CLS_ROLES[s.kind]} بنفس الاسم` : `المقترح: ${s.kind === 'supervisor' && /عام/.test(e.role || '') ? 'مدير عام' : esc(CLS_ROLES[s.kind])}`) : ''}</td><td><select class="mini" data-cls="${esc(e.id)}" aria-label="تصنيف ${esc(e.name)}">${opts()}</select></td></tr>`).join('');
       return `<div class="card">${bar}
-        <div class="note">موظفو المرتبات يظهرون هنا تلقائيًا. اختر نوع حساب كل واحد: <b>معلم</b> أو <b>مشرف</b> أو <b>محاسب</b> أو <b>إداري</b> (في مكان) فيُنشأ له عضو بهذا النوع (أو يُربط بالموجود بنفس الاسم)، و<b>مدير</b> يأخذ صلاحيات كاملة. الوظيفة في المرتبات «مشرف عام» أو «مدير عام» تجعله مديرًا عامًا يرى كل الحلقات.</div>
+        <div class="note">موظفو المرتبات يظهرون هنا تلقائيًا. اختر نوع حساب كل واحد: <b>معلم</b> أو <b>مشرف</b> أو <b>محاسب</b> أو <b>إداري</b> (في مكان) فيُنشأ له عضو بهذا النوع (أو يُربط بالموجود بنفس الاسم)، و<b>Admin</b> يأخذ صلاحيات كاملة. الوظيفة في المرتبات «مشرف عام» أو «مدير عام» تجعله مديرًا عامًا يرى كل الحلقات.</div>
         ${un.length ? `<div class="bar"><span class="grow muted">${un.length} موظف بلا تصنيف</span><button class="btn" data-act="dupOpen">الأسماء المتشابهة</button>${auto ? `<button class="btn primary" data-act="clsAuto">تصنيف تلقائي حسب الوظيفة (${auto})</button>` : ''}</div>
         <div class="tbl"><table><tr><th>#</th><th>الاسم</th><th>الوظيفة في المرتبات</th><th></th><th>التصنيف</th></tr>${rows}</table></div>` : empty('كل موظفي المرتبات مصنّفون ✓')}</div>`;
     };
@@ -249,7 +249,7 @@
       const list = payEmps().filter(e => !clsOf(e) && e.status !== 'متوقف').map(e => [e, clsSuggest(e)]).filter(([, s]) => s && s.kind !== 'admin');
       if (!list.length) { toast('لا يوجد تصنيف مقترح'); return; }
       const parts = Object.keys(CLS_ROLES).map(k => [list.filter(([, s]) => s.kind === k).length, CLS_ROLES[k]]).filter(([n]) => n).map(([n, l]) => `${n} ${l}`);
-      ask(`تصنيف ${list.length} موظفًا حسب وظيفتهم في المرتبات: ${parts.join('، و')}؟ لن يُصنَّف أحد «مدير» تلقائيًا، ويبقى الموظفون المتوقفون لتصنّفهم بنفسك.`, () => {
+      ask(`تصنيف ${list.length} موظفًا حسب وظيفتهم في المرتبات: ${parts.join('، و')}؟ لن يُصنَّف أحد «Admin» تلقائيًا، ويبقى الموظفون المتوقفون لتصنّفهم بنفسك.`, () => {
         let n = 0;
         list.forEach(([e, s]) => { if (classifyEmp(e.id, s.kind, true)) n++; });
         save(); render(); toast(`تم تصنيف ${list.length} موظفًا${n ? ` (${n} عضو جديد)` : ''}${CLOUD && n ? ' — أنشئ حسابات الدخول من فئات الأعضاء' : ''}`);
