@@ -55,7 +55,7 @@ function refresh() { return refreshing || (refreshing = doRefresh().finally(() =
 async function doRefresh() {
   const old = auth?.access_token;
   syncAuth();
-  if (auth?.access_token !== old) return;   // جُدِّدت في تبويب آخر: نستعمل رمزه
+  if (auth?.access_token !== old) return;   // جُدِّدت في تبويب آخر: نستعمل رمزه
   const r = await fetch(`${CFG.url}/auth/v1/token?grant_type=refresh_token`, {
     method: 'POST', headers: { apikey: CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: auth.refresh_token })
   });
@@ -308,19 +308,29 @@ function notePhoto(r, incremental) {
   else if (incremental || photoCache.get(r.id) === '') { photoCache.delete(r.id); photoSent.delete(r.id); }
 }
 /* غير المدير لا يُنزّل إلا نطاقه: حلقاته وطلابها وأسماء العاملين معه (والمشرف كل الأماكن لنموذج الغياب) */
-const inList = a => '(' + (a || []).join(',') + ')';
-function scopeFilter(t, chk) {
-  if (!chk?.hal) return '';
-  if (t === 'members') return '&id=in.' + inList([...new Set([...(chk.ids || []), ...(chk.stu || [])])]);
-  if (t === 'halaqat') return '&id=in.' + inList(chk.hal);
-  if (t === 'places' && !chk.sup) return '&id=in.' + inList(chk.pl);
-  if (t === 'member_admin') return '&member_id=in.' + inList(chk.me);
-  return '';
+/* نطاق الجدول: [العمود، المعرّفات] أو null (بلا تقييد) */
+function scopeOf(t, chk) {
+  if (!chk?.hal) return null;
+  if (t === 'members') return ['id', [...new Set([...(chk.ids || []), ...(chk.stu || [])])]];
+  if (t === 'halaqat') return ['id', chk.hal];
+  if (t === 'places' && !chk.sup) return ['id', chk.pl];
+  if (t === 'member_admin') return ['member_id', chk.me];
+  return null;
+}
+/* المعرّفات تُرسل في الرابط: مشرف له مئات الطلاب كان رابطه يتجاوز حد الخادم فتفشل مزامنته كلها.
+   تُقسَّم إلى دفعات (150 معرّفًا ≈ 5.6 كيلوبايت في الرابط) وتُجمع نتائجها */
+const SCOPE_CHUNK = 150;
+function selectScoped(t, order, filter, cols, sc) {
+  if (!sc) return selectAll(t, order, filter, cols);
+  const [col, ids] = sc, list = [...new Set(ids || [])];
+  if (!list.length) return selectAll(t, order, filter + `&${col}=in.()`, cols);
+  const parts = []; for (let i = 0; i < list.length; i += SCOPE_CHUNK) parts.push(list.slice(i, i + SCOPE_CHUNK));
+  return Promise.all(parts.map(p => selectAll(t, order, filter + `&${col}=in.(${p.join(',')})`, cols))).then(r => r.flat());
 }
 const sameSet = (a, b) => { a = a || []; b = b || []; if (a.length !== b.length) return false; const s = new Set(a); return b.every(x => s.has(x)); };
 async function fetchTables(tables, filter = '', chk = null) {
   const got = await Promise.all(tables.map(t => {
-    const p = selectAll(t, SYNC_TABLES[t].join(','), filter + scopeFilter(t, chk), t === 'members' && inc ? MEMBER_COLS : '*');
+    const p = selectScoped(t, SYNC_TABLES[t].join(','), filter, t === 'members' && inc ? MEMBER_COLS : '*', scopeOf(t, chk));
     /* جدول الاشتراكات قد لا يكون أُنشئ بعد: لا يعطّل ذلك بقية المزامنة */
     if (t === 'fees') return p.then(r => { feesOk = true; return r; }, () => { feesOk = false; return []; });
     if (t === 'news') { if (newsExt === null) probeNews(); return p.then(r => { if (r.length) newsExt = 'prio' in r[0]; return r; }); }
@@ -335,10 +345,24 @@ const backMinute = ts => new Date(new Date(ts).getTime() - 60000).toISOString();
    والإرسال الذي يبدأ أثناء السحب يُؤجَّل حتى ينتهي، ثم يُرسل بيانات الجهاز الحالية لا نسخة قديمة منها. */
 let pulling = false;
 const curDb = d => { try { return typeof db !== 'undefined' && db ? db : d; } catch (e) { return d; } };
+/* الحفاظ على ما لم يُرسل بعد: من يستدعي السحب يضع نتيجته مكان بيانات الجهاز، فتُعاد بيانات الجهاز نفسها بدل نسخة الخادم
+   - إن بقيت تغييرات لم تُرسل (انقطاع أو خطأ مؤقت في الخادم) لا يُسحب شيء؛ وبعد رفض صريح من الخادم يُسحب كالعادة.
+   - وإن سُجّل تعديل أثناء السحب تبقى بيانات الجهاز وآخر نسخة مؤكدة (snap) كما كانت، فيُرسل التعديل ويأتي الجديد في السحب التالي. */
+let editSeq = 0, localNewer = false, rejected = false;
 async function pull() {
   for (let i = 0; pushing && i < 600; i++) await new Promise(r => setTimeout(r, 50));
+  localNewer = false;
+  const cur0 = curDb(null);
+  if (cur0 && auth && snap && !rejected && diff(cur0).length) { localNewer = true; later(cur0, 5000); return cur0; }
   pulling = true;
-  try { return await pullInner(); } finally { pulling = false; }
+  const seq = editSeq, prevSnap = snap;
+  try {
+    const d = await pullInner();
+    rejected = false;
+    const cur = curDb(null);
+    if (editSeq !== seq && prevSnap && cur) { localNewer = true; snap = prevSnap; saveLocal(cur); later(cur, 300); return cur; }
+    return d;
+  } finally { pulling = false; }
 }
 async function pullInner() {
   /* هل يعرف الخادم نوع «المدير العام»؟ يُفحص مرة قبل أول إرسال (حتى لا يُرجَع المدير العام مشرفًا على الخادم ولا يُرسل نوع لا يقبله) */
@@ -369,8 +393,10 @@ async function pullInner() {
   else if (mode === 'inc') {
     const now = scoped ? chk.now : await rpc('sync_now'), f = '&sync_ts=gt.' + encodeURIComponent(since);
     const want = scoped ? tables.filter(t => chk.tables.includes(t)) : tables;
-    const tombF = '&at=gt.' + encodeURIComponent(since) + (chk?.hal ? `&or=(tbl.in.(settings,news,custom_fields${chk.sup ? ',places,absences' : ''}),scope.ov.${encodeURIComponent('{' + [...(chk.ids || []), ...(chk.stu || []), ...chk.hal, ...(chk.pl || [])].join(',') + '}')})` : '');
-    const [got, tomb] = await Promise.all([fetchTables(want, f, chk), !scoped || chk.tables.includes('deleted') ? selectAll('sync_deleted', 'rev', tombF) : []]);
+    /* المحذوفات منذ آخر مزامنة بلا قائمة معرّفات في الرابط (كانت تتجاوز حده للمشرف كثير الطلاب):
+       حذف ما ليس عند المستخدم أصلًا لا أثر له، فلا حاجة لتصفيتها بنطاقه */
+    const tombF = '&at=gt.' + encodeURIComponent(since);
+    const [got, tomb] = await Promise.all([fetchTables(want, f, chk), !scoped || chk.tables.includes('deleted') ? selectAll('sync_deleted', 'rev', tombF, 'tbl,pk') : []]);
     lastChanged = false;
     /* المحذوفات أولًا ثم الصفوف: ما يُرجعه الخادم الآن موجود فعلًا (ولو حُذف ثم أُعيد في الدقيقة نفسها، كما في الاسترجاع) */
     for (const d of tomb) { const m = raw[d.tbl]; if (m && m.delete(SYNC_TABLES[d.tbl].map(c => d.pk[c]).join('|'))) lastChanged = true; }
@@ -399,7 +425,9 @@ async function pullInner() {
     else if (db[ROLE_COLL[m.role]]) db[ROLE_COLL[m.role]].push({ ...base, info: m.info || {} }); // المدير والمشرف والمحاسب: بياناتهم الإضافية (مثل مسمى الموظف) تبقى ولا تُمسح عند التعديل
   });
   /* حساب محفوظ من قبل أن يصير صاحبه «مديرًا عامًا» على الخادم: يُعرف نوعه الحقيقي فتجلب المزامنة التالية ما يخصه */
-  if (auth?.member && auth.member.role === 'supervisor' && !auth.member.srvRole && GM_IDS.has(auth.member.id)) { auth.member = { ...auth.member, srvRole: 'gmanager' }; LS.set(AKEY, auth); raw = null; }
+  /* تُصفَّر نسخة الصفوف في آخر هذه الدالة لا هنا: ما بعدها يقرأ raw (كان تصفيرها هنا يعطّل هذه المزامنة كلها) */
+  const becameGM = !!(auth?.member && auth.member.role === 'supervisor' && !auth.member.srvRole && GM_IDS.has(auth.member.id));
+  if (becameGM) { auth.member = { ...auth.member, srvRole: 'gmanager' }; LS.set(AKEY, auth); }
   db.halaqat = halaqat.map(h => ({ id: h.id, name: h.name || '', teacherId: h.teacher_id || '', supervisorId: h.supervisor_id || '', placeId: h.place_id || '', time: h.time || undefined }));
   db.attendance = attendance.map(a => ({ id: a.id, studentId: a.student_id, date: a.date, status: a.status }));
   db.records = records.map(r => ({ id: r.id, studentId: r.student_id, date: r.date, type: r.type, surah: r.surah, from: r.from_ayah, to: r.to_ayah, grade: r.grade || '', note: r.note || '' }));
@@ -454,7 +482,8 @@ async function pullInner() {
     db.myPerms = raw.perms;
   }
   if (mode !== 'none' || !snap) { snap = snapshotOf(db); saveLocal(db); }
-  if (inc && scoped) { if (mode !== 'none' || lastChanged) saveRaw(); else saveRawMeta(); }
+  if (becameGM) raw = null;   // المزامنة التالية جلب كامل بنوعه الحقيقي
+  else if (inc && scoped) { if (mode !== 'none' || lastChanged) saveRaw(); else saveRawMeta(); }
   lastSync = new Date(); lastError = ''; emit();
   return db;
 }
@@ -540,7 +569,7 @@ function patchRaw(gr, rows, dels) {
 }
 async function push(db) {
   if (!auth || !snap) return;
-  if (pulling) { schedule(db, 400); return; }
+  if (pulling) { later(db, 400); return; }
   if (pushing) { again = true; return; }
   pushing = true; emit();
   try {
@@ -587,14 +616,17 @@ async function push(db) {
     lastError = e.message || String(e);
     if (e instanceof HttpError && e.status >= 400 && e.status < 500 && e.status !== 401) {
       // رفض من الخادم (صلاحية أو قيد): نعيد تحميل الحقيقة من الخادم حتى لا تبقى نسخة متعارضة
-      emit(); throw e;
+      rejected = true; emit(); throw e;
     }
   } finally {
     pushing = false; emit();
-    if (again) { again = false; schedule(db, 300); }
+    if (again) { again = false; later(db, 300); }
   }
 }
-function schedule(db, ms = 800) { clearTimeout(timer); timer = setTimeout(() => push(curDb(db)).catch(err => onReject?.(err)), ms); }
+function later(db, ms = 800) { clearTimeout(timer); timer = setTimeout(() => push(curDb(db)).catch(err => onReject?.(err)), ms); }
+/* من خارج هذا الملف: كل حفظ في التطبيق يمر من هنا، فيُعرف أن البيانات تغيّرت على الجهاز (ولو أثناء سحب) */
+function schedule(db, ms = 800) { editSeq++; later(db, ms); }
+function pushExt(db) { if (pulling) editSeq++; return push(db); }
 let onReject = null;
 
 /* ---------------- النسخة المحلية ---------------- */
@@ -652,9 +684,11 @@ window.Cloud = {
   get lastError() { return lastError; },
   get lastSync() { return lastSync; },
   cfg: CFG, uuid, isUuid, ensureUuids, emptyDb, snapshotOf,
-  signIn, reauth, signOut, lookup, setMember, pull, push, schedule, pendingCount, cached, saveLocal, loadLocal, ready, publicSettings,
+  signIn, reauth, signOut, lookup, setMember, pull, push: pushExt, schedule, pendingCount, cached, saveLocal, loadLocal, ready, publicSettings,
   provision, fn, rpc, req, selectAll,
   get lastChanged() { return lastChanged; },
+  /* آخر سحب جاء وبيانات الجهاز فيها تعديل لم يُرسل بعد: تبقى بيانات الجهاز */
+  get localNewer() { return localNewer; },
   get gmReady() { return gmReady; },
   get incremental() { return inc; },
   get feesReady() { return feesOk; },
