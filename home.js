@@ -152,6 +152,15 @@
     }
     if (r === 'supervisor') {
       const ab = ((db.payroll || {}).absences || []).filter(a => String(a.date || '').startsWith(d.mon)).length;
+      /* المدير العام: مربعات كما عند Admin («الحلقات» و«الطلاب» و«اليوم») على نطاقه (كل الحلقات) */
+      if (isGM() || me()?.info?.scope === 'all') {
+        const offN = d.S.length - d.on.length, ids = new Set(d.H.map(h => h.teacherId).filter(Boolean)), sups = new Set(d.H.map(h => h.supervisorId).filter(Boolean));
+        const tN = (db.teachers || []).filter(x => ids.has(x.id) && (x.admin || {}).status !== 'موقوف').length || ids.size;
+        const b = (title, rows) => `<div class="card qdashcard qhomecnt"><h3 style="margin:0 0 .8rem">${esc(title)}</h3><div class="qfrow">${rows.join('')}</div></div>`;
+        return `<div class="qhgrid">${b('الحلقات', [row('fr-plain', 'المعلمون', tN), row('fr-plain', 'المشرفون', Math.max(sups.size, (db.supervisors || []).length)), row('fr-plain', 'الحلقات', d.H.length), row('fr-plain', 'الأماكن', new Set(d.H.map(h => h.placeId).filter(Boolean)).size)])}
+          ${b('الطلاب', [row('fr-ok', 'منتظمون', d.on.length), row(offN ? 'fr-no' : 'fr-plain', 'منقطعون', offN), row('fr-plain qsoon', 'برنامج الإتقان', '—')])}
+          ${b('اليوم', [att, row(d.halDone < d.H.length ? 'fr-no' : 'fr-ok', 'حلقات سُجّل حضورها اليوم', `${d.halDone} من ${d.H.length}`), row('fr-info', 'تسميع اليوم', d.recT), row('fr-plain', 'غياب المعلمين هذا الشهر', ab), row(wait ? 'fr-no' : 'fr-ok', 'طلبات نقل بانتظار موافقتك', wait)])}</div>`;
+      }
       return card('حلقاتي', [row('fr-plain', 'الحلقات', d.H.length), row('fr-plain', 'الطلاب المنتظمون', d.on.length), att],
         [row(d.halDone < d.H.length ? 'fr-no' : 'fr-ok', 'حلقات سُجّل حضورها اليوم', `${d.halDone} من ${d.H.length}`), row('fr-info', 'تسميع اليوم', d.recT), row('fr-plain', 'غياب المعلمين هذا الشهر', ab), row(wait ? 'fr-no' : 'fr-ok', 'طلبات نقل بانتظار موافقتك', wait)]);
     }
