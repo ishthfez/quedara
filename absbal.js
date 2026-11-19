@@ -18,8 +18,8 @@
 
   let adjAt = 0, adjBusy = false, ADJ = null;
   /* كل مزامنة تعيد بناء db.payroll للمشرف (cloud.js) بلا التعديلات، فتُعاد إليه بعدها */
-  /* «الغياب» قسم مستقل عند المشرف، وتبويب في «العاملون» عند المدير العام (nav.js: QLView) */
-  const onAbs = () => ui.tab === 'absence' || (typeof window.QLView === 'function' && window.QLView() === 'absence');
+  /* «الغياب» قسم مستقل عند المشرف، وتبويب في «العاملون» عند المدير العام (التبويب المختار ظاهر في الصفحة) */
+  const onAbs = () => ui.tab === 'absence' || (ui.tab === 'teachers' && !!document.querySelector('main [data-subtab="absence"].on'));
   const putAdj = () => { const s = db.payroll?.settings; if (ADJ && s && s.lvAdj !== ADJ) s.lvAdj = ADJ; };
   async function freshAdj() {
     if (typeof CLOUD === 'undefined' || !CLOUD || session?.role !== 'supervisor' || adjBusy || Date.now() - adjAt < 120000 || !window.Cloud?.signedIn) return;
