@@ -355,10 +355,20 @@
       if (cols > 1 && F.length % cols === 1) F[F.length - 1].style.gridColumn = '1 / -1';
     });
   }
-  let evT = 0; window.addEventListener('resize', () => { clearTimeout(evT); evT = setTimeout(() => { try { evenCounters(); } catch (e) { /* ignore */ } }, 120); });
+  /* مربعات «الرئيسية» (الحلقات، الطلاب، اليوم…): المربع الذي بقي وحده في سطره وبجانبه فراغ يمتد ليملأ السطر،
+     ومتى جاءه مربع آخر في سطره عاد إلى حجمه بجانبه */
+  function spanLone() {
+    document.querySelectorAll('main .qhgrid').forEach(g => {
+      const K = [...g.children].filter(c => c.style.display !== 'none' && c.offsetParent !== null);
+      K.forEach(c => { c.style.gridColumn = ''; });
+      const cols = (getComputedStyle(g).gridTemplateColumns || '').split(' ').filter(Boolean).length;
+      if (cols > 1 && K.length % cols === 1) K[K.length - 1].style.gridColumn = '1 / -1';
+    });
+  }
+  let evT = 0; window.addEventListener('resize', () => { clearTimeout(evT); evT = setTimeout(() => { try { spanLone(); evenCounters(); } catch (e) { /* ignore */ } }, 120); });
   function homeLinks() {
     if (!session || !['home', 'dash'].includes(ui.tab)) return;
-    evenCounters();
+    spanLone(); evenCounters();
     document.querySelectorAll('main .feerow:not([data-qgo])').forEach(f => {
       const l = (f.querySelector('span')?.textContent || '').trim();
       if (!usable(target(l))) return;
