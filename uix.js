@@ -6,7 +6,8 @@
       يُحفظ مع الصلاحيات (priv_perms.roles[الفئة]['ui.home.hide.اسم العداد'] = true)، فيصل كل مستخدم ما يخصه من الخادم
       عبر my_perms كبقية الصلاحيات، بلا تعديل على الخادم. للعرض فقط.
    4) جدول «الطلاب» على الهاتف: بطاقة لكل طالب (الاسم والأزرار، ثم الحلقة والحالة، ثم آخر حفظ).
-   5) «الطلاب»: لا يتكرر اسم الصفحة عنوانًا للبطاقة. */
+   5) «الطلاب»: لا يتكرر اسم الصفحة عنوانًا للبطاقة.
+   6) مواعيد الحلقات مختصرة في كل التطبيق (timeText). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./uix.js')) VFILES.push('./uix.js'); } catch (e) { /* ignore */ } });
 
@@ -181,6 +182,18 @@
       if (x.textContent.trim() === t) h.classList.add('qdupttl');
     });
   }
+
+  /* ===== 6) مواعيد الحلقات مختصرة في كل التطبيق: «المغرب - العشاء»، «12:00 - 05:00» (بدل «من بعد صلاة … إلى صلاة …») ===== */
+  const hh = t => { if (!t) return ''; const [H, M] = String(t).split(':').map(Number); return `${String(((H + 11) % 12) + 1).padStart(2, '0')}:${String(M || 0).padStart(2, '0')}`; };
+  try {
+    timeText = function (h) {
+      const w = h?.time;
+      if (!w) return h?.schedule || '';
+      if (w.mode === 'clock') return w.from && w.to ? `${hh(w.from)} - ${hh(w.to)}` : '';
+      const to = w.toKind === 'clock' ? hh(w.toTime) : (w.toPrayer || '');
+      return w.fromPrayer ? (to ? `${w.fromPrayer} - ${to}` : `بعد ${w.fromPrayer}`) : '';
+    };
+  } catch (e) { /* ignore */ }
 
   const css = document.createElement('style');
   css.textContent = `@media screen{main .bar > h2.qdupttl{display:none}}
