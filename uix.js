@@ -12,7 +12,8 @@
    8) إعادة تحميل الصفحة لا تعيد المستخدم إلى «الرئيسية»، بل إلى صفحته.
    9) زر «تحصيل» بعلامة صح خضراء لمن سدّد اشتراك الشهر المعروض (ويبقى قابلًا للضغط).
    10) عدادات «الرئيسية» قابلة للضغط: نافذة بالتفاصيل أو الصفحة المعنية.
-   11) «الطلاب»: المكان والحلقة لا يظهران لمن له مكان واحد أو حلقة واحدة. */
+   11) «الطلاب»: المكان والحلقة لا يظهران لمن له مكان واحد أو حلقة واحدة.
+   12) «السجل» (الحضور والتسميع) يُسمّى «سجل الإنجاز». */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./uix.js')) VFILES.push('./uix.js'); } catch (e) { /* ignore */ } });
 
@@ -243,6 +244,25 @@
   };
   new MutationObserver(ms => { try { ms.forEach(m => m.addedNodes.forEach(relabel)); } catch (e) { /* ignore */ } }).observe(document.documentElement, { childList: true, subtree: true });
 
+  /* ===== 12) «السجل» (الحضور والتسميع) يُسمّى «سجل الإنجاز»: تبويب الطالب، وزر صف الطالب، ونافذته، وصلاحياته ===== */
+  const HIST = 'سجل الإنجاز';
+  const histTabs = () => { try { Object.values(TABS).forEach(l => (l || []).forEach(t => { if (t[0] === 'hist') t[1] = HIST; })); } catch (e) { /* ignore */ } };
+  histTabs();
+  document.addEventListener('DOMContentLoaded', () => {
+    histTabs();
+    try { A.hist = d => openInfo(HIST + ': ' + sName(d.id), historyTable(d.id)); } catch (e) { /* ignore */ }
+    /* صفحة الطالب: اسمها في الشريط العلوي، فلا يتكرر عنوانًا للبطاقة */
+    try { studentViews.hist = () => `<div class="card">${historyTable(session.id)}</div>`; } catch (e) { /* ignore */ }
+    try { (window.QLStuPerm?.ITEMS || []).forEach(i => { if (i[0] === 'r_hist' || i[0] === 'a_hist') i[1] = HIST; }); } catch (e) { /* ignore */ }
+  });
+  function histLabels() {
+    document.querySelectorAll('[data-act="hist"]').forEach(b => {
+      ['title', 'aria-label'].forEach(a => { const v = b.getAttribute(a); if (v && /^السجل/.test(v)) b.setAttribute(a, HIST); });
+      b.childNodes.forEach(n => { if (n.nodeType === 3 && n.nodeValue.trim() === 'السجل') n.nodeValue = HIST; });
+      b.querySelectorAll('.qsc-ml').forEach(s => { if (/^السجل/.test(s.textContent)) s.textContent = HIST; });
+    });
+  }
+
   const css = document.createElement('style');
   css.textContent = `@media screen{main .bar > h2.qdupttl{display:none}}
     body.qtab-stu main .card.feecard{display:none!important}
@@ -375,7 +395,7 @@
       [...tbl.rows].forEach(r => ix.forEach(i => { const c = r.cells[i]; if (c && c.style.display !== 'none') c.style.display = 'none'; }));
     });
   }
-  const after = () => { try { titleIcon(); applyHome(); trimMonths(); dupTitle(); markPaid(); homeLinks(); scopeTrim(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
+  const after = () => { try { histLabels(); titleIcon(); applyHome(); trimMonths(); dupTitle(); markPaid(); homeLinks(); scopeTrim(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
   /* ===== 8) إعادة تحميل الصفحة تُبقي المستخدم في الصفحة نفسها =====
      التبويب محفوظ في المتصفح (halaqat_tab)، لكن أول عرض بعد التحميل يأتي قبل اكتمال قائمة الحساب (الصلاحيات، صفحة «الطلاب» للعاملين…)
      فيُعاد إلى «الرئيسية». يُحفظ هنا التبويب المطلوب ويُرجع إليه متى ظهر في القائمة، ما لم ينتقل المستخدم بنفسه أو تمضِ 20 ثانية. */
@@ -396,7 +416,7 @@
   };
   /* النوافذ والقوائم التي تُفتح بعد العرض (نموذج الدفعة، كشف التحصيل…) */
   let q = false;
-  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { trimMonths(); titleIcon(); applyHome(); dupTitle(); markPaid(); homeLinks(); scopeTrim(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
+  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { histLabels(); trimMonths(); titleIcon(); applyHome(); dupTitle(); markPaid(); homeLinks(); scopeTrim(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
     .observe(document.body, { childList: true, subtree: true });
   /* تكبير الشاشة أو تدويرها إلى العرض الضيق */
   window.matchMedia('(max-width:640px)').addEventListener?.('change', e => { if (e.matches) after(); });
