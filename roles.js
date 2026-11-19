@@ -65,6 +65,35 @@
     ${sts.length ? `<div class="tbl"><table><tr><th>الطالب</th><th>آخر حفظ</th><th>الحضور</th><th></th></tr>${sts.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(lastHifz(s.id))}</td><td>${attRate(s.id)}</td><td><button class="btn sm primary" data-act="rec" data-id="${s.id}">تسجيل تسميع</button><button class="btn sm" data-act="hist" data-id="${s.id}">السجل</button><button class="btn sm" data-act="studentCard" data-id="${s.id}">الملف</button></td></tr>`).join('')}</table></div>` : empty('لا يوجد طلاب في هذه الحلقة.')}</div>`;
   };
 
+  /* ===== المدير العام: صفحات الاطلاع (يرى كل شيء ولا يعدّل؛ الخادم يفرض ذلك بعد supabase/gmanager_role.sql) =====
+     تُضاف إلى قائمته بعد صفحات المشرف (stuview.js). ويرسل الإشعارات متى أمكن إرسالها فعلًا. */
+  const isGM = () => session?.role === 'supervisor' && isGenSup(me());
+  window.QLGMTabs = [['gm_halaqat', 'الحلقات'], ['gm_staff', 'العاملون']];
+  /* الحلقات للاطلاع: قسم المدير نفسه بلا أزرار الإضافة والتعديل والحذف (كما عند المحاسب) */
+  const gmHalaqat = () => adminViews.halaqat()
+    .replace(/<button class="btn[^"]*" data-act="(addPlace|addHalaqa|editPlace|delPlace|editHalaqa|delHalaqa)"[^>]*>[^<]*<\/button>/g, '')
+    .replace(/<details class="pltools (pladd|plmore)">[\s\S]*?<\/details>/g, '')
+    .replace(/<button[^>]*data-fee-place[^>]*>[\s\S]*?<\/button>/g, '')
+    .replace(/<input type="checkbox" data-pl(sel|all)[^>]*>/g, '');
+  /* العاملون للاطلاع: الاسم والصفة والوظيفة والمكان (بلا أزرار الحساب والنطاق والاسم) */
+  const gmStaff = () => {
+    const list = staffList();
+    return `<div class="card"><p class="muted" style="margin-top:0">${list.length} من العاملين (للاطلاع).</p>${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الاسم</th><th>الصفة</th><th>الوظيفة في المرتبات</th><th>المكان</th></tr>${list.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.m.name)}${x.emp?.status === 'متوقف' ? ' <span class="tag tag-no">متوقف</span>' : ''}</td><td>${esc(x.type)}</td><td>${esc(x.emp?.role || '—')}</td><td>${esc(placeTxt(x.k, x.m, x.emp))}</td></tr>`).join('')}</table></div>` : empty('لا يوجد عاملون بعد.')}</div>`;
+  };
+  Object.assign(supervisorViews, { gm_halaqat: gmHalaqat, gm_staff: gmStaff });
+  /* الإشعارات: زر «+ إشعار» للمدير العام متى أمكن الإرسال فعلًا (بلا خادم، أو بعد gmanager_role.sql) */
+  const gmCanSend = () => !CLOUD || window.Cloud?.gmReady === true;
+  document.addEventListener('DOMContentLoaded', () => {
+    try { TAB_ICONS.gm_halaqat = TAB_ICONS.gm_halaqat || TAB_ICONS.halaqat; TAB_ICONS.gm_staff = TAB_ICONS.gm_staff || TAB_ICONS.members || TAB_ICONS.teachers; } catch (e) { /* ignore */ }
+    const baseNews = supervisorViews.news;
+    if (typeof baseNews !== 'function') return;
+    supervisorViews.news = function () {
+      const h = baseNews.apply(this, arguments);
+      if (!isGM() || !gmCanSend() || typeof h !== 'string') return h;
+      return `<div class="bar" style="margin:0 0 .6rem"><span class="grow"></span><button class="btn primary" data-act="addNews">+ إشعار</button></div>` + h;
+    };
+  });
+
   /* ===== الإداري: الطلاب (اطلاع فقط) والتحصيل والإعلانات ===== */
   TABS.placeadmin = [['mine', 'الطلاب'], ['collect', 'التحصيل'], ['news', 'الإعلانات']];
   VIEWS.placeadmin = {
