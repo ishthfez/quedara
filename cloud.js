@@ -174,7 +174,16 @@ const nz = v => (v === '' || v === undefined ? null : v);
 const num = v => (v === '' || v === undefined || v === null || isNaN(+v) ? null : +v);
 const ROLE_COLL = { admin: 'admins', supervisor: 'supervisors', gmanager: 'supervisors', teacher: 'teachers', student: 'students', accountant: 'accountants', placeadmin: 'placeadmins' };
 /* المدير العام في مجموعة المشرفين بالتطبيق: يُرسل بنوعه 'gmanager' متى عرفه الخادم، وإلا 'supervisor' كما كان */
-const staffRole = (m, r) => (r === 'supervisor' && gmReady === true && m?.info?.scope === 'all' ? 'gmanager' : r);
+/* قبل أن يُعرف جواب الخادم (أول لحظات بعد فتح التطبيق) لا يُرجَع المدير العام مشرفًا: يبقى بنوعه كما في آخر نسخة مؤكدة من الخادم */
+const snapRole = id => { try { return JSON.parse(snap?.staff?.[id] || 'null')?.role || null; } catch (e) { return null; } };
+const staffRole = (m, r) => {
+  if (r !== 'supervisor' || m?.info?.scope !== 'all') return r;
+  if (gmReady === true) return 'gmanager';
+  if (gmReady === false) return r;
+  return snapRole(m.id) === 'gmanager' || GM_IDS.has(m.id) ? 'gmanager' : r;
+};
+/* يُسأل الخادم مرة قبل أي إرسال أو سحب */
+const probeGM = async () => { if (gmReady === null) { try { await rpc('gmanager_ready'); gmReady = true; } catch (e) { if (e instanceof HttpError) gmReady = false; } } };
 
 function memberRow(m, role) {
   return {
@@ -323,7 +332,7 @@ async function fetchTables(tables, filter = '', chk = null) {
 const backMinute = ts => new Date(new Date(ts).getTime() - 60000).toISOString();
 async function pull() {
   /* هل يعرف الخادم نوع «المدير العام»؟ يُفحص مرة قبل أول إرسال (حتى لا يُرجَع المدير العام مشرفًا على الخادم ولا يُرسل نوع لا يقبله) */
-  if (gmReady === null) { try { await rpc('gmanager_ready'); gmReady = true; } catch (e) { if (e instanceof HttpError) gmReady = false; } }
+  await probeGM();
   const role = srvRole(), tables = tablesFor(role);
   if (inc === null) {
     /* لا يُحكم بغياب الدالة على الخادم إلا برفض صريح منه؛ انقطاع الاتصال أو انتهاء الجلسة يُعاد فحصه في المزامنة التالية */
@@ -518,6 +527,7 @@ async function push(db) {
   if (pushing) { again = true; return; }
   pushing = true; emit();
   try {
+    await probeGM();
     const role = auth.member?.role;
     const ds = diff(db);
     for (const gr of ds) {
