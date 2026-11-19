@@ -34,6 +34,8 @@
       /* «الرئيسية» (home.js) أول القائمة إن وُجدت، ثم «الطلاب» */
       const home = VIEWS[r]?.home ? [['home', 'الرئيسية']] : [];
       T.splice(0, T.length, ...(want ? [...home, ['students', 'الطلاب'], ...base] : saved[r]));
+      /* المدير العام (مشرف نطاقه الكل): صفحات الاطلاع الخاصة به (roles.js: QLGMTabs) بعد صفحات المشرف */
+      if (want && r === 'supervisor' && window.isGenSup?.(me()) && Array.isArray(window.QLGMTabs)) window.QLGMTabs.forEach(t => { if (!T.some(x => x[0] === t[0])) T.push(t); });
     });
     if (on() && (!ui.tab || OLD[role()].includes(ui.tab))) ui.tab = TABS[role()][0][0];
   }
