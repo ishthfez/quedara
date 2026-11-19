@@ -132,13 +132,18 @@
       const r1 = tbl.rows[1], rN = tbl.rows[tbl.rows.length - 1];
       const vis = r => (r ? [...r.querySelectorAll('td, td > *, button, select')].map(e => (hidden(e) ? 0 : 1)).join('') : '');
       const wrap = tbl.parentElement, sig = [tbl.rows.length, H.join(','), r1?.innerHTML.length, rN?.innerHTML.length, vis(r1), (r1?.textContent || '').slice(0, 30)].join('|');
-      let box = wrap.nextElementSibling?.classList?.contains('qscards') ? wrap.nextElementSibling : null;
+      /* البطاقات بعد الجدول، وقد يفصل بينهما سطر «عرض المزيد» (pager.js): يُبحث في الإخوة التالية حتى الجدول التالي،
+         وتُحذف أي نسخة زائدة (كانت تُبنى نسخة ثانية فتظهر القائمة مرتين) */
+      const found = [];
+      for (let n = wrap.nextElementSibling; n && !n.classList.contains('tbl'); n = n.nextElementSibling) if (n.classList.contains('qscards')) found.push(n);
+      let box = found.shift() || null;
+      found.forEach(x => x.remove());
       if (box && box.dataset.sig === sig) return;
-      if (!box) { box = document.createElement('div'); box.className = 'qscards'; wrap.after(box); }
-      box.dataset.sig = sig;
       const cell = (r, n) => { const i = ix(n); const c = i > -1 ? r.cells[i] : null; return c && !hidden(c) ? c : null; };
       const act = H.length - 1;   // عمود الأزرار بلا عنوان في آخر الصف
-      box.innerHTML = '';
+      /* تُبنى البطاقات خارج الصفحة ثم تُضاف مرة واحدة: قراءة التنسيق (getComputedStyle) بعد كل إضافة
+         كانت تعيد حساب تنسيق الصفحة كلها لكل طالب (ثوانٍ على الهاتف) */
+      const frag = document.createDocumentFragment();
       [...tbl.rows].slice(1).forEach(r => {
         if (!r.cells.length || r.classList.contains('sum')) return;
         const nm = cell(r, 'الاسم'); if (!nm) return;
@@ -155,8 +160,11 @@
         if (l2.childNodes.length) card.appendChild(l2);
         const hf = cell(r, 'آخر حفظ');
         if (hf && hf.textContent.trim() && hf.textContent.trim() !== '—') { const l3 = document.createElement('div'); l3.className = 'qsc-m'; l3.textContent = 'آخر حفظ: ' + hf.textContent.trim().replace(/^سورة\s+/, ''); card.appendChild(l3); }
-        box.appendChild(card);
+        frag.appendChild(card);
       });
+      if (!box) { box = document.createElement('div'); box.className = 'qscards'; wrap.after(box); }
+      box.dataset.sig = sig;
+      box.replaceChildren(frag);
     });
   }
 
@@ -165,7 +173,7 @@
     .qhcl{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.1rem .8rem}.qhcl label{margin:.15rem 0}
     .qscards{display:none}
     @media (max-width:640px){
-      main .card .tbl:has(+ .qscards){display:none!important}
+      main .card .tbl:has(~ .qscards){display:none!important}
       .qscards{display:block}
       .qsc{padding:.6rem .15rem;border-top:1px solid var(--line,#eee6d6)}.qscards .qsc:first-child{border-top:0}
       .qsc-t{display:flex;align-items:flex-start;gap:.5rem}.qsc-n{flex:1;min-width:0;font-weight:700}.qsc-n .who{gap:.45rem}
