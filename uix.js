@@ -6,8 +6,11 @@
       يُحفظ مع الصلاحيات (priv_perms.roles[الفئة]['ui.home.hide.اسم العداد'] = true)، فيصل كل مستخدم ما يخصه من الخادم
       عبر my_perms كبقية الصلاحيات، بلا تعديل على الخادم. للعرض فقط.
    4) جدول «الطلاب» على الهاتف: بطاقة لكل طالب (الاسم والأزرار، ثم الحلقة والحالة، ثم آخر حفظ).
-   5) «الطلاب»: لا يتكرر اسم الصفحة عنوانًا للبطاقة.
-   6) مواعيد الحلقات مختصرة في كل التطبيق (timeText). */
+   5) «الطلاب»: لا يتكرر اسم الصفحة عنوانًا للبطاقة، ولا تظهر فيها مربعات العدادات (بطاقة الاشتراكات) لأي عامل.
+   6) مواعيد الحلقات مختصرة في كل التطبيق (timeText).
+   7) «الإعلانات» تُسمّى «الإشعارات» في الواجهة.
+   8) إعادة تحميل الصفحة لا تعيد المستخدم إلى «الرئيسية»، بل إلى صفحته.
+   9) زر «تحصيل» بعلامة صح خضراء لمن سدّد اشتراك الشهر المعروض (ويبقى قابلًا للضغط). */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./uix.js')) VFILES.push('./uix.js'); } catch (e) { /* ignore */ } });
 
@@ -174,6 +177,8 @@
 
   /* ===== 5) «الطلاب»: عنوان البطاقة يكرر اسم الصفحة الذي في الشريط العلوي، فيُخفى على الشاشة (ويبقى في الطباعة) ===== */
   function dupTitle() {
+    /* ولا مربعات عدادات (بطاقة الاشتراكات التي في «الرئيسية») داخل «الطلاب» لأي عامل */
+    document.body.classList.toggle('qtab-stu', !!session && ui.tab === 'students');
     if (!session || ui.tab !== 'students') return;
     const t = (document.querySelector('.content .top .ttl')?.textContent || '').trim();
     if (!t) return;
@@ -195,8 +200,26 @@
     };
   } catch (e) { /* ignore */ }
 
+  /* ===== 7) «الإعلانات» تُسمّى «الإشعارات» (وكل «إعلان» «إشعار») في الواجهة كلها =====
+     للعرض فقط: أسماء التبويبات والعناوين والأزرار والرسائل. نص الإعلان الذي كتبه صاحبه لا يُمسّ، ولا البيانات ولا الخادم. */
+  const NW = 'إعلان', NW2 = 'إشعار';
+  try { Object.values(TABS).forEach(l => (l || []).forEach(t => { if (t[0] === 'news') t[1] = 'الإشعارات'; })); } catch (e) { /* ignore */ }
+  document.addEventListener('DOMContentLoaded', () => { try { Object.values(TABS).forEach(l => (l || []).forEach(t => { if (t[0] === 'news') t[1] = 'الإشعارات'; })); } catch (e) { /* ignore */ } });
+  const userText = p => !p || p.closest('textarea,script,style,.qnl-t,[contenteditable]') || p.classList.contains('news');
+  const relabel = root => {
+    if (!root || (root.nodeType === 1 ? !root.textContent.includes(NW) && !root.querySelector?.(`[title*="${NW}"],[placeholder*="${NW}"],[aria-label*="${NW}"]`) : !String(root.nodeValue || '').includes(NW))) return;
+    if (root.nodeType === 3) { if (!userText(root.parentElement)) root.nodeValue = root.nodeValue.replaceAll(NW, NW2); return; }
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n;
+    while ((n = w.nextNode())) if (n.nodeValue.includes(NW) && !userText(n.parentElement)) n.nodeValue = n.nodeValue.replaceAll(NW, NW2);
+    root.querySelectorAll?.(`[title*="${NW}"],[placeholder*="${NW}"],[aria-label*="${NW}"]`).forEach(e => ['title', 'placeholder', 'aria-label'].forEach(a => { const v = e.getAttribute(a); if (v && v.includes(NW)) e.setAttribute(a, v.replaceAll(NW, NW2)); }));
+  };
+  new MutationObserver(ms => { try { ms.forEach(m => m.addedNodes.forEach(relabel)); } catch (e) { /* ignore */ } }).observe(document.documentElement, { childList: true, subtree: true });
+
   const css = document.createElement('style');
   css.textContent = `@media screen{main .bar > h2.qdupttl{display:none}}
+    body.qtab-stu main .card.feecard{display:none!important}
+    main .btn.qpaid,main .btn.qpaid.primary{background:#e3f4e1!important;color:#1f7a2e!important;border-color:#9fd39a!important}
+    html.qdark main .btn.qpaid,html.qdark main .btn.qpaid.primary{background:color-mix(in srgb,#2e9e45 28%,#0e141d)!important;color:#8fd18a!important;border-color:color-mix(in srgb,#2e9e45 55%,#0e141d)!important}
     .content .top .ttl{display:flex;align-items:center;gap:.5rem}.qttlico{display:inline-flex;flex:none}.qttlico svg{width:22px;height:22px}
     .qhcl{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.1rem .8rem}.qhcl label{margin:.15rem 0}
     .qscards{display:none}
@@ -211,12 +234,41 @@
     }`;
   document.head.appendChild(css);
 
-  const after = () => { try { titleIcon(); applyHome(); trimMonths(); dupTitle(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
+  /* ===== 9) زر «تحصيل» لمن سدّد اشتراك الشهر المعروض: علامة صح خضراء، ويبقى قابلًا للضغط لإضافة شهر آخر ===== */
+  const CHECK = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  function markPaid() {
+    if (!session || ui.tab !== 'students') return;
+    const F = window.QLFees; if (!F || !Array.isArray(F.unpaid)) return;
+    const un = new Set(F.unpaid);
+    document.querySelectorAll('main .tbl [data-fee-pay2]:not([data-qpaid])').forEach(b => {
+      const s = byId(db.students, b.dataset.feePay2);
+      if (!s || b.disabled || un.has(s.id) || (typeof stOff === 'function' && stOff(s))) return;
+      b.dataset.qpaid = '1'; b.classList.add('qpaid'); b.innerHTML = CHECK;
+      b.title = 'مسدَّد — اضغط لتحصيل شهر آخر'; b.setAttribute('aria-label', b.title);
+    });
+  }
+  const after = () => { try { titleIcon(); applyHome(); trimMonths(); dupTitle(); markPaid(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
+  /* ===== 8) إعادة تحميل الصفحة تُبقي المستخدم في الصفحة نفسها =====
+     التبويب محفوظ في المتصفح (halaqat_tab)، لكن أول عرض بعد التحميل يأتي قبل اكتمال قائمة الحساب (الصلاحيات، صفحة «الطلاب» للعاملين…)
+     فيُعاد إلى «الرئيسية». يُحفظ هنا التبويب المطلوب ويُرجع إليه متى ظهر في القائمة، ما لم ينتقل المستخدم بنفسه أو تمضِ 20 ثانية. */
+  let want = null; const wantUntil = Date.now() + 20000;
+  try { want = JSON.parse(sessionStorage.getItem('halaqat_tab') || '{}').tab || null; } catch (e) { /* ignore */ }
+  document.addEventListener('click', e => { if (e.target.closest?.('[data-act="tab"],[data-act="logout"],[data-act="switchMode"]')) want = null; }, true);
+  const restoreTab = () => {
+    if (!want || !session) return;
+    if (Date.now() > wantUntil) { want = null; return; }
+    if (ui.tab !== want && (TABS[session.role] || []).some(t => t[0] === want)) ui.tab = want;
+  };
   const baseRender = render;
-  render = function () { const r = baseRender.apply(this, arguments); after(); return r; };
+  render = function () {
+    try { restoreTab(); } catch (e) { /* ignore */ }
+    const r = baseRender.apply(this, arguments);
+    if (want && session && ui.tab === want) { want = null; try { saveTab(); } catch (e) { /* ignore */ } }   // ثبت بعد العرض: انتهت الاستعادة
+    after(); return r;
+  };
   /* النوافذ والقوائم التي تُفتح بعد العرض (نموذج الدفعة، كشف التحصيل…) */
   let q = false;
-  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { trimMonths(); titleIcon(); applyHome(); dupTitle(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
+  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { trimMonths(); titleIcon(); applyHome(); dupTitle(); markPaid(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
     .observe(document.body, { childList: true, subtree: true });
   /* تكبير الشاشة أو تدويرها إلى العرض الضيق */
   window.matchMedia('(max-width:640px)').addEventListener?.('change', e => { if (e.matches) after(); });
