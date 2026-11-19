@@ -99,8 +99,31 @@
     .replace(/<details class="pltools (pladd|plmore)">[\s\S]*?<\/details>/g, '')
     .replace(/<button[^>]*data-fee-place[^>]*>[\s\S]*?<\/button>/g, '')
     .replace(/<input type="checkbox" data-pl(sel|all)[^>]*>/g, '');
-  /* المشرف: «العاملون» فيه تبويب «الغياب» وحده (العاملون والمرتبات للمدير والمدير العام) */
-  const supTeachers = () => `<div class="card subnav"><div class="bar" style="margin:0"><button type="button" class="btn on" data-subtab="absence" data-g="teachers">الغياب</button></div></div>` + supervisorViews.absence();
+  /* المشرف: «العاملون» فيه «الغياب» و«المرتبات» (كشوف الأشهر المغلقة وحدها، للاطلاع؛ على الخادم: supabase/sup_payroll.sql) */
+  const SUP_SUBS = [['absence', 'الغياب'], ['payroll', 'المرتبات']];
+  const supSub = () => { let s = ''; try { s = JSON.parse(sessionStorage.getItem('halaqat_sub') || '{}').teachers; } catch (e) { /* ignore */ } return SUP_SUBS.some(x => x[0] === s) ? s : 'absence'; };
+  const supPay = () => {
+    const P = db.payroll;
+    if (!P || typeof adminViews.payroll !== 'function') return `<div class="card">${empty('المرتبات غير محمّلة.')}</div>`;
+    const closed = new Set(P.closed || []), all = P.rows || [];
+    P.rows = all.filter(r => closed.has(r.y + '-' + r.m));
+    let h; try { h = adminViews.payroll(); } finally { P.rows = all; }
+    const t = document.createElement('template'); t.innerHTML = h; const C = t.content;
+    const on = C.querySelector('[data-act="paySub"].on')?.dataset.v;
+    C.querySelectorAll('[data-act]').forEach(b => { const a = b.dataset.act; if (!PAY_OK.includes(a) || (a === 'paySub' && !['month', 'year', 'archive'].includes(b.dataset.v))) b.remove(); });
+    C.querySelectorAll('label:has(input[type="file"])').forEach(l => l.remove());
+    C.querySelectorAll('.tbl input,.tbl select,.tbl textarea').forEach(x => { x.disabled = true; x.setAttribute('disabled', ''); });
+    const msg = txt => `<div class="card">${empty(txt)}</div>`;
+    if (!['month', 'year', 'archive'].includes(on)) { const sub = C.querySelector('.noprint:has([data-act="paySub"])'); while (sub?.nextSibling) sub.nextSibling.remove(); sub?.insertAdjacentHTML('afterend', msg('اختر «كشف الشهر».')); }
+    else if (on === 'month') {
+      const card = C.querySelector('select[data-pay="m"]')?.closest('.card');
+      const y = C.querySelector('select[data-pay="y"] option[selected]')?.value, m = C.querySelector('select[data-pay="m"] option[selected]')?.value;
+      if (card && !closed.has(y + '-' + m)) { const bar = card.querySelector('.bar'); card.replaceChildren(...(bar ? [bar] : [])); card.insertAdjacentHTML('beforeend', empty('كشف هذا الشهر لم يُغلق بعد؛ يظهر هنا بعد إغلاقه.')); }
+    }
+    return t.innerHTML;
+  };
+  const supTeachers = () => { const cur = supSub();
+    return `<div class="card subnav"><div class="bar" style="margin:0">${SUP_SUBS.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-subtab="${k}" data-g="teachers">${l}</button>`).join('')}</div></div>` + (cur === 'payroll' ? supPay() : supervisorViews.absence()); };
   Object.assign(supervisorViews, { halaqat: gmHalaqat, teachers: () => (isGM() ? gmTeachers() : supTeachers()) });
   /* الإشعارات: زر «+ إشعار» للمدير العام متى أمكن الإرسال فعلًا (بلا خادم، أو بعد gmanager_role.sql) */
   const gmCanSend = () => !CLOUD || window.Cloud?.gmReady === true;
