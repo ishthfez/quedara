@@ -34,21 +34,28 @@
 
   /* مستحقات الطلاب من الخادم (الرقم فقط) */
   /* مستحقات طلاب الحلقة عن سنة الشهر المختار (لكل سنة مبالغها)؛ وقبل تنفيذ fees_systems.sql: بالسنة الحالية */
-  const duesRpc = async (hid, yy) => { try { return await window.Cloud.rpc('student_dues_y', { hid, yy }); } catch (e) { return window.Cloud.rpc('student_dues', { hid }); } };
+  /* بالشهر نفسه (supabase/dues_month.sql): بعد «تغيير المبلغ ابتداءً من شهر» يختلف المستحق بين أشهر السنة الواحدة؛
+     وقبل تنفيذ الملف: بالسنة كما كان */
+  let ymOk = true;
+  const duesRpc = async (hid, yy, mm) => {
+    if (ymOk && mm) { try { return await window.Cloud.rpc('student_dues_ym', { hid, yy, mm }); } catch (e) { if (e?.status === 404 || /student_dues_ym|PGRST20[23]/.test(String(e?.message || e))) ymOk = false; else throw e; } }
+    try { return await window.Cloud.rpc('student_dues_y', { hid, yy }); } catch (e) { return window.Cloud.rpc('student_dues', { hid }); }
+  };
+  const duesKey = hid => hid + '|' + st.y + '|' + st.m;
   async function loadDues(hid, force) {
-    const key = hid + '|' + st.y;
+    const key = duesKey(hid);
     /* بلا خادم: المستحق محسوبًا على الجهاز من إعدادات الاشتراك (fees.js) */
-    if (!CLOUD && hid && window.QLFeeDue && st.duesFor !== key) { st.dues = Object.fromEntries(db.students.filter(s => s.halaqaId === hid).map(s => [s.id, window.QLFeeDue(s, st.y)])); st.duesFor = key; st.duesAt = Date.now(); return; }
+    if (!CLOUD && hid && window.QLFeeDue && st.duesFor !== key) { st.dues = Object.fromEntries(db.students.filter(s => s.halaqaId === hid).map(s => [s.id, window.QLFeeDue(s, st.y, st.m)])); st.duesFor = key; st.duesAt = Date.now(); return; }
     if (!CLOUD || !hid || st.loading || (!force && st.duesFor === key && Date.now() - st.duesAt < 60000)) return;
     st.loading = true;
     try {
-      const r = await duesRpc(hid, st.y);
+      const r = await duesRpc(hid, st.y, st.m);
       st.dues = Object.fromEntries((r || []).map(x => [x.student_id, x.due])); st.duesFor = key; st.duesAt = Date.now();
     } catch (e) { st.dues = {}; st.duesFor = key; st.duesAt = Date.now(); }
     st.loading = false;
     if (['collect'].includes(ui.tab) && !document.querySelector('.overlay')) render();
   }
-  const dueTxt = sid => (st.duesFor !== st.hid + '|' + st.y ? '…' : st.dues[sid] == null ? '—' : money(st.dues[sid]));
+  const dueTxt = sid => (st.duesFor !== duesKey(st.hid) ? '…' : st.dues[sid] == null ? '—' : money(st.dues[sid]));
 
   /* ===== المعلم ===== */
   const myColl = (hid, y, m) => colls().find(c => c.teacherId === session.id && c.halaqaId === hid && +c.y === y && +c.m === m);
@@ -73,7 +80,7 @@
         <td>${L ? tag(LINE[L.state] || LINE.pending) : ''}${L?.accNote ? `<br><small style="color:var(--red)">${esc(L.accNote)}</small>` : ''}</td></tr>`;
     }).join('');
     /* عدّادات الشهر: المستحق على المنتظمين، وما أكّده المحاسب، وما عنده للمراجعة، والباقي */
-    const act = list.filter(s => !stOff(s)), duesOk = st.duesFor === st.hid + '|' + st.y;
+    const act = list.filter(s => !stOff(s)), duesOk = st.duesFor === duesKey(st.hid);
     const expected = duesOk ? act.reduce((a, s) => a + (+st.dues[s.id] || 0), 0) : null;
     const sumBy = f => (c?.lines || []).filter(f).reduce((a, l) => a + (+l.amount || 0), 0);
     const okSum = sumBy(l => l.state === 'ok'), pendSum = c?.status === 'sent' || c?.status === 'returned' ? sumBy(l => l.state === 'pending') : 0;
@@ -129,7 +136,7 @@
   async function reviewDialog(c) {
     if (!c) return;
     let dues = {};
-    if (CLOUD && c.halaqaId) { try { dues = Object.fromEntries(((await duesRpc(c.halaqaId, +c.y)) || []).map(x => [x.student_id, x.due])); } catch (e) { /* بلا مستحقات */ } }
+    if (CLOUD && c.halaqaId) { try { dues = Object.fromEntries(((await duesRpc(c.halaqaId, +c.y, +c.m)) || []).map(x => [x.student_id, x.due])); } catch (e) { /* بلا مستحقات */ } }
     const open = c.status === 'sent' && isCollector();
     const rows = c.lines.map((l, i) => {
       const due = dues[l.studentId], diff = due == null ? '' : money((+l.amount || 0) - due);

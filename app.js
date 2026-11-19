@@ -325,7 +325,10 @@ function fieldHtml(f) {
   const v = f.value ?? '';
   let input;
   if (f.type === 'select') {
-    input = `<select name="${f.name}">${f.options.map(o => `<option value="${esc(o.v)}" ${String(o.v) === String(v) ? 'selected' : ''}>${esc(o.l)}</option>`).join('')}</select>`;
+    /* تعديل سجل حقله فارغ: خيار فارغ مختار، وإلا اختار المتصفح الخيار الأول فحفظه الحفظ دون أن يختاره أحد
+       (مثل «متطوع» و«حفص عن عاصم» و«بدون إجازة» لمعلم بلا بيانات). النموذج الجديد (بلا value) يبقى كما كان */
+    const blank = 'value' in f && (f.value === '' || f.value == null) && !f.required && !f.options.some(o => String(o.v) === '');
+    input = `<select name="${f.name}">${blank ? '<option value="" selected>—</option>' : ''}${f.options.map(o => `<option value="${esc(o.v)}" ${String(o.v) === String(v) ? 'selected' : ''}>${esc(o.l)}</option>`).join('')}</select>`;
   } else if (f.type === 'textarea') {
     input = `<textarea name="${f.name}" rows="3">${esc(v)}</textarea>`;
   } else {

@@ -214,7 +214,7 @@
   const onPv = () => { try { return ui.tab === 'preview' && session?.role === 'admin'; } catch (e) { return false; } };
   let pvLast = 0, restore = null;
   try { restore = JSON.parse(sessionStorage.getItem(PVK) || 'null'); sessionStorage.removeItem(PVK); } catch (e) { /* ignore */ }
-  const pvCheck = () => { if (!onPv() || typeof checkUpdate !== 'function' || Date.now() - pvLast < 20000) return; pvLast = Date.now(); checkUpdate(); };
+  const pvCheck = () => { if (!onPv() || typeof checkUpdate !== 'function' || Date.now() - pvLast < 20000) return; pvLast = Date.now(); checkUpdate(true); };   // true: الفحص العادي صار مرة كل 10 دقائق، والمعاينة تريده أسرع
   /* بعد إعادة التحميل: النوع والشخص والجهاز كما كانت */
   function doRestore() {
     if (!restore || !onPv()) return;

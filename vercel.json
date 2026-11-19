@@ -1,5 +1,6 @@
 {
   "cleanUrls": true,
+  "buildCommand": "V=${VERCEL_GIT_COMMIT_SHA:-$(date +%s)}; echo $V > version.txt; echo \"window.APP_VER='$V';\" > ver.js",
   "headers": [
     {
       "source": "/(.*)",
@@ -14,6 +15,13 @@
       "headers": [
         { "key": "Cache-Control", "value": "no-cache" },
         { "key": "Content-Type", "value": "text/javascript; charset=utf-8" }
+      ]
+    },
+    {
+      "source": "/version.txt",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" }
       ]
     },
     {

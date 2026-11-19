@@ -143,7 +143,7 @@
     const ids = new Set(S.hid ? [S.hid] : hs.map(h => h.id)), d = draft();
     const inDraft = new Set((d?.lines || []).map(l => l.studentId));
     const list = db.students.filter(s => ids.has(s.halaqaId) && (!stOff(s) || inDraft.has(s.id))).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-    const [y, m] = ym(), due = s => (window.QLFeeDue ? window.QLFeeDue(s, y) : null);
+    const [y, m] = ym(), due = s => (window.QLFeeDue ? window.QLFeeDue(s, y, m) : null);
     const rows = list.map((s, i) => {
       const st = stuState(s), dv = due(s);
       return `<tr${st.issue ? ' class="qissue"' : ''}><td class="qnm"><b>${esc(s.name)}</b>${hs.length > 1 && !S.hid ? ` <small class="muted">${esc(halaqaLabel(byId(db.halaqat, s.halaqaId)).replace(/^\s*حلقة\s+/, '').split(' — ')[0])}</small>` : ''}${st.txt ? `<div class="qcolst">${st.txt}</div>` : ''}</td>
@@ -173,12 +173,19 @@
 
   /* ===== نافذة التحصيل لطالب: كنافذة المحاسب (fees في app-abs.js) ===== */
   function payDialog(s) {
-    const [cy, cm] = ym(), fee = window.QLFeeDue ? window.QLFeeDue(s, cy) : null;
+    const [cy, cm] = ym();
+    let fee = window.QLFeeDue ? window.QLFeeDue(s, cy, cm) : null;
+    /* المستحق عن الشهر المختار في النافذة لا عن الشهر الحالي: بعد «تغيير المبلغ ابتداءً من شهر» يختلف بين الأشهر
+       (من الخادم: supabase/dues_month.sql؛ وقبل تنفيذه أو بلا خادم: كما يحسبه الجهاز) */
+    const feeFor = async (y, m) => {
+      if (CLOUD && s.halaqaId) { try { const r = await window.Cloud.rpc('student_dues_ym', { hid: s.halaqaId, yy: y, mm: m }); const x = (r || []).find(z => z.student_id === s.id); if (x && x.due != null) return +x.due; } catch (e) { /* يكمل بحساب الجهاز */ } }
+      return window.QLFeeDue ? window.QLFeeDue(s, y, m) : null;
+    };
     const d = draft(), ex = (d?.lines || []).find(l => l.studentId === s.id && l.y === cy && l.m === cm);
     let mOpts = '';
     for (let k = -12; k <= 2; k++) { const dd = new Date(cy, cm - 1 + k, 1), y = dd.getFullYear(), m = dd.getMonth() + 1; mOpts += `<option value="${y}-${m}" ${y === cy && m === cm ? 'selected' : ''}>${MONTHS[m - 1]} ${y}</option>`; }
     const p = document.createElement('div'); p.className = 'overlay';
-    p.innerHTML = `<div class="modal"><h2>تحصيل اشتراك: ${esc(s.name)}</h2>${fee ? `<p class="muted" style="margin:0 0 .6rem">المستحق: ${money(fee)} جنيه</p>` : ''}
+    p.innerHTML = `<div class="modal"><h2>تحصيل اشتراك: ${esc(s.name)}</h2><p class="muted" data-due style="margin:0 0 .6rem"${fee ? '' : ' hidden'}>${fee ? `المستحق: ${money(fee)} جنيه` : ''}</p>
       <label>المبلغ<input type="number" min="0" step="any" name="amount" value="${ex ? ex.amount : (fee || '')}" required></label>
       <label>عن شهر<select name="month">${mOpts}</select></label>
       <label>التاريخ<input type="date" name="date" value="${today()}"></label>
@@ -190,6 +197,17 @@
     const ai = p.querySelector('[name=amount]'), rw = p.querySelector('[data-rw]');
     const need = () => { rw.hidden = !(fee && +ai.value > 0 && +ai.value < fee); };
     ai.addEventListener('input', need); need();
+    const dueEl = p.querySelector('[data-due]'), mSel = p.querySelector('[name=month]');
+    let feeSeq = 0;
+    const showFee = () => { dueEl.hidden = !fee; dueEl.textContent = fee ? `المستحق: ${money(fee)} جنيه` : ''; need(); };
+    mSel.addEventListener('change', async () => {
+      const [y, m] = mSel.value.split('-').map(Number), seq = ++feeSeq, prevFee = fee;
+      const f = await feeFor(y, m); if (seq !== feeSeq) return;
+      fee = f;
+      /* المبلغ المقترح يتبع المستحق ما لم يكتب المستخدم غيره */
+      if (!ex && (!ai.value || +ai.value === +prevFee) && fee) ai.value = fee;
+      showFee();
+    });
     p.querySelector('[data-close]').onclick = () => p.remove();
     p.querySelector('[data-colsave]').onclick = async e => {
       const amt = +ai.value; if (!(amt > 0)) { toast('اكتب مبلغًا'); return; }

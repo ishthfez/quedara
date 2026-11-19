@@ -87,7 +87,8 @@
       T.list = (r || []).map(x => ({ id: x.id, studentId: x.student_id, studentName: x.student_name, fromTitle: x.from_title, toTitle: x.to_title, byName: x.by_name, at: x.created_at, waiting: x.waiting, canDecide: !!x.can_decide }));
     } catch (e) { console.warn('my_transfers:', e?.message || e); }   // قبل تشغيل transfers.sql على الخادم: لا شيء
     T.at = Date.now(); T.loading = false;
-    if (ui.tab === 'students' && !document.querySelector('.overlay')) render();
+    /* و«الرئيسية»: عدّاد «طلبات نقل بانتظار موافقتك» فيها كان يبقى 0 حتى يتغير شيء آخر */
+    if (['students', 'home'].includes(ui.tab) && !document.querySelector('.overlay')) render();
   }
 
   /* ===== صفحة «الطلاب»: بطاقة الطلبات ===== */

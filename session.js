@@ -47,7 +47,8 @@
 
   function reason() {
     if (!CLOUD || !session || !C()?.auth) return '';
-    const P = policy()[session.role] || { mode: 'none' }, now = Date.now();
+    /* الإداري يتبع سياسة «المحاسبون والإداريون» (كما يقول عنوانها في الإعدادات)؛ كان بلا قفل أبدًا */
+    const P = policy()[session.role === 'placeadmin' ? 'accountant' : session.role] || { mode: 'none' }, now = Date.now();
     let act = getN(ACT), li = getN(LOGIN);
     if (!act) { setN(ACT, now); act = now; }
     if (!li) { setN(LOGIN, now); li = now; }

@@ -10,12 +10,15 @@
   let targets = null, loading = false, missing = false;
   const GROUP = { admin: 'Admin', supervisor: 'المشرفون', teacher: 'المعلمون', accountant: 'المحاسبون' };
   const groupOf = x => (x.role === 'accountant' && x.title ? x.title : GROUP[x.role] || 'آخرون');
+  let failAt = 0;
   async function loadTargets(force) {
     if ((targets && !force) || loading) return;
+    if (!force && failAt && Date.now() - failAt < 30000) return;   // بعد فشل عابر: محاولة كل 30 ثانية لا مع كل رسم
     if (!CLOUD) { targets = ['admins', 'supervisors', 'teachers', 'accountants'].flatMap(k => (db[k] || []).filter(m => m.id !== session?.id).map(m => ({ id: m.id, name: m.name, role: { admins: 'admin', supervisors: 'supervisor', teachers: 'teacher', accountants: 'accountant' }[k], title: m.info?.title || '' }))); return; }
     loading = true;
-    try { targets = (await window.Cloud.rpc('note_targets')) || []; missing = false; }
-    catch (e) { missing = /note_targets|function|404|PGRST202/i.test(String(e.message || e)); targets = targets || []; }
+    try { targets = (await window.Cloud.rpc('note_targets')) || []; missing = false; failAt = 0; }
+    /* فشل عابر (بلا إنترنت مثلًا) لا يُثبّت قائمة فارغة طوال الجلسة: تبقى null فيُعاد الطلب لاحقًا؛ والدالة الغائبة وحدها تُثبَّت فارغة */
+    catch (e) { missing = /note_targets|function|404|PGRST202/i.test(String(e.message || e)); if (missing) targets = targets || []; else failAt = Date.now(); }
     loading = false; if (ui.tab === 'notes') render();
   }
   const nameOf = id => (targets || []).find(x => x.id === id)?.name || '';

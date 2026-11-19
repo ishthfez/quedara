@@ -60,7 +60,10 @@
 
   /* ===== الاشتراكات لحلقاته (المعلم والمشرف والإداري على الخادم) ===== */
   const FS = { y: 0, m: 0, at: 0, loading: false, dues: new Map(), fees: null, ok: false, old: false };
-  const needFees = () => CLOUD && on() && ['teacher', 'supervisor', 'placeadmin'].includes(role()) && !window.QLActAs?.();
+  /* المدير العام (على الخادم gmanager) تصله الاشتراكات كاملة بالمزامنة ومعها إعداداتها، فلا تُستبدل بنافذة staff_fees
+     (سنة واحدة حول الشهر المختار)، وإلا نقص «سجل الاشتراكات» في ملف الطالب وخطأ «انتظام الدفع» */
+  const isGM = () => window.Cloud?.auth?.member?.srvRole === 'gmanager';
+  const needFees = () => CLOUD && on() && ['teacher', 'supervisor', 'placeadmin'].includes(role()) && !window.QLActAs?.() && !isGM();
   /* المستحق عن الشهر المختار (supabase/fee_periods.sql: المبلغ قد يتغير من شهر بعينه)؛ وقبل تنفيذه: بالسنة وحدها كما كان */
   async function load(y, m) {
     if (FS.loading) return; FS.loading = true;
@@ -71,9 +74,11 @@
       FS.dues = new Map((r?.dues || []).map(x => [x.s, x.d == null ? null : +x.d]));
       FS.fees = (r?.fees || []).map(f => ({ id: f.id, studentId: f.s, y: +f.y, m: +f.m, amount: +f.a || 0, date: f.dt || '', by: f.by || '', note: f.n || '' }));
       FS.y = y; FS.m = m; FS.at = Date.now(); FS.ok = true;
-    } catch (e) { FS.ok = false; FS.at = Date.now(); console.warn('staff_fees:', e?.message || e); }
+    /* الفشل يُسجَّل للشهر نفسه أيضًا: وإلا رأى كل رسم أن الشهر لم يُحمَّل بعد فأعاد الطلب، والفشل يعيد الرسم… (حلقة بلا نهاية بلا إنترنت) */
+    } catch (e) { FS.ok = false; FS.at = Date.now(); FS.y = y; FS.m = m; console.warn('staff_fees:', e?.message || e); }
     FS.loading = false;
-    if (on() && ui.tab === 'students') render();
+    /* و«الرئيسية» أيضًا: بطاقة الاشتراكات فيها تنتظر هذا التحميل (وإلا بقيت غائبة حتى يتغير شيء آخر) */
+    if (on() && ['students', 'home'].includes(ui.tab) && !document.querySelector('.overlay')) render();
   }
   function staffFees() {
     if (!needFees()) return;

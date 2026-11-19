@@ -20,10 +20,16 @@
     const r = baseRows(table, kind);
     if (r.err || kind !== 'students' || !r.cols.some(c => c.id === 'core:halaqaId')) return r;
     const seen = new Set(db.students.map(m => norm(m.name) + '|' + (m.halaqaId || '')));
+    const byName = new Map(db.halaqat.flatMap(h => halaqaKeys(h).map(k => [k, h])));
     r.rows.forEach(x => {
       const h = byId(db.halaqat, x.vals['core:halaqaId']);
-      if (h) x.halaqa = halaqaLabel(h);   // الحلقة بالمعرّف: اسمها الحالي، فيجدها الاستيراد بدقة
-      const k = norm(x.name) + '|' + (h ? h.id : '');
+      /* الحلقة بالمعرّف تُحفظ معرّفًا (x.hid) فيستعملها الاستيراد مباشرة (app-forms.js)، لا باسمها */
+      if (h) { x.halaqa = halaqaLabel(h); x.hid = h.id; }
+      /* بلا معرّف صالح: الحلقة من عمود «الحلقة» كما يجدها الاستيراد، وإلا بقي حكم المكرر كما حسبه الاستيراد الأساسي
+         (كان المفتاح «الاسم|» فلا يطابق أحدًا، فإعادة استيراد ملف فيه معرّف فارغ تكرر الطلاب) */
+      const h2 = h || (x.halaqa ? halaqaQKeys(x.halaqa).map(k => byName.get(k)).find(Boolean) : null);
+      if (!h2) return;
+      const k = norm(x.name) + '|' + h2.id;
       x.dup = seen.has(k); seen.add(k);
     });
     return r;

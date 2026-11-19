@@ -25,9 +25,12 @@
       if (!act) return baseCan(p);
       const c = db.settings.priv_perms || {}, o = (c.members || {})[act.id]?.[p];
       if (o !== undefined) return !!o;
-      const r = (c.roles || {})[act.role]?.[p];
+      /* المدير العام: صلاحياته على الخادم في roles.gmanager (has_perm بنوعه الحقيقي)، لا في roles.supervisor؛
+         وقبل gmanager_role.sql (الخادم لا يعرف النوع) تبقى بصلاحيات المشرف كما كان */
+      const pr = act.cat === 'gmanager' && window.Cloud?.gmReady !== false ? 'gmanager' : act.role;
+      const r = (c.roles || {})[pr]?.[p];
       if (r !== undefined) return !!r;
-      return !!Perms.list.find(d => d.key === p)?.defaults?.includes(act.role);
+      return !!Perms.list.find(d => d.key === p)?.defaults?.includes(pr);
     };
   }
 

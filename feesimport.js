@@ -32,6 +32,8 @@
     if (C.id < 0 && C.old < 0) return { err: 'لم أجد عمود «معرف الطالب» ولا «رقم الطالب القديم».' };
     const byOld = new Map(); db.students.forEach(s => { const c = dg(s.info?.oldCode); if (c) byOld.set(c, s); });
     const have = new Set((db.fees || []).map(f => `${f.studentId}|${+f.y}|${+f.m}|${+f.amount}|${f.date || ''}`));
+    /* صف بلا تاريخ يُطابَق بالطالب والشهر والمبلغ وحدها: كان يُحفظ بتاريخ يوم الاستيراد، فإعادة استيراد الملف في يوم آخر تكرر كل دفعة */
+    const haveNoDate = new Set((db.fees || []).map(f => `${f.studentId}|${+f.y}|${+f.m}|${+f.amount}`));
     const out = { ok: [], dup: 0, none: [], bad: 0 };
     grid.slice(hi + 1).forEach(r => {
       const amount = +dg(r[C.amt]); if (!(amount > 0)) return;
@@ -41,10 +43,11 @@
       if (!m) { out.bad++; return; }
       const s = (C.id >= 0 && byId(db.students, dg(r[C.id]))) || (C.old >= 0 && byOld.get(dg(r[C.old]))) || null;
       if (!s) { out.none.push({ name: C.name >= 0 ? r[C.name] : '', old: C.old >= 0 ? dg(r[C.old]) : '', m, y, amount }); return; }
-      const k = `${s.id}|${y}|${m}|${amount}|${date}`;
-      if (have.has(k)) { out.dup++; return; }
-      have.add(k);
-      out.ok.push({ id: uid(), studentId: s.id, y, m, amount, date: date || today(), by: 'كشف الإيراد', byMember: session?.id || '', note: (C.note >= 0 ? r[C.note] : '') || 'استيراد من كشف الإيراد' });
+      const k = `${s.id}|${y}|${m}|${amount}|${date}`, k0 = `${s.id}|${y}|${m}|${amount}`;
+      if (have.has(k) || (!date && haveNoDate.has(k0))) { out.dup++; return; }
+      have.add(k); haveNoDate.add(k0);
+      /* بلا تاريخ في الملف: أول الشهر المدفوع عنه، لا تاريخ اليوم (تاريخ اليوم كان يُرسل للطلاب «تأكيد دفع» عن دفعات قديمة) */
+      out.ok.push({ id: uid(), studentId: s.id, y, m, amount, date: date || `${y}-${String(m).padStart(2, '0')}-01`, by: 'كشف الإيراد', byMember: session?.id || '', note: (C.note >= 0 ? r[C.note] : '') || 'استيراد من كشف الإيراد' });
     });
     return out;
   }

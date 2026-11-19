@@ -255,7 +255,8 @@
   function apply() {
     document.querySelectorAll('.overlay .scard').forEach(markCard);
     /* القواعد لصفحة «الطلاب» (ونوافذها) وحدها: لا تمسّ صفحات العامل الأخرى مثل «التحصيل» */
-    const off = session && session.role !== 'admin' && ui.tab === 'students' ? ITEMS.filter(it => !myOn(it)) : [];
+    /* و«الرئيسية»: فيها بطاقة الاشتراكات نفسها (home.js)، فما أخفاه المدير منها في الطلاب يُخفى فيها أيضًا */
+    const off = session && session.role !== 'admin' && ['students', 'home'].includes(ui.tab) ? ITEMS.filter(it => !myOn(it)) : [];
     const sig = (session?.role || '') + '|' + off.map(i => i[0]).join(',');
     if (sig !== lastSig) {
       lastSig = sig;

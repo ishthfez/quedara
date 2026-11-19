@@ -97,10 +97,15 @@
   function saveCat(k, hidden) {
     const pp = db.settings.priv_perms = db.settings.priv_perms || {};
     pp.roles = pp.roles || {};
-    const R = { ...(pp.roles[k] || {}) };
-    Object.keys(R).forEach(x => { if (x.startsWith('ui.home.hide.')) delete R[x]; });
-    hidden.forEach(l => { R[HK(l)] = true; });
-    pp.roles = { ...pp.roles, [k]: R };
+    /* «المشرفون والمديرون العامون»: يُحفظ للنوعين، فالمدير العام يقرأ من الخادم roles.gmanager (my_perms بنوعه الحقيقي) */
+    const ks = k === 'supervisor' ? ['supervisor', 'gmanager'] : [k], next = { ...pp.roles };
+    ks.forEach(kk => {
+      const R = { ...(pp.roles[kk] || {}) };
+      Object.keys(R).forEach(x => { if (x.startsWith('ui.home.hide.')) delete R[x]; });
+      hidden.forEach(l => { R[HK(l)] = true; });
+      next[kk] = R;
+    });
+    pp.roles = next;
     save(); render(); toast('حُفظت عدادات الرئيسية لـ«' + CATS.find(c => c[0] === k)[1] + '»');
   }
   document.addEventListener('change', e => { if (e.target.matches?.('[data-qhcat]')) { cat = e.target.value; render(); } });

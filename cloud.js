@@ -55,7 +55,7 @@ function refresh() { return refreshing || (refreshing = doRefresh().finally(() =
 async function doRefresh() {
   const old = auth?.access_token;
   syncAuth();
-  if (auth?.access_token !== old) return;   // جُدِّدت في تبويب آخر: نستعمل رمزه
+  if (auth?.access_token !== old) return;   // جُدِّدت في تبويب آخر: نستعمل رمزه
   const r = await fetch(`${CFG.url}/auth/v1/token?grant_type=refresh_token`, {
     method: 'POST', headers: { apikey: CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: auth.refresh_token })
   });
@@ -348,7 +348,7 @@ const curDb = d => { try { return typeof db !== 'undefined' && db ? db : d; } ca
 /* الحفاظ على ما لم يُرسل بعد: من يستدعي السحب يضع نتيجته مكان بيانات الجهاز، فتُعاد بيانات الجهاز نفسها بدل نسخة الخادم
    - إن بقيت تغييرات لم تُرسل (انقطاع أو خطأ مؤقت في الخادم) لا يُسحب شيء؛ وبعد رفض صريح من الخادم يُسحب كالعادة.
    - وإن سُجّل تعديل أثناء السحب تبقى بيانات الجهاز وآخر نسخة مؤكدة (snap) كما كانت، فيُرسل التعديل ويأتي الجديد في السحب التالي. */
-let editSeq = 0, localNewer = false, rejected = false;
+let editSeq = 0, localNewer = false, rejected = false, pushFails = 0;
 async function pull() {
   for (let i = 0; pushing && i < 600; i++) await new Promise(r => setTimeout(r, 50));
   localNewer = false;
@@ -360,7 +360,13 @@ async function pull() {
     const d = await pullInner();
     rejected = false;
     const cur = curDb(null);
-    if (editSeq !== seq && prevSnap && cur) { localNewer = true; snap = prevSnap; saveLocal(cur); later(cur, 300); return cur; }
+    if (editSeq !== seq && prevSnap && cur) {
+      localNewer = true; snap = prevSnap; saveLocal(cur); later(cur, 300);
+      /* نسخة صفوف الخادم (raw) ووقتها (since) صارت أحدث من snap المُعاد: لو بقيتا لبُنيت البيانات منهما في سحب «لا تغيير»
+         التالي فظهرت تغييرات الآخرين فروقًا محلية وأُرسلت باسم هذا المستخدم. تُنسى فيكون السحب التالي كاملًا */
+      raw = null; since = null; persist(rawKey(), null);
+      return cur;
+    }
     return d;
   } finally { pulling = false; }
 }
@@ -532,6 +538,9 @@ const ALLOWED = {
 };
 /* مجموعات يرسلها غير المدير متى مُنح صلاحيتها (والخادم يتحقق منها): الأماكن والحلقات (supabase/halaqat_perm.sql) */
 const PERM_GROUPS = { places: 'halaqat.manage', halaqat: 'halaqat.manage' };
+/* صفوف بعينها من مجموعة يرسلها غير المدير متى مُنح صلاحيتها: إعدادات الاشتراك (priv_fees) لمن له «تعديل مبالغ الاشتراك»
+   (supabase/fees_systems.sql: settings_write_fees). قبل هذا كان المحاسب يعدّلها فتظهر عنده ثم ترجع مع المزامنة */
+const PERM_ROWS = { settings: { perm: 'fees.amount', keys: ['priv_fees'] } };
 /* مقارنة لا تتأثر بترتيب الحقول: قاعدة البيانات تعيد ترتيب حقول JSON (مثل إعدادات المرتبات)،
    فلولا هذا لظنّ التطبيق أنها تغيّرت وأعاد إرسالها مع كل مزامنة. تُستخدم فقط حين يختلف النص الظاهر. */
 const canon = v => (Array.isArray(v) ? '[' + v.map(canon).join(',') + ']' : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}' : JSON.stringify(v === undefined ? null : v));
@@ -539,12 +548,18 @@ const sameRow = (prevJ, r) => { try { return canon(JSON.parse(prevJ)) === canon(
 function diff(db) {
   const role = srvRole(), allow = ALLOWED[role];
   const out = [];
+  const perms = db.myPerms || [];
   for (const gr of groups(db)) {
-    if (allow && !allow.includes(gr.name) && !(PERM_GROUPS[gr.name] && (db.myPerms || []).includes(PERM_GROUPS[gr.name]))) continue;
+    let only = null;   // null = كل صفوف المجموعة، وإلا قائمة المفاتيح المسموح بإرسالها
+    if (allow && !allow.includes(gr.name) && !(PERM_GROUPS[gr.name] && perms.includes(PERM_GROUPS[gr.name]))) {
+      const pr = PERM_ROWS[gr.name];
+      if (!pr || !perms.includes(pr.perm)) continue;
+      only = pr.keys;
+    }
     const prev = snap?.[gr.name] || {}, cur = {};
     const up = [];
-    gr.rows.forEach(r => { const k = rowKey(gr.pk, r), j = JSON.stringify(r); cur[k] = j; if (prev[k] !== j && !(prev[k] && sameRow(prev[k], r))) up.push(r); });
-    const del = Object.keys(prev).filter(k => !(k in cur));
+    gr.rows.forEach(r => { const k = rowKey(gr.pk, r), j = JSON.stringify(r); cur[k] = j; if (only && !only.includes(k)) return; if (prev[k] !== j && !(prev[k] && sameRow(prev[k], r))) up.push(r); });
+    const del = Object.keys(prev).filter(k => !(k in cur) && (!only || only.includes(k)));
     if (up.length || del.length) out.push({ ...gr, up, del, cur });
   }
   return out;
@@ -611,13 +626,17 @@ async function push(db) {
       }
     }
     persist(snapKey(), snap);
-    lastSync = new Date(); lastError = '';
+    lastSync = new Date(); lastError = ''; pushFails = 0;
   } catch (e) {
     lastError = e.message || String(e);
     if (e instanceof HttpError && e.status >= 400 && e.status < 500 && e.status !== 401) {
       // رفض من الخادم (صلاحية أو قيد): نعيد تحميل الحقيقة من الخادم حتى لا تبقى نسخة متعارضة
       rejected = true; emit(); throw e;
     }
+    /* خطأ من الخادم يتكرر (5xx، أو خطأ في الكود) لا انقطاع اتصال: بعد 5 مرات متتالية يُعامَل كرفض، وإلا بقي الجهاز
+       لا يسحب جديد الخادم أبدًا (السحب ينتظر إرسال ما لم يُرسل). انقطاع الاتصال (فشل fetch) لا يُحسب: ما سُجّل بدون إنترنت يبقى */
+    const offline = !(e instanceof HttpError) && (e instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false));
+    if (!offline && ++pushFails >= 5) { pushFails = 0; rejected = true; }
   } finally {
     pushing = false; emit();
     if (again) { again = false; later(db, 300); }

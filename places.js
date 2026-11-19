@@ -17,7 +17,8 @@
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./places.js')) VFILES.push('./places.js'); } catch (e) { /* ignore */ } });
   const st = { v: 'place', f: '', open: new Set(), q: '', sel: new Set(), sup: '', src: '' };
   /* صلاحية «الأماكن والحلقات»: للمحاسبين افتراضيًا، ويسحبها المدير أو يمنحها من «الصلاحيات» */
-  try { Perms.define({ key: 'halaqat.manage', label: 'الحلقات', desc: 'إضافة الأماكن والحلقات وتعديلها (وحذفها بطلب يوافق عليه المدير)', group: 'الحلقات والطلاب', defaults: ['accountant'] }); } catch (e) { /* ignore */ }
+  try { Perms.define({ key: 'halaqat.manage', label: 'الحلقات', desc: 'إضافة الأماكن والحلقات وتعديلها (وحذفها بطلب يوافق عليه المدير)', group: 'الحلقات والطلاب', defaults: ['accountant'], roles: ['accountant'] }); } catch (e) { /* ignore */ }
+  /* roles: الواجهة (canManage أدناه) لا تعمل بها إلا للمحاسب؛ فلا تُعرض خانتها لغيره في جدول الصلاحيات */
   const canManage = () => session?.role === 'admin' || (session?.role === 'accountant' && !!window.Perms?.can('halaqat.manage'));
   /* اسم القسم «الحلقات» (للمدير وللمحاسب)، قبل أن ترتّب nav.js وstuview.js القوائم */
   try { (TABS.admin || []).forEach(t => { if (t[0] === 'halaqat') t[1] = 'الحلقات'; }); } catch (e) { /* ignore */ }

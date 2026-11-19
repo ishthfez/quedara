@@ -36,6 +36,19 @@ async function withPhoto(id, fn) {
   if (CLOUD && s.hasPhoto && s.photo === undefined) { try { await window.Cloud.loadPhotos([id]); fillPhotos(); } catch (e) { /* بلا اتصال: تُفتح دون الصورة ولن تُمسح */ } }
   fn(s);
 }
+/* تاريخ الحضور يتبع اليوم: التطبيق المفتوح منذ الأمس (على الجوال يبقى مفتوحًا) كان يسجّل حضور اليوم بتاريخ الأمس.
+   ما اختاره المستخدم بنفسه من التقويم يبقى كما هو؛ والتاريخ الذي وُضع تلقائيًا ينتقل إلى اليوم الجديد */
+ui.dateAuto = ui.date;
+function rollDate() {
+  const t = today();
+  if (ui.date === ui.dateAuto && ui.date !== t) { ui.date = ui.dateAuto = t; return true; }
+  return false;
+}
+/* نافذة الحضور (attwin.js) .overlay.qatt جزء من الصفحة يُعاد رسمه معها؛ ونافذة أخرى مفتوحة: يُرسم بعد إغلاقها */
+const rollAndRender = () => { if (rollDate() && !document.querySelector('.overlay:not(.qatt)')) render(); };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) rollAndRender(); });
+window.addEventListener('focus', rollAndRender);
+setInterval(() => { if (!document.hidden) rollAndRender(); }, 60000);
 /* ============ الإجراءات ============ */
 const A = {
   lmode: d => { if (!ui.pick) return; ui.pick.sel = +d.i; renderPick(); document.querySelector('#login input[name=pin]')?.focus(); },
@@ -236,6 +249,8 @@ const A = {
     toast(`سيُرفع ${n} سجلًا إلى قاعدة البيانات`);
   }),
   att: d => {
+    /* يوم جديد بدأ والصفحة مفتوحة: لا يُكتب الحضور بتاريخ الأمس */
+    if (rollDate()) { render(); toast('بدأ يوم جديد — اضغط مرة أخرى لتسجيل حضور اليوم'); return; }
     const ex = db.attendance.find(a => a.studentId === d.sid && a.date === ui.date);
     if (ex) ex.status = d.st; else db.attendance.push({ id: uid(), studentId: d.sid, date: ui.date, status: d.st });
     save(); render();
@@ -298,7 +313,7 @@ document.addEventListener('change', e => {
   if (c === 'hid') { ui.hid = el.value; render(); }
   else if (c === 'fh') { ui.fh = el.value; render(); }
   else if (c === 'fcat') { ui.fcat = el.value; render(); }
-  else if (c === 'date') { ui.date = el.value || today(); render(); }
+  else if (c === 'date') { ui.date = el.value || today(); if (ui.date === today()) ui.dateAuto = ui.date; render(); }
   else if (c === 'import') {
     const f = el.files[0]; if (!f) return;
     const rd = new FileReader();
@@ -483,7 +498,9 @@ async function cloudMakeLogins(list, fresh = false) {
       const old = String(m.pin || legacy[m.id] || '');
       const kind = ['teachers', 'supervisors', 'students', 'accountants', 'admins'].find(k => (db[k] || []).includes(m));
       const password = !fresh && PASS_RE.test(old) ? old : genPassK(kind);
-      const twin = accounts().find(a => a.u.id !== m.id && a.u.hasLogin && norm(a.u.name) === norm(m.name));
+      /* الحساب المشترك للشخص نفسه بأكثر من صفة: ليس للطلاب، ولا مع حساب مدير أو مدير عام (والخادم يتحقق من ذلك أيضًا) */
+      const twin = kind === 'students' || kind === 'admins' ? null : accounts().find(a => a.u.id !== m.id && a.u.hasLogin && norm(a.u.name) === norm(m.name)
+        && !['student', 'admin'].includes(a.role) && a.u.info?.scope !== 'all');
       return { member_id: m.id, password, share_with: twin?.u.id, name: m.name, m };
     });
     const res = await window.Cloud.provision(items.map(({ name, m, ...x }) => x), (n, t) => toast(`تم ${n} من ${t}`));
@@ -599,6 +616,8 @@ function cloudMergeInto(src, skipDemo) {
   const demo = new Set(skipDemo ? [...(src.teachers || []), ...(src.supervisors || []), ...(src.students || [])].filter(m => DEMO.includes(m.name) && m.pin === '0000').map(m => m.id) : []);
   const add = (k, list) => { db[k] = db[k] || []; const have = new Set(db[k].map(x => x.id)); (list || []).forEach(x => { if (!have.has(x.id) && !demo.has(x.id)) { db[k].push(x); n++; } }); };
   add('supervisors', src.supervisors); add('teachers', src.teachers);
+  /* المحاسبون والإداريون كانوا يسقطون من الدمج */
+  add('accountants', src.accountants); add('placeadmins', src.placeadmins);
   const halaqat = (src.halaqat || []).filter(h => !(demo.has(h.teacherId) && !(src.students || []).some(s => s.halaqaId === h.id && !demo.has(s.id))));
   const usedPlaces = new Set(halaqat.map(h => h.placeId));
   add('places', (src.places || []).filter(p => usedPlaces.has(p.id) || !skipDemo));
@@ -607,6 +626,8 @@ function cloudMergeInto(src, skipDemo) {
   add('students', (src.students || []).map(s => (demo.has(s.halaqaId) ? { ...s, halaqaId: '' } : s)));
   add('attendance', (src.attendance || []).filter(a => !demo.has(a.studentId)));
   add('records', (src.records || []).filter(r => !demo.has(r.studentId)));
+  /* دفعات الاشتراكات كانت تسقط من الدمج: تُضاف لطلاب موجودين فقط (لا دفعة باسم طالب غير موجود) */
+  if (Array.isArray(src.fees)) { const stu = new Set((db.students || []).map(s => s.id)); add('fees', src.fees.filter(f => !demo.has(f.studentId) && stu.has(f.studentId))); }
   add('news', src.news); add('pending', src.pending);
   ['students', 'teachers'].forEach(k => { db.fields[k] = db.fields[k] || []; (src.fields?.[k] || []).forEach(f => { if (!db.fields[k].some(x => x.key === f.key)) db.fields[k].push(f); }); });
   if (src.settings?.org && (!db.settings.org || db.settings.org === 'إدارة الحلقات القرآنية')) db.settings.org = src.settings.org;
@@ -780,6 +801,14 @@ function dupMerge(k, keep, drop) {
     const kd = new Set(db.attendance.filter(a => a.studentId === keep.id).map(a => a.date));
     db.attendance = db.attendance.filter(a => !(a.studentId === drop.id && kd.has(a.date)));
     db.attendance.forEach(a => re(a, 'studentId')); db.records.forEach(r => re(r, 'studentId'));
+    /* اشتراكات المحذوف تُنقل للباقي (كانت تبقى باسم طالب محذوف فيظهر الباقي «لم يسدّد»)؛
+       ودفعة مكررة تمامًا (الشهر والمبلغ والتاريخ نفسها) مسجّلة للاثنين هي الدفعة نفسها فتُترك */
+    if (Array.isArray(db.fees)) {
+      const fk = f => [f.y, f.m, +f.amount, f.date || ''].join('|');
+      const kf = new Set(db.fees.filter(f => f.studentId === keep.id).map(fk));
+      db.fees = db.fees.filter(f => !(f.studentId === drop.id && kf.has(fk(f))));
+      db.fees.forEach(f => re(f, 'studentId'));
+    }
     if (!keep.halaqaId && drop.halaqaId) keep.halaqaId = drop.halaqaId;
     keep.info = { ...(drop.info || {}), ...(keep.info || {}) };
   }
@@ -806,14 +835,18 @@ function dupDialog(manual) {
   ov.querySelector('[data-close]').onclick = () => ov.remove();
   ov.addEventListener('change', e => { const b = e.target.closest('.dupg'); if (!b) return; if (e.target.matches('[data-ignore]') && e.target.checked) b.querySelector('[data-merge]').checked = false; if (e.target.matches('[data-merge]') && e.target.checked) b.querySelector('[data-ignore]').checked = false; });
   ov.querySelector('[data-dupok]').onclick = e => withBusy(e.currentTarget, (async () => {
-    let merged = 0, ignored = 0; const unlink = [];
+    let merged = 0, ignored = 0; const unlink = [], held = [];
+    /* قوائم التحصيل تُحفظ على الخادم بدوالها (لا بالمزامنة)، فلا ينقلها الدمج: من في قائمة تحصيل لم تُؤكَّد بعد لا يُدمج حتى تُراجَع،
+       وإلا ضاعت دفعته (يتخطى المحاسب سطرًا طالبه محذوف) أو بقيت قائمة المعلم بلا صاحب */
+    const inOpenColl = (k, id) => (db.collections || []).some(c => c.status !== 'done' && (k === 'teachers' ? c.teacherId === id : k === 'students' && (c.lines || []).some(l => l.studentId === id)));
     gs.forEach((g, gi) => {
       const box = ov.querySelector(`.dupg[data-g="${gi}"]`);
       if (box.querySelector('[data-ignore]').checked) { db.settings.dupIgnore = [...dupIgnored(), g.key]; ignored++; return; }
       if (!box.querySelector('[data-merge]').checked) return;
       const keepId = box.querySelector(`[name=keep${gi}]:checked`).value, keep = g.items.find(m => m.id === keepId);
-      g.items.filter(m => m.id !== keepId).forEach(d => { if (g.k !== 'payroll' && d.hasLogin) unlink.push(d.id); dupMerge(g.k, keep, d); merged++; });
+      g.items.filter(m => m.id !== keepId).forEach(d => { if (inOpenColl(g.k, d.id)) { held.push(d.name); return; } if (g.k !== 'payroll' && d.hasLogin) unlink.push(d.id); dupMerge(g.k, keep, d); merged++; });
     });
+    if (held.length) setTimeout(() => toast(`لم يُدمج ${held.length} (${held.slice(0, 3).join('، ')}${held.length > 3 ? '…' : ''}): في قائمة تحصيل لم تُراجَع بعد — راجعها أولًا ثم ادمج`), 1500);
     for (const id of unlink) { try { await window.Cloud.fn({ action: 'remove', member_id: id }); } catch (err) { /* يبقى الحساب يتيمًا بلا ضرر */ } }
     save(); ov.remove(); render();
     toast(`تم: دمج ${merged}${ignored ? ` وتجاهل ${ignored} مجموعة` : ''}`);
@@ -1052,10 +1085,30 @@ async function verSig() {
     .then(r => (r.ok ? r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || '' : null)).catch(() => null)));
   return parts.some(p => p === null) ? null : parts.join('|');
 }
-async function checkUpdate() {
-  if (verBusy || navigator.onLine === false || !/^https?:/.test(location.protocol)) return;
-  verBusy = true;
+/* رقم الإصدار: version.txt يكتبه Vercel عند كل نشر (buildCommand في vercel.json: معرّف الـ commit).
+   طلب واحد صغير بدل طلب لكل ملف من ملفات التطبيق — كان الفحص (كل 5 دقائق وعند كل عودة للتطبيق) أكثر ما يستهلك
+   «CDN Requests» في باقة Vercel. بلا version.txt (تشغيل محلي، أو قبل نشر هذا التعديل) يُستعمل الفحص القديم، مرة كل 30 دقيقة على الأكثر */
+/* يُقارن بإصدار الكود الذي يعمل فعلًا في هذه الصفحة (window.APP_VER من ver.js، محفوظ مع بقية الملفات)،
+   لا بقيمة في التخزين: تلك كانت تُسجَّل للإصدار الجديد دون أن يُحمَّل، أو يسجّلها تبويب آخر، فيبقى الجهاز على الكود القديم */
+const CHECK_EVERY = 10 * 60000, OLD_EVERY = 30 * 60000;
+let lastCheck = 0, lastOld = 0;
+async function remoteVer() {
   try {
+    const r = await fetch('./version.txt?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return null;
+    const t = (await r.text()).trim();
+    return /^[\w.-]{4,80}$/.test(t) ? t : null;
+  } catch (e) { return null; }
+}
+async function checkUpdate(force) {
+  if (verBusy || navigator.onLine === false || !/^https?:/.test(location.protocol)) return;
+  if (!force && Date.now() - lastCheck < CHECK_EVERY) return;
+  verBusy = true; lastCheck = Date.now();
+  try {
+    const v = await remoteVer(), running = window.APP_VER || null;
+    if (v && running) { if (v !== running) applyUpdate(); return; }
+    if (Date.now() - lastOld < OLD_EVERY && verBase !== null) return;
+    lastOld = Date.now();
     const s = await verSig();
     if (!s) return;
     if (verBase === null) { verBase = s; return; }
@@ -1066,13 +1119,15 @@ async function applyUpdate() {
   const typing = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
   if (document.querySelector('.overlay') || typing || window.Cloud?.busy) { clearTimeout(updWait); updWait = setTimeout(applyUpdate, 5000); return; }
   if (CLOUD && session && window.Cloud.pendingCount(db)) { try { await window.Cloud.push(db); } catch (e) { /* يُعاد المحاولة */ updWait = setTimeout(applyUpdate, 5000); return; } }
+  /* الملفات تُقدَّم من النسخة المحفوظة على الجهاز (sw.js)، فتُمسح قبل إعادة التحميل لتُجلب الجديدة مرة واحدة */
+  try { if (window.caches) { const ks = await caches.keys(); await Promise.all(ks.filter(k => k.startsWith('halaqat-')).map(k => caches.delete(k))); } } catch (e) { /* ignore */ }
   try { const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update(); } catch (e) { /* ignore */ }
   location.reload();
 }
-window.addEventListener('online', () => setTimeout(checkUpdate, 1500));
+window.addEventListener('online', () => setTimeout(() => checkUpdate(true), 1500));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
-setInterval(() => { if (!document.hidden) checkUpdate(); }, 5 * 60000);
-setTimeout(checkUpdate, 4000);
+setInterval(() => { if (!document.hidden) checkUpdate(); }, 30 * 60000);
+setTimeout(() => checkUpdate(true), 4000);
 
 /* مسح كل البيانات: يطلب بريد المدير وكلمة مروره (أو اسمه وكلمته في الوضع المحلي) وكتابة «مسح» للتأكيد */
 function wipeAll() {
@@ -1092,7 +1147,11 @@ function wipeAll() {
     if (!CLOUD) {
       const a = db.admins.find(x => norm(x.name) === norm(val('aname')) && x.pin === ov.querySelector('[name=pw]').value);
       if (!a) { toast('اسم المدير أو كلمة المرور غير صحيحة'); return; }
-      db = seed(); session = null; ss.del(SKEY); save(); ov.remove(); render(); toast('تم مسح كل البيانات');
+      /* كما يقول التنبيه وكما في المسح على الخادم: تبقى حسابات الإداريين والمظهر.
+         كان db = seed() يستبدل كل شيء ببيانات التجربة، ومنها مدير تجريبي بكلمة 1234 مكان المديرين الحقيقيين */
+      Object.assign(db, { supervisors: [], teachers: [], students: [], places: [], halaqat: [], attendance: [], records: [], news: [], pending: [], fields: { students: [], teachers: [] } });
+      if (db.payroll) db.payroll = { settings: db.payroll.settings || {}, employees: [], rows: [], absences: [], closed: [] };
+      session = null; ss.del(SKEY); save(); ov.remove(); render(); toast('تم مسح كل البيانات');
       return;
     }
     let j;

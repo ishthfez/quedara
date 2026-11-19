@@ -13,7 +13,10 @@
   var baseOf = function (s, sys) {
     if (typeof window.QLFeeDue !== 'function') return null;
     var info = Object.assign({}, s.info || {}, { feeSys: sys, feeDisc: '', feeDiscVal: '' });
-    return window.QLFeeDue(Object.assign({}, s, { info: info }));
+    /* بالشهر الحالي، كالأسعار المقترحة وsetPrices (الفترة السارية الآن)؛ بلا شهر كان يأخذ الشهر المعروض في «الاشتراكات»
+       فتظهر فروق غير حقيقية إن كان في فترة مبالغ أخرى */
+    var d = new Date();
+    return window.QLFeeDue(Object.assign({}, s, { info: info }), d.getFullYear(), d.getMonth() + 1);
   };
 
   /* أسعار الأماكن الفعلية: من مبالغ السنة الحالية إن وُجدت (كما يحسبها fees.js)، وإلا من الإعدادات العامة */

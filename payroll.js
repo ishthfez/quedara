@@ -143,11 +143,22 @@ function view() {
 /* شهر المرتب الافتراضي: آخر شهر مفتوح في المرتبات، وإلا شهر التاريخ نفسه */
 function payMonthFor(date) {
   const p = P();
-  if (!p.rows.length && p.curMonth?.y) return { y: p.curMonth.y, m: p.curMonth.m };
   const open = [...new Set(p.rows.map(r => key(r.y, r.m)))].filter(k => !p.closed.includes(k)).map(k => k.split('-').map(Number)).sort((a, b) => (b[0] * 100 + b[1]) - (a[0] * 100 + a[1]))[0];
   if (open) return { y: open[0], m: open[1] };
+  /* بلا شهر مفتوح ظاهر: شهر المرتبات الحالي كما يعرفه الخادم. المشرف لا تصله إلا كشوف الأشهر المغلقة،
+     فكان يقع بعد إغلاق أي شهر على شهر التقويم (مثلًا نوفمبر وكشف أكتوبر ما زال مفتوحًا) فلا يظهر غيابه في كشف المدير */
+  if (p.curMonth?.y) return { y: p.curMonth.y, m: p.curMonth.m };
   const d = new Date(String(date || Q().today()) + 'T00:00:00');
   return { y: d.getFullYear(), m: d.getMonth() + 1 };
+}
+/* سنة الشهر المختار للغياب: الأقرب إلى تاريخ الغياب نفسه (وإلا إلى شهر المرتبات الحالي).
+   كانت تؤخذ من شهر المرتبات الحالي وحده: ديسمبر 2026 مفتوح وغياب 2027-01-04 عن «يناير» يُسجَّل يناير 2026 */
+function absYear(pm, date) {
+  const d = /^\d{4}-\d{2}-\d{2}/.test(String(date || '')) ? String(date) : '';
+  const cur = payMonthFor(Q().today()), base = d ? +d.slice(0, 4) * 12 + (+d.slice(5, 7) - 1) : cur.y * 12 + (cur.m - 1);
+  if (!pm) return d ? +d.slice(0, 4) : cur.y;
+  const by = Math.floor(base / 12);
+  return [by - 1, by, by + 1].reduce((best, y) => (Math.abs(y * 12 + pm - 1 - base) < Math.abs(best * 12 + pm - 1 - base) ? y : best), by);
 }
 /* الرصيد والإثبات لمن يسجّل الغياب: المدير والمشرف (والمشرف العام). على الخادم يحتاج المشرف supabase/absence_proof.sql،
    وكذلك الإثبات «خصم» (قبله يرفضه الخادم)؛ والتطبيق يعرف ذلك بنفسه (leaveOK) فلا يرسل ما سيُرفض */
@@ -303,8 +314,8 @@ const act = {
     const reason = D.reason === 'أخرى' ? D.reasonOther : D.reason;
     if (!reason) { toast(D.reason === 'أخرى' ? 'اكتب السبب' : 'اختر السبب'); return; }
     if (p.absences.some(a => a.eid === e.id && a.date === D.date)) { toast('غياب هذا المعلم في هذا اليوم مسجّل بالفعل'); return; }
-    const pmY = payMonthFor(today()).y;
-    p.absences.push({ id: uid(), y: pmY, m: D.pm || payMonthFor(D.date).m, date: D.date, eid: e.id, name: e.name, place, perm: D.perm, reason, proof: proofRole() ? D.proof : '', note: D.note, ts: new Date().toISOString(), by: Q().me()?.name || '', byMember: Q().session?.id || '' });
+    const pmM = D.pm || payMonthFor(D.date).m, pmY = D.pm ? absYear(+D.pm, D.date) : payMonthFor(D.date).y;
+    p.absences.push({ id: uid(), y: pmY, m: pmM, date: D.date, eid: e.id, name: e.name, place, perm: D.perm, reason, proof: proofRole() ? D.proof : '', note: D.note, ts: new Date().toISOString(), by: Q().me()?.name || '', byMember: Q().session?.id || '' });
     ab.draft = { date: D.date, pm: D.pm, place: D.place, placeOther: D.placeOther };
     ab.y = pmY; ab.m = D.pm || ab.m;
     Q().save(); Q().render(); toast('تم تسجيل غياب ' + e.name);
@@ -456,7 +467,7 @@ function absAuto() {
   if (!e || !D.perm || !proofRole()) {   // الرصيد والإثبات لمن يسجّل الغياب؛ وإلغاء الإذن يعيد الإثبات «لاحقًا»
     box.hidden = true; if (pr && !D.perm && (pr.value === 'رصيد' || pr.value === 'خصم')) { pr.value = ''; absRead(); } return;
   }
-  const { y } = payMonthFor(Q().today()), m = D.pm || payMonthFor(D.date).m, b = absBalance(e, y, m);
+  const m = D.pm || payMonthFor(D.date).m, y = D.pm ? absYear(+D.pm, D.date) : payMonthFor(D.date).y, b = absBalance(e, y, m);
   let ok = false, msg;
   if (D.perm !== 'بإذن') msg = 'غياب بغير إذن: يُخصم من المرتب.';
   else if (b.total == null) msg = 'نظام عمله غير محدد في المرتبات، فلا رصيد له: يُخصم.';

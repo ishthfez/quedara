@@ -109,6 +109,14 @@
       <button type="button" class="btn ${maintOn ? 'primary' : 'danger'}" data-maint-toggle>${maintOn ? 'تشغيل الموقع' : 'إيقاف الموقع'}</button>
     </div>` : '';
 
+    /* nav.js جعل «الإعدادات» قسمًا جامعًا (شريط تبويبات ثم التبويب المختار) قبل تحميل هذا الملف:
+       المربعان يوضعان تحت الشريط وفي تبويب «الإعدادات» وحده، لا فوق الشريط في كل تبويب (الصلاحيات، النسخ الاحتياطية…) */
+    if (typeof base === 'string' && base.startsWith('<div class="card subnav">')) {
+      const cur = (base.match(/class="btn on" data-subtab="([^"]+)"/) || [])[1];
+      if (cur && cur !== 'settings') return base;
+      const end = base.indexOf('</div></div>') + '</div></div>'.length;
+      return base.slice(0, end) + sec + maintSec + base.slice(end);
+    }
     return sec + maintSec + base;
   };
 })();
