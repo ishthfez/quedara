@@ -125,6 +125,26 @@
   const supTeachers = () => { const cur = supSub();
     return `<div class="card subnav"><div class="bar" style="margin:0">${SUP_SUBS.map(([k, l]) => `<button type="button" class="btn ${k === cur ? 'on' : ''}" data-subtab="${k}" data-g="teachers">${l}</button>`).join('')}</div></div>` + (cur === 'payroll' ? supPay() : supervisorViews.absence()); };
   Object.assign(supervisorViews, { halaqat: gmHalaqat, teachers: () => (isGM() ? gmTeachers() : supTeachers()) });
+  /* المدير العام والحضور والتسميع: اطلاع فقط، إلا في الحلقات المسندة إليه (هو مشرفها) فله فيها صلاحيات المشرف كاملة.
+     القاعدة نفسها على الخادم (can_manage_halaqa في gmanager_role.sql). الأزرار تظهر بلا ضغط، والضغط عليها لا يسجّل شيئًا. */
+  const GM_WRITE = '[data-act="att"],[data-act="rec"],[data-move],[data-stat],[data-act="editStudent"],[data-act="editExtra"],select[data-fsys]';
+  const stuOfEl = el => { const d = el.dataset; return byId(db.students, d.sid || d.id || d.move || d.stat || d.fsys || el.closest('[data-sid]')?.dataset.sid || ''); };
+  const gmOwns = s => !!s && byId(db.halaqat, s.halaqaId)?.supervisorId === session?.id;
+  const gmLocked = el => isGM() && !gmOwns(stuOfEl(el));
+  const gmBlock = e => {
+    if (!isGM()) return;
+    const el = e.target.closest?.(GM_WRITE); if (!el || !gmLocked(el)) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (e.type === 'click') toast('للاطلاع فقط: التسجيل في هذه الحلقة لمعلمها ومشرفها');
+  };
+  ['click', 'change', 'mousedown'].forEach(t => document.addEventListener(t, gmBlock, true));
+  let gmRaf = 0;
+  new MutationObserver(() => { if (gmRaf || !isGM()) return; gmRaf = requestAnimationFrame(() => { gmRaf = 0;
+    document.querySelectorAll(GM_WRITE).forEach(el => { const lock = gmLocked(el); if (lock !== el.classList.contains('qgmro')) { el.classList.toggle('qgmro', lock); if (el.tagName === 'SELECT') el.disabled = lock; } });
+  }); }).observe(document.body, { childList: true, subtree: true });
+  const gmCss = document.createElement('style');
+  gmCss.textContent = '.qgmro{opacity:.45;cursor:not-allowed!important;filter:grayscale(.6)}';
+  document.head.appendChild(gmCss);
   /* الإشعارات: زر «+ إشعار» للمدير العام متى أمكن الإرسال فعلًا (بلا خادم، أو بعد gmanager_role.sql) */
   const gmCanSend = () => !CLOUD || window.Cloud?.gmReady === true;
   document.addEventListener('DOMContentLoaded', () => {
