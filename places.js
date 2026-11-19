@@ -41,8 +41,11 @@
   const acts = h => `<button class="btn sm" data-act="editHalaqa" data-id="${h.id}">تعديل</button><button class="btn sm danger" data-act="delHalaqa" data-id="${h.id}">حذف</button>`;
   const nameCell = h => `<button type="button" class="lnk" data-hstu="${h.id}" title="عرض طلاب الحلقة"><b>${esc(short(h))}</b></button>${flags(h)}`;
   /* على الهاتف: كل حلقة بطاقة (والجدول للحاسوب، وللطباعة والتنزيل من أدواته) */
+  /* سطر البطاقة: كبسولة «إشراف» قبل اسم المشرف، وعدد الطلاب في كبسولة، والموعد بعد أيقونة ساعة */
+  const CLOCK = '<svg class="plclk" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  const cardBit = (c, h) => c === C.n ? `<span class="tag plpill">${stuN(h)} طالب</span>` : c === C.sup ? `<span class="tag plpill">إشراف</span> ${c[1](h)}` : c[1](h);
   const cards = (list, cols, check) => `<div class="plhl">${list.map(h => `<div class="plhi">${check ? `<input type="checkbox" data-plsel="${h.id}" ${st.sel.has(h.id) ? 'checked' : ''} aria-label="تحديد">` : ''}
-      <div class="plhi-b"><div>${nameCell(h)}</div><div class="muted plhi-m">${cols.filter(c => c !== C.name && c !== C.time).map(c => c === C.n ? `${stuN(h)} طالب` : c[1](h)).join(' · ')}</div>${cols.includes(C.time) ? `<div class="muted plhi-m">${C.time[1](h)}</div>` : ''}</div>
+      <div class="plhi-b"><div>${nameCell(h)}</div><div class="muted plhi-m">${cols.filter(c => c !== C.name && c !== C.time && c !== C.n).map(c => cardBit(c, h)).join(' · ')}${cols.includes(C.n) ? ' ' + cardBit(C.n, h) : ''}</div>${cols.includes(C.time) ? `<div class="muted plhi-m">${CLOCK}${C.time[1](h)}</div>` : ''}</div>
       <div class="plhi-a">${acts(h)}</div></div>`).join('')}</div>`;
   const table = (list, cols, check) => `<div class="tbl"><table><tr>${check ? `<th><input type="checkbox" data-plall aria-label="تحديد الكل" ${list.length && list.every(h => st.sel.has(h.id)) ? 'checked' : ''}></th>` : ''}${cols.map(c => `<th>${c[0]}</th>`).join('')}<th></th></tr>
     ${list.map(h => `<tr>${check ? `<td><input type="checkbox" data-plsel="${h.id}" ${st.sel.has(h.id) ? 'checked' : ''} aria-label="تحديد"></td>` : ''}${cols.map(c => `<td>${c[1](h)}</td>`).join('')}<td>${acts(h)}</td></tr>`).join('')}</table></div>` + cards(list, cols, check);   // البطاقات بعد الجدول: فصف الأعمال والأدوات فوقها على الهاتف
@@ -173,8 +176,8 @@
       main .card:has(.plhl) .tbl,main .card:has(.plhl) .tblprint .tzoom,main .card:has(.plhl) .tblprint .qzoom{display:none!important}
       .plhl{display:block}.plhi{display:flex;align-items:center;gap:.6rem;padding:.65rem .1rem;border-top:1px solid var(--line,#eee6d6)}
       .plhl .plhi:first-child{border-top:0}.plhi-b{flex:1;min-width:0}.plhi-b .lnk{text-align:start}
-      .plhi-m{font-size:.84rem;margin-top:.15rem;line-height:1.5}
-      .plsum{flex-basis:100%}.plctl{flex-wrap:wrap}.plctl input[data-plq]{max-width:none;flex-basis:100%;order:3}.plctl [data-plall2]{order:4}.pladdr{display:none}
+      .plhi-m{font-size:.84rem;margin-top:.15rem;line-height:1.5}.plhi-m .plpill{font-size:.75rem;padding:.05rem .45rem;margin:0}.plhi-m .plclk{vertical-align:-2px;margin-inline-end:.3rem}
+      .plsum{flex-basis:100%}.plctl{flex-wrap:wrap}.plctl .plseg{flex:1 1 100%}.plctl .plseg .btn{flex:1 1 0;justify-content:center;text-align:center;padding-inline:.3rem;white-space:nowrap;font-size:.9rem;min-width:0}.plctl input[data-plq]{max-width:none;flex-basis:100%;order:3}.plctl [data-plall2]{order:4}.pladdr{display:none}
       .plhi-a{display:flex;flex-direction:column;gap:.3rem}.plhi-a .btn{padding:.25rem .55rem!important;min-height:0!important;font-size:.82rem}
       .plhi>input[type=checkbox]{flex:none;width:1.15rem;height:1.15rem}
     }`;
@@ -214,6 +217,15 @@
     }
   });
   document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-plopen]')) { e.preventDefault(); e.target.click(); } });
+  /* قوائم «+ إضافة» والترس لا تخرج عن حد الشاشة: تُزاح عند فتحها لتبقى داخلها */
+  document.addEventListener('toggle', e => {
+    const d = e.target; if (!d.matches?.('details.pltools') || !d.open) return;
+    const m = d.querySelector('.pltmenu'); if (!m) return;
+    m.style.transform = '';
+    const r = m.getBoundingClientRect(), pad = 8, W = document.documentElement.clientWidth;
+    const dx = r.right > W - pad ? W - pad - r.right : r.left < pad ? pad - r.left : 0;
+    if (dx) m.style.transform = `translateX(${dx}px)`;
+  }, true);
   /* أي نقرة خارج قائمة الأدوات تغلقها */
   document.addEventListener('click', e => { document.querySelectorAll('details.pltools[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; }); });
 })();
