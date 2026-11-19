@@ -296,10 +296,10 @@
     if (l === 'منتظمون' || l === 'الطلاب المنتظمون') return { tab: 'students', sel: '[data-sstfv="on"]' };
     if (ATT.includes(l)) return { tab: 'students', sel: 'main [data-attopen]' };
     if (STU.includes(l)) return { tab: 'students' };
-    if (l === 'المعلمون' || l === 'المعلمون العاملون') return { tab: 'teachers' };
+    if (l === 'المعلمون' || l === 'المعلمون العاملون') return { tab: 'teachers', sel: '[data-subtab="teachers"]' };
     if (l === 'الحلقات' || l === 'الأماكن') return { tab: hasTab('halaqat') ? 'halaqat' : 'students' };
     if (l === 'المشرفون') return { modal: supModal };
-    if (l === 'غياب المعلمين هذا الشهر') return { tab: 'absence' };
+    if (l === 'غياب المعلمين هذا الشهر') return hasTab('absence') ? { tab: 'absence' } : { tab: 'teachers', sel: '[data-subtab="absence"]' };   // «العاملون ← الغياب»
     if (l === 'كشوف بانتظار المراجعة') { const t = (TABS[session.role] || []).find(x => /تحصيل المعلمين/.test(x[1])); return t ? { tab: t[0] } : null; }
     if (['نسبة حضوري', 'أيام الغياب', 'تسميعاتي', 'آخر حفظ'].includes(l)) return { tab: hasTab('hist') ? 'hist' : 'me' };
     return null;
