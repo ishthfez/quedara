@@ -36,6 +36,8 @@
       T.splice(0, T.length, ...(want ? [...home, ['students', 'الطلاب'], ...base] : saved[r]));
       /* المدير العام (مشرف نطاقه الكل): أقسام المدير نفسها بأسمائها وترتيبها (roles.js: QLGMTabs) بدل أقسام المشرف */
       if (want && r === 'supervisor' && window.isGenSup?.(me()) && typeof window.QLGMTabs === 'function') T.splice(0, T.length, ...window.QLGMTabs());
+      /* والمشرف: «غياب المعلمين» تبويب «الغياب» في «العاملون» كما عند المدير (roles.js) */
+      else if (want && r === 'supervisor') { const i = T.findIndex(t => t[0] === 'absence'); if (i > -1) T.splice(i, 1, ['teachers', (TABS.admin.find(t => t[0] === 'teachers') || [])[1] || 'العاملون']); }
     });
     if (on() && (!ui.tab || OLD[role()].includes(ui.tab))) ui.tab = TABS[role()][0][0];
   }
