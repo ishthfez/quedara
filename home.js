@@ -7,7 +7,7 @@
    - مدة الإعلان: يختار المدير مدة (أو تاريخًا) يختفي بعدها الإعلان من «الرئيسية» و«الإعلانات» عند الجميع؛
      ويبقى في «الإعلانات» عند المدير بعلامة «انتهى»، وله فيها «تعديل» لكل إعلان (النص والجمهور والأهمية والمدة).
    - الحفظ على الخادم: عمودا prio و until (supabase/news_ext.sql)؛ وقبل تنفيذه يعمل الإعلان كما كان بلا أهمية ولا مدة.
-   - تحت الإعلانات عدّادات بحسب اختصاص كل فئة (بطاقة «الحلقات والطلاب» نفسها التي عند المدير)، كلٌّ في نطاقه:
+   - تحت الإعلانات عدّادات بحسب اختصاص كل فئة (بطاقة «الحلقات والطلاب» نفسها التي عند المدير)، كلٌّ في نطاقه:
      المعلم حلقاته، والمشرف حلقاته، والإداري حلقات أماكنه، والمحاسب الطلاب و«الاشتراكات»، والطالب حضوره وتسميعه.
      الطلاب في العدّادات كلها المنتظمون وحدهم، والمعلمون العاملون وحدهم (لا الموقوفون)، عند المدير وغيره. */
 (() => {
@@ -187,7 +187,15 @@
   }
 
   /* ===== «الرئيسية» ===== */
-  const homeView = r => { let c = ''; try { c = counters(r); } catch (e) { console.error('home counters:', e); } return box(r) + c; };
+  /* بطاقة «الاشتراكات» للمعلم والمشرف والإداري: على طلاب حلقاته وحدها (كما في «الطلاب»)، وما يظهر منها بحسب جدول عناصر صفحة الطلاب.
+     (المحاسب في مربعه أعلاه، والمدير العام من delreq.js) */
+  const staffFee = r => {
+    if (!['teacher', 'supervisor', 'placeadmin'].includes(r) || (r === 'supervisor' && me()?.info?.scope === 'all')) return '';
+    if (!window.QLFeeSummary || window.QLStuPerm?.can?.('sum') === false) return '';
+    const V = window.QLStuView;
+    return V?.scoped ? V.scoped(() => window.QLFeeSummary(db.students)) : '';
+  };
+  const homeView = r => { let c = ''; try { c = counters(r); } catch (e) { console.error('home counters:', e); } try { c += staffFee(r); } catch (e) { console.error('home fees:', e); } return box(r) + c; };
   /* الطالب: تُضاف قبل أن يرتّب nav.js القوائم (فيحفظها صفحة البداية)، ثم تُعاد أول القائمة بعد ترتيبه.
      (العاملون يضعها stuview.js أول قائمتهم) */
   try { if (TABS.student && !TABS.student.some(t => t[0] === 'home')) TABS.student.unshift(['home', 'الرئيسية']); } catch (e) { /* ignore */ }
