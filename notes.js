@@ -8,7 +8,7 @@
   const t = TABS.accountant.find(x => x[0] === 'notes'); if (t) t[1] = 'ملاحظات';
   const can = p => (window.Perms ? Perms.can(p) : session?.role === 'admin');
   let targets = null, loading = false, missing = false;
-  const GROUP = { admin: 'المدير', supervisor: 'المشرفون', teacher: 'المعلمون', accountant: 'المحاسبون' };
+  const GROUP = { admin: 'Admin', supervisor: 'المشرفون', teacher: 'المعلمون', accountant: 'المحاسبون' };
   const groupOf = x => (x.role === 'accountant' && x.title ? x.title : GROUP[x.role] || 'آخرون');
   async function loadTargets(force) {
     if ((targets && !force) || loading) return;
@@ -46,7 +46,7 @@
     else {
       const groups = new Map();
       targets.slice().sort((a, b) => a.name.localeCompare(b.name, 'ar')).forEach(x => { const g = groupOf(x); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(x); });
-      const order = ['المدير', 'المشرفون', 'المعلمون', 'المحاسبون'];
+      const order = ['Admin', 'المشرفون', 'المعلمون', 'المحاسبون'];
       const keys = [...groups.keys()].sort((a, b) => ((order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99)) || a.localeCompare(b, 'ar'));
       form = `<label>إلى<select data-nto2 aria-label="الموظف"><option value="">— اختر الموظف —</option>${keys.map(g => `<optgroup label="${esc(g)}">${groups.get(g).map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}</select></label>
         <label>الملاحظة<textarea data-ntext2 rows="4" placeholder="اكتب ملاحظتك"></textarea></label>

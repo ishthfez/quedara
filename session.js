@@ -24,7 +24,7 @@
   document.head.appendChild(css);
   setTimeout(() => { try { if (!VFILES.includes('./session.js')) VFILES.push('./session.js'); } catch (e) { /* ignore */ } }, 0);
 
-  const GROUPS = [['admin', 'المدير'], ['accountant', 'المحاسبون والإداريون'], ['supervisor', 'المشرفون'], ['teacher', 'المعلمون'], ['student', 'الطلاب']];
+  const GROUPS = [['admin', 'Admin'], ['accountant', 'المحاسبون والإداريون'], ['supervisor', 'المشرفون'], ['teacher', 'المعلمون'], ['student', 'الطلاب']];
   const DEF = { admin: { mode: 'idle', val: 30 }, accountant: { mode: 'idle', val: 60 }, supervisor: { mode: 'month' }, teacher: { mode: 'month' }, student: { mode: 'month' } };
   const MODES = [['idle', 'عند عدم الاستخدام لمدة', 'دقيقة'], ['days', 'كل عدد من الأيام', 'يوم'], ['month', 'بداية كل شهر', ''], ['none', 'لا يُطلب', '']];
   const policy = () => ({ ...DEF, ...(db?.settings?.session_policy || {}) });
