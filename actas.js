@@ -51,7 +51,7 @@
     act = null; ui.tab = null; ui.hid = ''; ui.nav = false;
     document.querySelectorAll('.overlay').forEach(o => o.remove());
     render(); bar(); window.scrollTo(0, 0);
-    toast('رجعت إلى حساب المدير');
+    toast('رجعت إلى حساب Admin');
   }
   window.QLActExit = exit;
 
@@ -109,7 +109,7 @@
     b.innerHTML = `<span>تعمل الآن بصفة</span>
       <select data-asbr aria-label="الفئة">${ROLES.map(([k, l]) => `<option value="${k}" ${k === act.cat ? 'selected' : ''} ${people(k).length ? '' : 'disabled'}>${l}</option>`).join('')}</select>
       <select data-asbp aria-label="الشخص">${ppl.map(m => `<option value="${esc(m.id)}" ${m.id === act.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
-      <small>كل ما تسجّله يُكتب باسمك</small><button type="button" class="btn sm" data-actas-exit>رجوع إلى المدير</button>`;
+      <small>كل ما تسجّله يُكتب باسمك</small><button type="button" class="btn sm" data-actas-exit>رجوع إلى Admin</button>`;
     requestAnimationFrame(() => document.documentElement.style.setProperty('--actas-h', b.offsetHeight + 'px'));
   }
   document.addEventListener('click', e => { if (e.target.closest('[data-actas-exit]')) exit(); });
@@ -149,7 +149,7 @@
     const draw = () => {
       const opts = opts0();
       ov.innerHTML = `<div class="modal"><h2>العمل بصفة…</h2>
-        <p class="muted" style="margin:0 0 .6rem;font-size:.88rem">يتحول التطبيق إلى واجهة من تختاره كما يراها هو، بصلاحياته، وتعمل أعماله كاملة. كل ما تسجّله يُكتب باسمك أنت لا باسمه، وترجع إلى حساب المدير من الشريط أعلى الشاشة.</p>
+        <p class="muted" style="margin:0 0 .6rem;font-size:.88rem">يتحول التطبيق إلى واجهة من تختاره كما يراها هو، بصلاحياته، وتعمل أعماله كاملة. كل ما تسجّله يُكتب باسمك أنت لا باسمه، وترجع إلى حساب Admin من الشريط أعلى الشاشة.</p>
         <label>الفئة<select data-asr>${ROLES.map(([k, l]) => `<option value="${k}" ${k === role ? 'selected' : ''}>${l} (${people(k).length})</option>`).join('')}</select></label>
         <label>الشخص${opts ? `<select data-asp>${opts}</select>` : '<p class="muted">لا يوجد أحد في هذه الفئة.</p>'}</label>
         <div class="row"><button type="button" class="btn primary" data-asgo ${opts ? '' : 'disabled'}>ابدأ</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
