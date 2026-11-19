@@ -5,7 +5,8 @@
    3) «عدادات الرئيسية» (في «الإعدادات»، للمدير): يختار لكل فئة العدادات التي تظهر لها في «الرئيسية».
       يُحفظ مع الصلاحيات (priv_perms.roles[الفئة]['ui.home.hide.اسم العداد'] = true)، فيصل كل مستخدم ما يخصه من الخادم
       عبر my_perms كبقية الصلاحيات، بلا تعديل على الخادم. للعرض فقط.
-   4) جدول «الطلاب» على الهاتف: بطاقة لكل طالب (الاسم والأزرار، ثم الحلقة والحالة، ثم آخر حفظ). */
+   4) جدول «الطلاب» على الهاتف: بطاقة لكل طالب (الاسم والأزرار، ثم الحلقة والحالة، ثم آخر حفظ).
+   5) «الطلاب»: لا يتكرر اسم الصفحة عنوانًا للبطاقة. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./uix.js')) VFILES.push('./uix.js'); } catch (e) { /* ignore */ } });
 
@@ -170,8 +171,20 @@
     });
   }
 
+  /* ===== 5) «الطلاب»: عنوان البطاقة يكرر اسم الصفحة الذي في الشريط العلوي، فيُخفى على الشاشة (ويبقى في الطباعة) ===== */
+  function dupTitle() {
+    if (!session || ui.tab !== 'students') return;
+    const t = (document.querySelector('.content .top .ttl')?.textContent || '').trim();
+    if (!t) return;
+    document.querySelectorAll('main .card .bar > h2:not(.qdupttl)').forEach(h => {
+      const x = h.cloneNode(true); x.querySelectorAll('.muted').forEach(m => m.remove());   // بلا العدد «(…)»
+      if (x.textContent.trim() === t) h.classList.add('qdupttl');
+    });
+  }
+
   const css = document.createElement('style');
-  css.textContent = `.content .top .ttl{display:flex;align-items:center;gap:.5rem}.qttlico{display:inline-flex;flex:none}.qttlico svg{width:22px;height:22px}
+  css.textContent = `@media screen{main .bar > h2.qdupttl{display:none}}
+    .content .top .ttl{display:flex;align-items:center;gap:.5rem}.qttlico{display:inline-flex;flex:none}.qttlico svg{width:22px;height:22px}
     .qhcl{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.1rem .8rem}.qhcl label{margin:.15rem 0}
     .qscards{display:none}
     @media (max-width:640px){
@@ -180,17 +193,17 @@
       .qsc{padding:.6rem .15rem;border-top:1px solid var(--line,#eee6d6)}.qscards .qsc:first-child{border-top:0}
       .qsc-t{display:flex;align-items:flex-start;gap:.5rem}.qsc-n{flex:1;min-width:0;font-weight:700}.qsc-n .who{gap:.45rem}
       .qsc-a{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.3rem;max-width:58%}.qsc-a .btn{padding:.22rem .55rem!important;min-height:0!important;font-size:.8rem;margin:0!important}
-      .qsc-a .btn.qri svg{width:17px;height:17px}
+      .qsc-a .btn.qri{display:inline-flex;align-items:center;justify-content:center;height:31px}.qsc-a .btn.qri svg{width:17px;height:17px;display:block;flex:none}
       .qsc-m{font-size:.85rem;color:var(--muted);margin-top:.25rem;line-height:1.6}.qsc-m .btn{padding:.05rem .5rem!important;min-height:0!important;font-size:.78rem;margin:0!important}
     }`;
   document.head.appendChild(css);
 
-  const after = () => { try { titleIcon(); applyHome(); trimMonths(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
+  const after = () => { try { titleIcon(); applyHome(); trimMonths(); dupTitle(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
   const baseRender = render;
   render = function () { const r = baseRender.apply(this, arguments); after(); return r; };
   /* النوافذ والقوائم التي تُفتح بعد العرض (نموذج الدفعة، كشف التحصيل…) */
   let q = false;
-  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { trimMonths(); titleIcon(); applyHome(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
+  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { trimMonths(); titleIcon(); applyHome(); dupTitle(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
     .observe(document.body, { childList: true, subtree: true });
   /* تكبير الشاشة أو تدويرها إلى العرض الضيق */
   window.matchMedia('(max-width:640px)').addEventListener?.('change', e => { if (e.matches) after(); });
