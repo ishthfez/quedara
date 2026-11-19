@@ -330,7 +330,17 @@ async function fetchTables(tables, filter = '', chk = null) {
   return Object.fromEntries(tables.map((t, i) => [t, got[i]]));
 }
 const backMinute = ts => new Date(new Date(ts).getTime() - 60000).toISOString();
+/* السحب والإرسال لا يتداخلان: سحبٌ جلب صفوف الخادم قبل وصول إرسالٍ جارٍ كان يعيد البيانات القديمة إلى الجهاز،
+   ثم يرسلها الحفظ التالي فوق الجديدة على الخادم (هكذا ضاعت إعدادات الاشتراك). السحب ينتظر الإرسال الجاري،
+   والإرسال الذي يبدأ أثناء السحب يُؤجَّل حتى ينتهي، ثم يُرسل بيانات الجهاز الحالية لا نسخة قديمة منها. */
+let pulling = false;
+const curDb = d => { try { return typeof db !== 'undefined' && db ? db : d; } catch (e) { return d; } };
 async function pull() {
+  for (let i = 0; pushing && i < 600; i++) await new Promise(r => setTimeout(r, 50));
+  pulling = true;
+  try { return await pullInner(); } finally { pulling = false; }
+}
+async function pullInner() {
   /* هل يعرف الخادم نوع «المدير العام»؟ يُفحص مرة قبل أول إرسال (حتى لا يُرجَع المدير العام مشرفًا على الخادم ولا يُرسل نوع لا يقبله) */
   await probeGM();
   const role = srvRole(), tables = tablesFor(role);
@@ -522,8 +532,15 @@ async function doDelete(gr, keys) {
     }
   }
 }
+/* ما أُرسل بنجاح يُسجَّل في نسخة صفوف الخادم على الجهاز (raw)، فلا يعيد السحب التالي بناء البيانات من النسخة السابقة له */
+function patchRaw(gr, rows, dels) {
+  const m = raw?.[gr.table]; if (!m || !SYNC_TABLES[gr.table]) return;
+  rows.forEach(r => { const k = pkOf(gr.table, r); m.set(k, { ...(m.get(k) || {}), ...r }); });
+  dels.forEach(k => m.delete(k));
+}
 async function push(db) {
   if (!auth || !snap) return;
+  if (pulling) { schedule(db, 400); return; }
   if (pushing) { again = true; return; }
   pushing = true; emit();
   try {
@@ -538,6 +555,7 @@ async function push(db) {
         await req(`/rest/v1/${gr.table}?on_conflict=${conflict}`, { method: 'POST', body: list.slice(i, i + 500), headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } });
       }
       gr.up.forEach(r => { snap[gr.name] = snap[gr.name] || {}; snap[gr.name][rowKey(gr.pk, r)] = JSON.stringify(r); });
+      patchRaw(gr, gr.up, []);
     }
     /* الصور تُرسل وحدها وفقط إن تغيّرت فعلًا؛ وصورة لم تُحمَّل بعد لا تُمسح أبدًا */
     if (role === 'admin' || (db.myPerms || []).includes('students.edit')) for (const m of db.students || []) {
@@ -550,6 +568,7 @@ async function push(db) {
     for (const gr of ds.slice().reverse()) {
       if (gr.del.length) await doDelete(gr, gr.del);
       gr.del.forEach(k => { delete snap[gr.name][k]; });
+      patchRaw(gr, [], gr.del);
     }
     // المعلم يعدّل بياناته الشخصية والفنية عبر دالة مخصّصة (لا يملك تعديل جدول الأعضاء)
     if (role === 'teacher') {
@@ -575,7 +594,7 @@ async function push(db) {
     if (again) { again = false; schedule(db, 300); }
   }
 }
-function schedule(db, ms = 800) { clearTimeout(timer); timer = setTimeout(() => push(db).catch(err => onReject?.(err)), ms); }
+function schedule(db, ms = 800) { clearTimeout(timer); timer = setTimeout(() => push(curDb(db)).catch(err => onReject?.(err)), ms); }
 let onReject = null;
 
 /* ---------------- النسخة المحلية ---------------- */
