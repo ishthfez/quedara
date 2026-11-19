@@ -180,9 +180,10 @@
     }`;
   document.head.appendChild(css);
 
-  const reFocus = () => { const i = document.querySelector('[data-plq]'); if (i) { i.focus(); const n = i.value.length; i.setSelectionRange(n, n); } };
+  /* يعود المؤشر إلى موضعه قبل إعادة الرسم (لا إلى آخر النص)، فيمكن التصحيح في وسط الكلمة */
+  const reFocus = (a, b) => { const i = document.querySelector('[data-plq]'); if (i) { i.focus(); const n = i.value.length; try { i.setSelectionRange(Math.min(a ?? n, n), Math.min(b ?? a ?? n, n)); } catch (err) { /* ignore */ } } };
   let qT = 0;
-  document.addEventListener('input', e => { if ('plq' in (e.target.dataset || {})) { st.q = e.target.value; clearTimeout(qT); qT = setTimeout(() => { render(); reFocus(); }, 250); } });
+  document.addEventListener('input', e => { if ('plq' in (e.target.dataset || {})) { st.q = e.target.value; clearTimeout(qT); qT = setTimeout(() => { const o = document.querySelector('[data-plq]'), a = o?.selectionStart, b = o?.selectionEnd; render(); reFocus(a, b); }, 250); } });
   document.addEventListener('change', e => {
     const d = e.target.dataset || {};
     if ('plsel' in d) { e.target.checked ? st.sel.add(d.plsel) : st.sel.delete(d.plsel); render(); }
