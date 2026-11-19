@@ -65,26 +65,44 @@
     ${sts.length ? `<div class="tbl"><table><tr><th>الطالب</th><th>آخر حفظ</th><th>الحضور</th><th></th></tr>${sts.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(lastHifz(s.id))}</td><td>${attRate(s.id)}</td><td><button class="btn sm primary" data-act="rec" data-id="${s.id}">تسجيل تسميع</button><button class="btn sm" data-act="hist" data-id="${s.id}">السجل</button><button class="btn sm" data-act="studentCard" data-id="${s.id}">الملف</button></td></tr>`).join('')}</table></div>` : empty('لا يوجد طلاب في هذه الحلقة.')}</div>`;
   };
 
-  /* ===== المدير العام: صفحات الاطلاع (يرى كل شيء ولا يعدّل؛ الخادم يفرض ذلك بعد supabase/gmanager_role.sql) =====
-     تُضاف إلى قائمته بعد صفحات المشرف (stuview.js). ويرسل الإشعارات متى أمكن إرسالها فعلًا. */
+  /* ===== المدير العام: أقسام المدير نفسها (الاسم والترتيب والتجميع)، للاطلاع (الخادم يفرض ذلك بعد supabase/gmanager_role.sql) =====
+     لا أقسام خاصة به: قائمته هي قائمة المدير بلا ما لا يخصه (الإعدادات والمعاينة)، وتبنيها stuview.js.
+     «العاملون» بتبويباته كما عند المدير: العاملون (اطلاع) · الغياب (يسجّل) · المرتبات (اطلاع). ويرسل الإشعارات متى أمكن إرسالها فعلًا. */
   const isGM = () => session?.role === 'supervisor' && isGenSup(me());
-  window.QLGMTabs = [['gm_halaqat', 'الحلقات'], ['gm_staff', 'العاملون']];
+  const GM_KEEP = { dash: 'home', students: 'students', teachers: 'teachers', halaqat: 'halaqat', news: 'news' };
+  window.QLGMTabs = () => TABS.admin.filter(t => GM_KEEP[t[0]]).map(t => [GM_KEEP[t[0]], t[1]]);
+  /* «العاملون» و«المرتبات» للاطلاع: بلا أزرار الإضافة والتعديل والحسابات، والخانات معطلة */
+  const PAY_OK = ['paySub', 'payPrint', 'payOpenMonth', 'payOpenYear'];
+  const gmTeachers = () => {
+    const t = document.createElement('template'); t.innerHTML = adminViews.teachers(); const C = t.content;
+    const cur = C.querySelector('[data-subtab].on')?.dataset.subtab;
+    if (cur === 'teachers') {
+      C.querySelectorAll('[data-act],[data-wmk],[data-ttlacc]').forEach(b => b.remove());
+      C.querySelectorAll('.tbl table').forEach(tbl => {
+        const i = [...(tbl.rows[0]?.cells || [])].findIndex(c => c.textContent.trim() === 'الحساب');
+        if (i > -1) [...tbl.rows].forEach(r => r.cells[i]?.remove());
+      });
+      C.querySelectorAll('select[data-pstat],select[data-tstat]').forEach(s => { const o = s.querySelector('option[selected]') || s.options[0]; s.outerHTML = `<span class="${s.classList.contains('qoff') ? 'tag tag-no' : ''}">${esc(o?.textContent || '')}</span>`; });
+      C.querySelectorAll('button[data-staff]').forEach(b => { b.outerHTML = b.innerHTML; });
+    } else if (cur === 'payroll') {
+      const setOn = C.querySelector('[data-act="paySub"][data-v="set"].on');
+      C.querySelectorAll('[data-act]').forEach(b => { if (!PAY_OK.includes(b.dataset.act) || (b.dataset.act === 'paySub' && b.dataset.v === 'set')) b.remove(); });
+      C.querySelectorAll('label:has(input[type="file"])').forEach(l => l.remove());
+      C.querySelectorAll('.tbl input,.tbl select,.tbl textarea').forEach(x => { x.disabled = true; x.setAttribute('disabled', ''); });
+      if (setOn) { const sub = C.querySelector('.noprint:has([data-act="paySub"])'); while (sub?.nextSibling) sub.nextSibling.remove(); sub?.insertAdjacentHTML('afterend', `<div class="card">${empty('اختر قسمًا.')}</div>`); }
+    }
+    return t.innerHTML;
+  };
   /* الحلقات للاطلاع: قسم المدير نفسه بلا أزرار الإضافة والتعديل والحذف (كما عند المحاسب) */
   const gmHalaqat = () => adminViews.halaqat()
     .replace(/<button class="btn[^"]*" data-act="(addPlace|addHalaqa|editPlace|delPlace|editHalaqa|delHalaqa)"[^>]*>[^<]*<\/button>/g, '')
     .replace(/<details class="pltools (pladd|plmore)">[\s\S]*?<\/details>/g, '')
     .replace(/<button[^>]*data-fee-place[^>]*>[\s\S]*?<\/button>/g, '')
     .replace(/<input type="checkbox" data-pl(sel|all)[^>]*>/g, '');
-  /* العاملون للاطلاع: الاسم والصفة والوظيفة والمكان (بلا أزرار الحساب والنطاق والاسم) */
-  const gmStaff = () => {
-    const list = staffList();
-    return `<div class="card"><p class="muted" style="margin-top:0">${list.length} من العاملين (للاطلاع).</p>${list.length ? `<div class="tbl"><table><tr><th>#</th><th>الاسم</th><th>الصفة</th><th>الوظيفة في المرتبات</th><th>المكان</th></tr>${list.map((x, i) => `<tr><td>${i + 1}</td><td>${esc(x.m.name)}${x.emp?.status === 'متوقف' ? ' <span class="tag tag-no">متوقف</span>' : ''}</td><td>${esc(x.type)}</td><td>${esc(x.emp?.role || '—')}</td><td>${esc(placeTxt(x.k, x.m, x.emp))}</td></tr>`).join('')}</table></div>` : empty('لا يوجد عاملون بعد.')}</div>`;
-  };
-  Object.assign(supervisorViews, { gm_halaqat: gmHalaqat, gm_staff: gmStaff });
+  Object.assign(supervisorViews, { halaqat: gmHalaqat, teachers: gmTeachers });
   /* الإشعارات: زر «+ إشعار» للمدير العام متى أمكن الإرسال فعلًا (بلا خادم، أو بعد gmanager_role.sql) */
   const gmCanSend = () => !CLOUD || window.Cloud?.gmReady === true;
   document.addEventListener('DOMContentLoaded', () => {
-    try { TAB_ICONS.gm_halaqat = TAB_ICONS.gm_halaqat || TAB_ICONS.halaqat; TAB_ICONS.gm_staff = TAB_ICONS.gm_staff || TAB_ICONS.members || TAB_ICONS.teachers; } catch (e) { /* ignore */ }
     const baseNews = supervisorViews.news;
     if (typeof baseNews !== 'function') return;
     supervisorViews.news = function () {
