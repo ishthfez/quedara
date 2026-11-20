@@ -208,7 +208,8 @@
 
   /* ===== المعاينة: آخر إصدار دائمًا ===== */
   document.addEventListener('DOMContentLoaded', () => {
-    try { document.querySelectorAll('script[src]').forEach(sc => { const f = './' + sc.getAttribute('src').replace(/^\.\//, ''); if (!VFILES.includes(f)) VFILES.push(f); }); } catch (e) { /* ignore */ }
+    /* ملفات التطبيق وحدها: سكربت من نطاق آخر (مثل ما يضيفه Vercel في نسخ المعاينة) يصير «./https://…» فيفشل فحص الإصدار كله */
+    try { document.querySelectorAll('script[src]').forEach(sc => { const s = sc.getAttribute('src'); if (/^([a-z]+:)?\/\//i.test(s)) return; const f = './' + s.replace(/^\.\//, ''); if (!VFILES.includes(f)) VFILES.push(f); }); } catch (e) { /* ignore */ }
   });
   const PVK = 'qpv_restore';
   const onPv = () => { try { return ui.tab === 'preview' && session?.role === 'admin'; } catch (e) { return false; } };

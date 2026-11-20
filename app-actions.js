@@ -1081,7 +1081,7 @@ function printTable(tbl) {
 const VFILES = ['./index.html', './style.css', './app.js', './app-forms.js', './fees.js', './perms.js', './accountant.js', './app-actions.js', './payroll.js', './cloud.js'];
 let verBase = null, verBusy = false, updWait = null;
 async function verSig() {
-  const parts = await Promise.all(VFILES.map(f => fetch(f + '?v=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
+  const parts = await Promise.all(VFILES.filter(f => !/^(\.\/)?([a-z]+:)?\/\//i.test(f)).map(f => fetch(f + '?v=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
     .then(r => (r.ok ? r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || '' : null)).catch(() => null)));
   return parts.some(p => p === null) ? null : parts.join('|');
 }
