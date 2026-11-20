@@ -1,10 +1,10 @@
 /* Service Worker v7 — ملفات التطبيق من النسخة المحفوظة على الجهاز أولًا
    كانت الشبكة أولًا لكل ملف في كل فتح (نحو 75 طلبًا للخادم كل مرة يُفتح فيها التطبيق ولو لم يتغير شيء)،
    وهذا ما يستهلك «CDN Requests» في باقة Vercel. الآن: الملف المحفوظ يُقدَّم بلا أي طلب، ويُجلب من الشبكة إن لم يكن محفوظًا.
-   الإصدار الجديد: الصفحة تقرأ version.txt (طلب واحد صغير، app-actions.js)، فإن تغيّر تمسح هذه النسخة وتعيد التحميل
-   فتُجلب الملفات الجديدة مرة واحدة. والتحديث اليدوي (Ctrl+Shift+R) يتجاوز عامل الخدمة كما كان. */
+   الإصدار الجديد: الصفحة تفحص بصمة الملفات على الخادم مرة كل ساعة على الأكثر (app-actions.js)، فإن تغيّرت تمسح هذه النسخة
+   وتعيد التحميل فتُجلب الملفات الجديدة مرة واحدة. والتحديث اليدوي (Ctrl+Shift+R) يتجاوز عامل الخدمة كما كان. */
 const CACHE = 'halaqat-v7';
-const CORE = ['./', './ver.js', './style.css', './app.js', './app-forms.js', './app-actions.js', './payroll.js', './fees.js', './app-abs.js', './app-import.js', './fee-setup.js', './disc-setup.js', './perms.js', './accountant.js', './collect.js', './tables.js', './backup.js', './session.js', './dups.js', './selects.js', './links.js', './distribute.js', './split.js', './cleanup.js', './unassigned.js', './cascade.js', './places.js', './notes.js', './roles.js', './mine.js', './staff.js', './preview.js', './nav.js', './people.js', './notify.js', './receipt.js', './importx.js', './feesimport.js', './actas.js', './feeedit.js', './demo.js', './fixpay.js', './dupsall.js', './pager.js', './toolbar.js', './uniqname.js', './cloud.js', './logo.png', './manifest.webmanifest'];
+const CORE = ['./', './style.css', './app.js', './app-forms.js', './app-actions.js', './payroll.js', './fees.js', './app-abs.js', './app-import.js', './fee-setup.js', './disc-setup.js', './perms.js', './accountant.js', './collect.js', './tables.js', './backup.js', './session.js', './dups.js', './selects.js', './links.js', './distribute.js', './split.js', './cleanup.js', './unassigned.js', './cascade.js', './places.js', './notes.js', './roles.js', './mine.js', './staff.js', './preview.js', './nav.js', './people.js', './notify.js', './receipt.js', './importx.js', './feesimport.js', './actas.js', './feeedit.js', './demo.js', './fixpay.js', './dupsall.js', './pager.js', './toolbar.js', './uniqname.js', './cloud.js', './logo.png', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   /* كل ملف وحده: ملف واحد ناقص لا يُفشل التثبيت كله (كان addAll يفشل كله) */

@@ -1085,34 +1085,22 @@ async function verSig() {
     .then(r => (r.ok ? r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || '' : null)).catch(() => null)));
   return parts.some(p => p === null) ? null : parts.join('|');
 }
-/* رقم الإصدار: version.txt يكتبه Vercel عند كل نشر (buildCommand في vercel.json: معرّف الـ commit).
-   طلب واحد صغير بدل طلب لكل ملف من ملفات التطبيق — كان الفحص (كل 5 دقائق وعند كل عودة للتطبيق) أكثر ما يستهلك
-   «CDN Requests» في باقة Vercel. بلا version.txt (تشغيل محلي، أو قبل نشر هذا التعديل) يُستعمل الفحص القديم، مرة كل 30 دقيقة على الأكثر */
-/* يُقارن بإصدار الكود الذي يعمل فعلًا في هذه الصفحة (window.APP_VER من ver.js، محفوظ مع بقية الملفات)،
-   لا بقيمة في التخزين: تلك كانت تُسجَّل للإصدار الجديد دون أن يُحمَّل، أو يسجّلها تبويب آخر، فيبقى الجهاز على الكود القديم */
-const CHECK_EVERY = 10 * 60000, OLD_EVERY = 30 * 60000;
-let lastCheck = 0, lastOld = 0;
-async function remoteVer() {
-  try {
-    const r = await fetch('./version.txt?t=' + Date.now(), { cache: 'no-store' });
-    if (!r.ok) return null;
-    const t = (await r.text()).trim();
-    return /^[\w.-]{4,80}$/.test(t) ? t : null;
-  } catch (e) { return null; }
-}
-async function checkUpdate(force) {
+/* كل فحص يرسل طلبًا لكل ملف من ملفات التطبيق (نحو 70)، وكل طلب يُحسب من «CDN Requests» في باقة Vercel.
+   كان يجري عند كل فتح وكل عودة للتطبيق وكل 5 دقائق. الآن: مرة كل ساعة على الأكثر لكل جهاز، والوقت والبصمة محفوظان
+   على الجهاز فلا يُعاد الفحص مع كل فتح. والملفات نفسها تُقدَّم من النسخة المحفوظة (sw.js) بلا طلبات. */
+const CHECK_EVERY = 60 * 60000, SIG_KEY = 'qapp_sig', SIG_AT = 'qapp_sig_at';
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
+async function checkUpdate() {
   if (verBusy || navigator.onLine === false || !/^https?:/.test(location.protocol)) return;
-  if (!force && Date.now() - lastCheck < CHECK_EVERY) return;
-  verBusy = true; lastCheck = Date.now();
+  if (Date.now() - (+lsGet(SIG_AT) || 0) < CHECK_EVERY) return;
+  verBusy = true; lsSet(SIG_AT, String(Date.now()));
   try {
-    const v = await remoteVer(), running = window.APP_VER || null;
-    if (v && running) { if (v !== running) applyUpdate(); return; }
-    if (Date.now() - lastOld < OLD_EVERY && verBase !== null) return;
-    lastOld = Date.now();
     const s = await verSig();
     if (!s) return;
-    if (verBase === null) { verBase = s; return; }
-    if (s !== verBase) applyUpdate();
+    const base = lsGet(SIG_KEY) || verBase;
+    lsSet(SIG_KEY, s); verBase = s;
+    if (base && s !== base) applyUpdate();
   } finally { verBusy = false; }
 }
 async function applyUpdate() {
@@ -1124,10 +1112,10 @@ async function applyUpdate() {
   try { const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update(); } catch (e) { /* ignore */ }
   location.reload();
 }
-window.addEventListener('online', () => setTimeout(() => checkUpdate(true), 1500));
+window.addEventListener('online', () => setTimeout(checkUpdate, 1500));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
-setInterval(() => { if (!document.hidden) checkUpdate(); }, 30 * 60000);
-setTimeout(() => checkUpdate(true), 4000);
+setInterval(() => { if (!document.hidden) checkUpdate(); }, 15 * 60000);
+setTimeout(checkUpdate, 4000);
 
 /* مسح كل البيانات: يطلب بريد المدير وكلمة مروره (أو اسمه وكلمته في الوضع المحلي) وكتابة «مسح» للتأكيد */
 function wipeAll() {
