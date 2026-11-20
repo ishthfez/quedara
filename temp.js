@@ -58,8 +58,9 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     try { if (!VFILES.includes('./temp.js')) VFILES.push('./temp.js'); } catch (e) { /* ignore */ }
-    let raf = 0;
-    const schedule = () => { if (raf || !onPrograms()) return; raf = requestAnimationFrame(() => { raf = 0; decorate(); }); };
+    // مؤقِّت لا requestAnimationFrame: الأخير لا يعمل والصفحة في الخلفية
+    let tm = 0;
+    const schedule = () => { if (tm || !onPrograms()) return; tm = setTimeout(() => { tm = 0; decorate(); }, 60); };
     try {
       const base = render;
       render = function () { const r = base.apply(this, arguments); try { if (onPrograms()) { expire(); schedule(); } } catch (e) { /* ignore */ } return r; };
