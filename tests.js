@@ -1010,6 +1010,7 @@
     .qtwin{max-width:720px}.qtwtabs{position:sticky;top:3.1rem;z-index:2;background:var(--glass-strong,var(--card,#fff));padding:.3rem 0;margin:0 0 .5rem}
     .qtembed > .row{margin-top:.6rem}.qtwlog{margin:.9rem 0 0;border:1px solid var(--line);border-radius:12px;padding:.45rem .7rem}.qtwlog > summary{cursor:pointer;font-weight:700}.qtwlog .qtlog{margin-top:.5rem}
     .qthome .bar .btn[hidden]{display:none}
+    [data-qtbulk][hidden]:not(#qz0){display:none!important}   /* «إضافة متعددة» في تبويب الإتقان وحده (أقوى من عرض الأزرار على الهاتف) */
     .qtbulk{max-width:820px}.qtbrows{display:flex;flex-direction:column;gap:.1rem}
     .qtbrow{display:flex;align-items:flex-start;gap:.45rem .6rem;flex-wrap:wrap;padding:.5rem 0;border-bottom:1px solid var(--line)}
     .qtbrow .qtbname{flex:1 1 15rem;min-width:0;margin:0}.qtbrow .qtbname input{margin:0}.qtbrow [data-bh]{display:block;margin-top:.15rem;font-size:.78rem}

@@ -489,12 +489,17 @@
   /* ===== 8) إعادة تحميل الصفحة تُبقي المستخدم في الصفحة نفسها =====
      التبويب محفوظ في المتصفح (halaqat_tab)، لكن أول عرض بعد التحميل يأتي قبل اكتمال قائمة الحساب (الصلاحيات، صفحة «الطلاب» للعاملين…)
      فيُعاد إلى «الرئيسية». يُحفظ هنا التبويب المطلوب ويُرجع إليه متى ظهر في القائمة، ما لم ينتقل المستخدم بنفسه أو تمضِ 20 ثانية. */
-  let want = null; const wantUntil = Date.now() + 20000;
+  /* المهلة تبدأ من أول عرض اكتملت فيه بيانات الحساب (على الجوال قد يتأخر التحميل من الخادم)، لا من فتح الصفحة.
+     وإن مُسحت ذاكرة الجلسة (الجوال) أُخذ التبويب من نسخة الجهاز الاحتياطية إن كانت حديثة (12 ساعة). */
+  let want = null, wantUntil = 0;
   try { want = JSON.parse(sessionStorage.getItem('halaqat_tab') || '{}').tab || null; } catch (e) { /* ignore */ }
+  if (!want) try { const l = JSON.parse(localStorage.getItem('halaqat_tab_l') || '{}'); if (l.tab && Date.now() - (l.at || 0) < 12 * 3600e3) { want = l.tab; if (l.msub) ui.msub = l.msub; } } catch (e) { /* ignore */ }
   document.addEventListener('click', e => { if (e.target.closest?.('[data-act="tab"],[data-act="logout"],[data-act="switchMode"]')) want = null; }, true);
   const restoreTab = () => {
     if (!want || !session) return;
-    if (Date.now() > wantUntil) { want = null; return; }
+    let ready = false; try { ready = !!me(); } catch (e) { /* ignore */ }
+    if (ready && !wantUntil) wantUntil = Date.now() + 30000;
+    if (wantUntil && Date.now() > wantUntil) { want = null; return; }
     if (ui.tab !== want && (TABS[session.role] || []).some(t => t[0] === want)) ui.tab = want;
   };
   const baseRender = render;

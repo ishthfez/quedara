@@ -67,7 +67,7 @@ const A = {
     openForm('كلمة مرور حساب ' + ROLE_L[d.r], [{ name: 'pin', label: 'كلمة المرور', type: 'password', required: true }], v => { if (v.pin !== acc.pin) return 'كلمة المرور غير صحيحة'; go(); });
   },
   logout: () => {
-    ui.shown = {}; ui.pick = null; session = null; ss.del(SKEY); ss.del('halaqat_tab'); ui.tab = null; ui.sel = new Set();
+    ui.shown = {}; ui.pick = null; session = null; ss.del(SKEY); ss.del('halaqat_tab'); try { localStorage.removeItem('halaqat_tab_l'); } catch (e) { /* ignore */ } ui.tab = null; ui.sel = new Set();
     if (CLOUD) { const s = db.settings; window.Cloud.signOut(); db = migrate({ ...window.Cloud.emptyDb(), settings: s }); }
     render();
   },

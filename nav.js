@@ -476,6 +476,15 @@
     document.documentElement.classList.toggle('ql-modal', ovs.length > 0);
     ovs.forEach(dressModal);
   }).observe(document.body, { childList: true });
+  /* صمام أمان: قفل تمرير الصفحة لا يبقى بلا سبب (نافذة ظاهرة أو إطار «العرض على الأجهزة»)، فلا «تتجمد» الصفحة
+     إن أُزيلت نافذة بطريق لا يراه المراقب أعلاه. يُفحص عند محاولة التمرير وعند الرجوع للتبويب. */
+  const unlockStale = () => {
+    const h = document.documentElement;
+    if (h.classList.contains('ql-modal') && ![...document.querySelectorAll('.overlay')].some(o => getComputedStyle(o).display !== 'none')) h.classList.remove('ql-modal');
+    if (h.classList.contains('asframe-on') && !document.getElementById('asframe')) h.classList.remove('asframe-on');
+  };
+  ['wheel', 'touchmove', 'keydown'].forEach(t => window.addEventListener(t, unlockStale, { passive: true, capture: true }));
+  document.addEventListener('visibilitychange', unlockStale);
   /* ===== زر الرجوع (في الجوال والمتصفح) يرجع للسابق بدل الخروج من التطبيق =====
      - كل انتقال بين الأقسام (والتبويبات الداخلية وفئات الأعضاء) يُسجَّل خطوةً في سجل المتصفح.
      - النافذة المنبثقة والقائمة الجانبية على الجوال «طبقة»: الرجوع يغلقها أولًا.

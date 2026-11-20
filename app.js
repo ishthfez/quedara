@@ -246,7 +246,11 @@ let tabPref = {};
 try { tabPref = JSON.parse(ss.get('halaqat_tab') || '{}') || {}; } catch (e) { /* ignore */ }
 const ui = { fcat: '', nav: false, sideW: clampW(uiPref.sideW), collapsed: !!uiPref.collapsed, pick: null, tab: tabPref.tab || null, hid: '', date: today(), fh: '', psub: 'personal', msub: tabPref.msub || 'teachers', shown: {}, sel: new Set() };
 /* آخر تبويب مفتوح يُستعاد عند إعادة تحميل الصفحة */
-const saveTab = () => ss.set('halaqat_tab', JSON.stringify({ tab: ui.tab, msub: ui.msub }));
+const saveTab = () => {
+  ss.set('halaqat_tab', JSON.stringify({ tab: ui.tab, msub: ui.msub }));
+  /* نسخة احتياطية في الجهاز: الجوال قد يمسح ذاكرة الجلسة إذا أغلق المتصفح الصفحة في الخلفية */
+  try { localStorage.setItem('halaqat_tab_l', JSON.stringify({ tab: ui.tab, msub: ui.msub, at: Date.now() })); } catch (e) { /* ignore */ }
+};
 
 /* ============ دوال مساعدة للمجال ============ */
 /* الحلقة تُسمّى باسم معلمها؛ وإن كان للمعلم أكثر من حلقة يُضاف اسم المكان للتمييز */
