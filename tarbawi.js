@@ -71,7 +71,7 @@
 
   function programView() {
     const p = T.p, cfg = p.cfg || {};
-    const tabs = [['students', 'الطلاب']].concat(cfg.attendance ? [['att', 'الحضور']] : []).concat([['results', 'الاختبار والنتيجة'], ['log', 'السجل']]);
+    const tabs = [['students', 'الطلاب']].concat(cfg.attendance || +cfg.att_weight ? [['att', 'الحضور']] : []).concat([['results', 'الاختبار والنتيجة'], ['log', 'السجل']]);
     const unitSel = T.units.length && T.tab !== 'students' && T.tab !== 'log' ? `<label>الحلقة <select data-tf="unit" data-nosearch>${T.units.map((u) => `<option value="${u.id}" ${unitId() === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select></label>` : '';
     const head = `<div class="card"><div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
       <div><button class="btn ghost" data-ta="back">→ البرامج</button> <h2 style="display:inline;margin:0 .5rem">${esc(p.name || '')}</h2><span class="muted">${esc(cfg.book || '')}</span></div>
@@ -150,8 +150,8 @@
       <details open><summary><b>البرنامج</b></summary>${f('name', 'الاسم', p.name)}${f('book', 'المنهج (كتاب أو ورقة أو درس)', c.book)}
         <label>وصف أو مرجع<textarea data-k="desc" rows="2">${esc(c.desc || '')}</textarea></label>${f('audience', 'الفئة المستهدفة', c.audience)}
         ${T.units.length ? '' : f('start', 'البداية', c.start, 'date') + f('end', 'النهاية', c.end, 'date') + f('test_date', 'موعد الاختبار', c.test_date, 'date') + f('schedule', 'المواعيد', c.schedule)}
-        <label><input type="checkbox" data-k="apply_open" ${c.apply_open === false ? '' : 'checked'}> يتقدم الطلاب من حساباتهم</label>
-        <label><input type="checkbox" data-k="attendance" ${c.attendance ? 'checked' : ''}> برنامج بحضور (يُرصد الحضور)</label></details>
+        <label style="display:flex;align-items:center;gap:.4rem"><input style="width:auto;margin:0" type="checkbox" data-k="apply_open" ${c.apply_open === false ? '' : 'checked'}> يتقدم الطلاب من حساباتهم</label>
+        <label style="display:flex;align-items:center;gap:.4rem"><input style="width:auto;margin:0" type="checkbox" data-k="attendance" ${c.attendance ? 'checked' : ''}> برنامج بحضور (يُرصد الحضور)</label></details>
       <details open><summary><b>النتيجة</b></summary>${f('test_max', 'درجة الاختبار العظمى', c.test_max || 100, 'number')}${f('att_weight', 'درجة الحضور (0 = لا يدخل)', c.att_weight || 0, 'number')}${f('pass', 'نسبة النجاح % (اختياري)', c.pass, 'number')}</details>
       <div class="row"><button class="btn" data-k="save">حفظ الإعدادات</button></div>
       <hr><h3>حلقات البرنامج</h3><p class="muted">اختيارية. لكل حلقة مدتها واختبارها ونتيجتها وترتيبها وجوائزها، ولا يُشترط النجاح في حلقة لدخول التالية.</p>
