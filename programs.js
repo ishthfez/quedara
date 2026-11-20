@@ -87,7 +87,7 @@
         <b>${esc(p.name)}</b>
         <span class="muted">${p.year || ''} · ${p.status === 'closed' ? 'مغلقة' : 'مفتوحة'} · ${p.n_entries} متسابق</span>
       </button>`).join('');
-    return `<div class="card subnav"><button class="on" data-pg="noop">برامج قرآنية</button><button disabled title="قريبًا">برامج تربوية</button></div>
+    return `<div class="card subnav"><div class="bar" style="margin:0"><button type="button" class="btn on" data-pg="noop">برامج قرآنية</button><button type="button" class="btn" disabled title="قريبًا">برامج تربوية</button></div></div>
       <div class="card"><div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">مسابقة رمضان</h2>${add}</div>
       ${S.err ? `<p class="pg-err">${esc(S.err)}</p>` : ''}
       <div class="pg-grid">${cards || empty('لا توجد نسخ بعد.')}</div>
@@ -104,7 +104,7 @@
         <div class="row" style="gap:.4rem">${org ? `<button class="btn ghost" data-pg="settings">الإعدادات</button>` : ''}
         <button class="btn ghost" data-pg="reload">تحديث</button></div></div>
         ${S.err ? `<p class="pg-err">${esc(S.err)}</p>` : ''}</div>
-      <div class="card subnav">${tabs.map(([k, l]) => `<button class="${S.tab === k ? 'on' : ''}" data-pg="tab" data-t="${k}">${l}${k === 'pending' && pend ? ` (${pend})` : ''}</button>`).join('')}</div>`;
+      <div class="card subnav"><div class="bar" style="margin:0">${tabs.map(([k, l]) => `<button type="button" class="btn ${S.tab === k ? 'on' : ''}" data-pg="tab" data-t="${k}">${l}${k === 'pending' && pend ? ` (${pend})` : ''}</button>`).join('')}</div></div>`;
     if (S.entries === null) return head + `<div class="card"><p class="muted">جارٍ التحميل…</p></div>`;
     const body = { entries: entriesView, pending: pendingView, results: resultsView, summary: summaryView, log: logView }[S.tab] || entriesView;
     return head + body();
@@ -248,7 +248,15 @@
   async function openCands() {
     const o = modal('تسجيل متسابقين', '<p class="muted">جارٍ حساب الأجزاء المتقنة…</p>', true);
     let C;
-    try { C = await rpc('prog_candidates', { pid: S.cur.id }); } catch (e) { o.querySelector('.modal p').textContent = errMsg(e); return; }
+    try {
+      // الخادم يعيد 1000 صف على الأكثر في الطلب الواحد، فتُجلب القائمة على دفعات
+      C = [];
+      for (let off = 0; off < 20000; off += 1000) {
+        const part = await rpc('prog_candidates', { pid: S.cur.id, off });
+        C = C.concat(part || []);
+        if (!part || part.length < 1000) break;
+      }
+    } catch (e) { o.querySelector('.modal p').textContent = errMsg(e); return; }
     S.cands = C;
     const box = o.querySelector('.modal p');
     const rows = C.filter((c) => !c.entered).map((c) => {
@@ -403,12 +411,18 @@
     });
   }
 
-  async function openNew() {
-    const y = new Date().getFullYear() - 579; // تقريب للسنة الهجرية، يعدّلها المنظم
-    openForm('نسخة جديدة من مسابقة رمضان', [{ name: 'name', label: 'الاسم', value: 'مسابقة رمضان ' + y }, { name: 'year', label: 'السنة الهجرية', value: String(y) }], async (v) => {
+  const hijriYear = () => {
+    try { return +new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', { year: 'numeric' }).format(new Date()).replace(/\D/g, ''); }
+    catch (e) { return new Date().getFullYear() - 578; }
+  };
+  function openNew() {
+    const y = hijriYear();
+    openForm('نسخة جديدة من مسابقة رمضان', [{ name: 'name', label: 'الاسم', value: 'مسابقة رمضان ' + y }, { name: 'year', label: 'السنة الهجرية', value: String(y) }], (v) => {
       if (!v.name || !+v.year) return 'اكتب الاسم والسنة';
-      try { const id = await rpc('prog_save', { pid: null, knd: 'ramadan', nm: v.name, yr: +v.year, cf: { neutral: true, win: 94 } }); S.list = null; await loadList(); openProgram(id); }
-      catch (e) { toast(errMsg(e)); }
+      rpc('prog_save', { pid: null, knd: 'ramadan', nm: v.name, yr: +v.year, cf: { neutral: true, win: 94 } })
+        .then(async (id) => { S.list = null; await loadList(); openProgram(id); })
+        .catch((e) => toast(errMsg(e)));
+      return '';
     });
   }
 
