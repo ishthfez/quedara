@@ -27,6 +27,8 @@
     .gbar i{width:100%!important;transform:scaleX(0);transform-origin:right;will-change:transform;animation-name:qfill!important}
     @keyframes qfill{to{transform:scaleX(1)}}
     html.qdark,html.qdark body,html.qdark #splash{background:#0e141d}
+    /* «إظهار القسم» (intensive.js) في قوائم البرامج فقط، لا داخل برنامج تربوي */
+    main div:has(> [data-ta="back"]) > [data-ia="vis"]{display:none}
   </style>
   <script>try { if (localStorage.getItem('qdark') === '1') document.documentElement.classList.add('qdark'); } catch (e) { /* ignore */ }</script>
 </head>
@@ -129,6 +131,7 @@
   <script src="intensive.js"></script>
   <script src="temp.js"></script>
   <script src="tarbawi.js"></script>
+  <script src="proghist.js"></script>
   <script>
     setTimeout(() => { const s = document.getElementById('splash'); if (s) { s.classList.add('hide'); setTimeout(() => s.remove(), 650); } }, 1100);
   </script>
