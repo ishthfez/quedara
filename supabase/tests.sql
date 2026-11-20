@@ -4,7 +4,7 @@
 --   في «إدارة الاختبارات ← نطاق المعلمين المختبِرين» (settings.tests_cfg.scopes). كل محاولة إتقان سجل مستقل،
 --   ومن لم يجتز يُحفظ اختباره في «متابعة» (kind follow ومعه data.itqan = true) بحق تسجيل الإتقان نفسه.
 -- «الفصول» (term): ومعلم حلقة الطالب بلا صلاحية؛ وتُعدَّل نتيجتها (test_upd).
--- القراءة: من يسجّل، ومعلم الحلقة، والمحاسب بصلاحية tests.view، والإداري لطلاب نطاق عمله. لا يقرؤها الطالب.
+-- القراءة: من يسجّل، ومعلم الحلقة، والمحاسب بصلاحية tests.view، والإداري لطلاب نطاق عمله، والطالب اختباراته هو (في «سجل الإنجاز»).
 -- الدرجات العظمى ونسبة النجاح من settings.tests_cfg (يكتبها المدير).
 -- جدول بلا قواعد قراءة مباشرة، والوصول بالدوال فقط (كما في sup_notes.sql).
 -- آمن للتكرار. يُنفَّذ بعد gmanager_role.sql.
@@ -58,6 +58,7 @@ language sql stable security definer set search_path = public as $$
     or ((public.has_perm('tests.follow') or public.has_perm('tests.itqan')) and public.test_in_scope(sid))
     or (exists (select 1 from members where user_id = auth.uid() and role = 'accountant') and public.has_perm('tests.view'))
     or exists (select 1 from members s where s.id = sid and s.role = 'student' and s.halaqa_id in (select public.my_place_halaqat()))
+    or exists (select 1 from members s where s.id = sid and s.role = 'student' and s.user_id = auth.uid())   -- الطالب يرى اختباراته في «سجل الإنجاز»
 $$;
 
 -- «سجل الاختبارات» في الصفحة الرئيسية: أحدث اختبارات نوع واحد مما يحق للمستخدم قراءته، مع العدد الكلي

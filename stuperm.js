@@ -39,7 +39,7 @@
     ['search', 'البحث باسم الطالب', 'أدوات الجدول', ALL, 'main input[data-sq]', 'hide'],
     ['place', 'قائمة المكان', 'أدوات الجدول', [S, A, P], 'main > .card .qcombo:has([data-fplace]),main > .card select[data-fplace]', 'hide'],
     ['halaqa', 'قائمة الحلقة', 'أدوات الجدول', [S, A, P], 'main .qcombo:has([data-change="fh"]),main select[data-change="fh"]', 'hide'],
-    ['att', 'زر «الحضور» (نافذة تسجيل الحضور)', 'أدوات الجدول', [T, S, P], 'main [data-attopen]', 'hide'],
+    ['att', 'زر «الدفتر» (نافذة تسجيل الحضور والتسميع)', 'أدوات الجدول', [T, S, P], 'main [data-attopen]', 'hide'],
     ['colbtn', 'زر «تحصيل» (كشف التحصيل للمحاسب)', 'أدوات الجدول', [T, P], 'main [data-colopen]', 'hide'],
     ['accbtn', 'زر «كشوف» (مراجعة كشوف التحصيل وسجلها)', 'أدوات الجدول', [A], 'main [data-acopen]', 'hide'],
     ['seg', 'تبويبا الحالة كلاهما (منتظم / منقطع)', 'أدوات الجدول', ALL, 'main [data-sstfseg]', 'hide'],

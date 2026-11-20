@@ -181,6 +181,8 @@
       .plsum{flex-basis:100%}.plctl{flex-wrap:wrap}.plctl .plseg{flex:1 1 100%}.plctl .plseg .btn{flex:1 1 0;justify-content:center;text-align:center;padding-inline:.3rem;white-space:nowrap;font-size:.9rem;min-width:0}.plctl input[data-plq]{max-width:none;flex-basis:100%;order:3}.plctl [data-plall2]{order:4}.pladdr{display:none}
       .plhi-a{display:flex;flex-direction:column;gap:.3rem}.plhi-a .btn{padding:.25rem .55rem!important;min-height:0!important;font-size:.82rem}
       .plhi>input[type=checkbox]{flex:none;width:1.15rem;height:1.15rem}
+      /* «+ إضافة» في أول الصف على الهاتف: قائمته تُفتح نحو داخل الشاشة لا خارجها */
+      .pladd .pltmenu{inset-inline-start:0;inset-inline-end:auto;max-width:calc(100vw - 2rem)}
     }`;
   document.head.appendChild(css);
 

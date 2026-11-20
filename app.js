@@ -542,10 +542,13 @@ function halaqaPicker(list) {
   if (!list.some(h => h.id === ui.hid)) ui.hid = list[0]?.id || '';
   return `<select data-change="hid">${list.map(h => `<option value="${esc(h.id)}" ${h.id === ui.hid ? 'selected' : ''}>${esc(halaqaLabel(h))}</option>`).join('')}</select>`;
 }
+/* «سجل الإنجاز»: التاريخ يسبقه اسم اليوم */
+const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+const dayOf = d => { const x = new Date(String(d) + 'T00:00:00'); return isNaN(x) ? '' : DAY_NAMES[x.getDay()]; };
 function historyTable(sid) {
   const rs = recsOf(sid);
   if (!rs.length) return empty('لا توجد تسجيلات بعد.');
-  return `<div class="tbl"><table><tr><th>التاريخ</th><th>النوع</th><th>الموضع</th><th>التقدير</th><th>ملاحظة</th></tr>${rs.map(r => `<tr><td>${esc(r.date)}</td><td><span class="tag">${esc(r.type)}</span></td><td>سورة ${esc(SURAHS[r.surah - 1][0])} (${r.from}–${r.to})</td><td>${esc(r.grade)}</td><td>${esc(r.note)}</td></tr>`).join('')}</table></div>`;
+  return `<div class="tbl"><table><tr><th>التاريخ</th><th>النوع</th><th>الموضع</th><th>التقدير</th><th>ملاحظة</th></tr>${rs.map(r => `<tr><td>${esc(dayOf(r.date))} <bdi>${esc(r.date)}</bdi></td><td><span class="tag">${esc(r.type)}</span></td><td>سورة ${esc(SURAHS[r.surah - 1][0])} (${r.from}–${r.to})</td><td>${esc(r.grade)}</td><td>${esc(r.note)}</td></tr>`).join('')}</table></div>`;
 }
 
 /* ============ قسم الإداريات ============ */

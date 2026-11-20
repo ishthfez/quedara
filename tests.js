@@ -36,13 +36,27 @@
   const icfg = () => ({ ...ICFG_DEF, ...(db.settings?.tests_cfg?.itqan || {}) });
   /* «الفصول»: ثلاثة فصول، في كل فصل اختبار نصفي ونهائي. الدرجات من «الإعدادات ← إدارة الاختبارات» (db.settings.tests_cfg) */
   /* [الرقم، الاسم، المدة كما تظهر في القائمة، أول شهر، آخر شهر] */
-  const TERMS = [[1, 'الفصل الأول', '1 / 1 - 30 / 4', 1, 4], [2, 'الفصل الثاني', '1 / 5 - 31 / 8', 5, 8], [3, 'الفصل الثالث', '1 / 9 - 31 / 12', 9, 12]];
+  const TERMS = [[1, 'الفصل الأول', 'من 1 يناير إلى 30 أبريل', 1, 4], [2, 'الفصل الثاني', 'من 1 مايو إلى 31 أغسطس', 5, 8], [3, 'الفصل الثالث', 'من 1 سبتمبر إلى 31 ديسمبر', 9, 12]];
   const termOfDate = d => { const m = +String(d || '').slice(5, 7) || new Date().getMonth() + 1; return (TERMS.find(t => m >= t[3] && m <= t[4]) || TERMS[0])[0]; };
   const EXAMS = [['mid', 'نصفي'], ['final', 'نهائي']];
   const CFG_DEF = { newMax: 40, revN: 2, revMax: 20, effortMax: 20 };
   const cfg = () => { const c = db.settings?.tests_cfg || {}; return Object.fromEntries(EXAMS.map(([k]) => [k, { ...CFG_DEF, ...(c[k] || {}) }])); };
   const qsOf = c => [{ k: 'new', l: 'سؤال الجديد', max: +c.newMax || 0 }, ...Array.from({ length: +c.revN === 1 ? 1 : 2 }, (_, i) => ({ k: 'r' + (i + 1), l: +c.revN === 1 ? 'سؤال المراجعة' : `سؤال المراجعة (${i + 1})`, max: +c.revMax || 0 }))];
   const examMax = c => qsOf(c).reduce((a, q) => a + q.max, 0) + (+c.effortMax || 0);
+  /* عدادات الدرجة في «الفصول»: خطأ وتردد وتجويد (0–10 لكل سؤال)، ولكل واحدة خصم من «إدارة الاختبارات» (tests_cfg.ded) */
+  const CNT = [['err', 'خطأ'], ['trd', 'تردد'], ['taj', 'تجويد']], CNT_MAX = 10;
+  const DED_DEF = { err: 1, trd: 0.5, taj: 0.5 };
+  const dedCfg = () => ({ ...DED_DEF, ...((db.settings?.tests_cfg || {}).ded || {}) });
+  /* عدادات مشتركة (الإتقان والمتابعة): كبسولة الكلمة تزيد، و↶ تُنقص، من 0 إلى 10 */
+  const ctrHTML = (items, cnt) => `<div class="qtctrs">${items.map(([k, l]) => { const n = Math.min(CNT_MAX, +(cnt || {})[k] || 0); return `<span class="qtctr"><button type="button" class="qtcbtn ${n >= CNT_MAX ? 'max' : ''}" data-inc="${k}" aria-label="${l}: زيادة">${l}</button><b class="qtcn" data-n="${k}">${n}</b><button type="button" class="qtundo" data-dec="${k}" title="تراجع" aria-label="${l}: تراجع" ${n ? '' : 'disabled'}>↶</button></span>`; }).join('')}</div>`;
+  const bump = b => {
+    const box = b.closest('.qtctrs'), k = b.dataset.inc || b.dataset.dec, el = box.querySelector(`[data-n="${k}"]`), n = +el.textContent || 0;
+    const m = b.dataset.inc ? Math.min(CNT_MAX, n + 1) : Math.max(0, n - 1);
+    el.textContent = m; box.querySelector(`[data-dec="${k}"]`).disabled = !m; box.querySelector(`[data-inc="${k}"]`).classList.toggle('max', m >= CNT_MAX);
+    return box;
+  };
+  const cntIn = box => Object.fromEntries([...box.querySelectorAll('[data-n]')].map(e => [e.dataset.n, +e.textContent || 0]));
+  const dedSum = (c, D) => CNT.reduce((a, [k]) => a + (+c[k] || 0) * (+D[k] || 0), 0);
   const termName = n => (TERMS.find(t => t[0] === +n) || [])[1] || '';
   const examName = k => (EXAMS.find(t => t[0] === k) || [])[1] || '';
   const num = v => { const n = parseFloat(String(v).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))); return Number.isFinite(n) ? n : null; };
@@ -128,7 +142,7 @@
   }
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-qtest]');
-    if (b) { e.preventDefault(); const open = document.querySelector('.qtmenu')?.dataset.sid === b.dataset.qtest; if (open) closeMenu(); else { const st = stOf(b.dataset.qtest); if (st) openMenu(b, st); } return; }
+    if (b) { e.preventDefault(); closeMenu(); const st = stOf(b.dataset.qtest); if (st) testsWindow(st); return; }   // نافذة بتبويبات بدل القائمة
     const go = e.target.closest('[data-qtgo]');
     if (go) { const st = stOf(go.closest('.qtmenu').dataset.sid); closeMenu(); if (!st) return; if (go.dataset.qtgo === 'follow') followForm(st); else if (go.dataset.qtgo === 'term') termForm(st); else if (go.dataset.qtgo === 'itqan') itqanForm(st); else logView(st); return; }
     if (!e.target.closest('.qtmenu')) closeMenu();
@@ -188,24 +202,30 @@
   /* ===== استمارة «متابعة» ===== */
   const chip = (type, name, v, on) => `<label class="chip-r chip-t"><input type="${type}" name="${name}" value="${esc(v)}" ${on ? 'checked' : ''}><span>${esc(v)}</span></label>`;
   const surahSel = name => `<select name="${name}" aria-label="السورة"><option value="">— اختر السورة —</option>${SURAHS.map(([n]) => `<option>${esc(n)}</option>`).join('')}</select>`;
+  /* أخطاء · تشكيل · تردد: عدادات (0–10) بدل اختيار 1–4 / تأكيد */
   const partBody = k => `<label>السورة${surahSel(k + '_s')}</label>
-      <div class="qtgrid">${ROWS.map(([rk, rl]) => `<div class="qtrow"><span class="qtrl">${rl}</span><div class="chips">${LEVELS.map(v => chip('radio', `${k}_${rk}`, v)).join('')}</div></div>`).join('')}</div>`;
+      <div class="qtpartc" data-part="${k}">${ctrHTML(ROWS)}</div>`;
   const partHTML = ([k, l]) => `<fieldset class="tfs qtpart"><legend>${l}</legend>${partBody(k)}</fieldset>`;
   /* المراجعة: مربع واحد، وفيه سؤال (1) و(2) */
   const reviewHTML = () => `<fieldset class="tfs qtpart"><legend>المراجعة</legend>
       <div class="qtsubq"><b class="qtsubh">سؤال (1)</b>${partBody('r1')}</div>
       <div class="qtsubq"><b class="qtsubh">سؤال (2)</b>${partBody('r2')}</div></fieldset>`;
-  function followForm(st) {
-    const h = halaqaOf(st);
-    const ov = document.createElement('div'); ov.className = 'overlay';
-    ov.innerHTML = `<div class="modal wide qtform"><h2>متابعة: ${esc(st.name)}</h2>
-      <p class="muted qtsub">${esc(hLabel(st))}</p>
+  /* الاستمارات تُفتح وحدها في نافذة، أو داخل «نافذة الاختبارات» (host: عنصر داخلها) بلا عنوان؛ والإغلاق يغلق النافذة كلها */
+  const shell = (host, title, st) => {
+    const ov = host || document.createElement('div'); if (!host) ov.className = 'overlay';
+    const open = host ? '<div class="qtform qtembed">' : `<div class="modal wide qtform"><h2>${title}: ${esc(st.name)}</h2><p class="muted qtsub">${esc(hLabel(st))}</p>`;
+    const close = () => (host ? host.closest('.overlay') || host : ov).remove();
+    return { ov, open, close, mount: () => { if (!host) document.body.appendChild(ov); return ov.querySelector('.qtform'); } };
+  };
+  function followForm(st, host) {
+    const S = shell(host, 'متابعة', st), ov = S.ov;
+    ov.innerHTML = `${S.open}
       <label class="qtdate">التاريخ<input type="date" name="dt" value="${today()}" max="${today()}"></label>
       <fieldset class="tfs"><legend>الأساسيات ينقصها</legend>
         <div class="chips">${BASICS.map(v => chip('checkbox', 'basics', v)).join('')}${chip('checkbox', 'basics', 'أخرى')}</div>
         <label data-other="basics" hidden>اكتب ما ينقصه<input name="basicsOther" maxlength="200"></label>
       </fieldset>
-      <fieldset class="tfs"><legend>آخر المحفوظ <span class="muted">(اختياري)</span></legend>
+      <fieldset class="tfs"><legend>آخر المحفوظ</legend>
         <div class="two"><label>السورة${surahSel('last_s')}</label><label>الآية<input type="number" inputmode="numeric" name="last_a" min="1" step="1" aria-label="رقم الآية"></label></div>
       </fieldset>
       ${partHTML(PARTS[0])}${reviewHTML()}
@@ -215,20 +235,15 @@
       </fieldset>
       <label>ملاحظات <span class="muted">(اختياري)</span><textarea name="note" rows="2" maxlength="1000"></textarea></label>
       <div class="row"><button type="button" class="btn primary" data-qtsave>حفظ الاختبار</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
-    document.body.appendChild(ov);
-    const M = ov.querySelector('.modal');
+    const M = S.mount();
     const vals = n => [...M.querySelectorAll(`[name="${n}"]:checked`)].map(i => i.value);
     const val = n => (M.querySelector(`[name="${n}"]`)?.value || '').trim();
     ov.addEventListener('change', e => {
       const n = e.target.name; if (n === 'basics' || n === 'taj') M.querySelector(`[data-other="${n}"]`).hidden = !vals(n).includes('أخرى');
     });
-    /* الاختيار المحدد في صفوف الدرجات: ضغطة أخرى تلغيه */
-    ov.addEventListener('click', e => {
-      if (e.target.matches?.('input')) return;
-      const lab = e.target.closest('.qtgrid label.chip-t'); if (!lab) return;
-      const inp = lab.querySelector('input'); if (inp?.checked) { e.preventDefault(); inp.checked = false; }
-    });
-    ov.querySelector('[data-close]').onclick = () => ov.remove();
+    /* عدادات أخطاء / تشكيل / تردد */
+    ov.addEventListener('click', e => { const b = e.target.closest('.qtpartc [data-inc], .qtpartc [data-dec]'); if (b) bump(b); });
+    ov.querySelector('[data-close]').onclick = S.close;
     ov.querySelector('[data-qtsave]').onclick = async ev => {
       const dt = val('dt'), basics = vals('basics'), taj = vals('taj');
       const data = { basics: basics.filter(x => x !== 'أخرى'), basicsOther: basics.includes('أخرى') ? val('basicsOther') : '', parts: {}, taj: taj.filter(x => x !== 'أخرى'), tajOther: taj.includes('أخرى') ? val('tajOther') : '', note: val('note') };
@@ -242,7 +257,7 @@
         data.last = { surah: ls, ayah: a };
       }
       for (const [k, l] of PARTS) {
-        const p = { surah: val(k + '_s') }; ROWS.forEach(([rk]) => { p[rk] = vals(`${k}_${rk}`)[0] || ''; });
+        const c = cntIn(M.querySelector(`[data-part="${k}"]`)), p = { surah: val(k + '_s') }; ROWS.forEach(([rk]) => { p[rk] = c[rk] ? String(c[rk]) : ''; });
         if (!p.surah && ROWS.some(([rk]) => p[rk])) { toast(`اختر سورة «${l}»`); M.querySelector(`[name="${k}_s"]`).focus(); return; }
         if (p.surah) data.parts[k] = p;
       }
@@ -252,7 +267,7 @@
         else { (db.tests = db.tests || []).push({ id: uid(), studentId: st.id, kind: 'follow', date: dt, data, by: me()?.name || '', byMember: session?.id || '', ts: new Date().toISOString() }); save(); }
       };
       try {
-        await withBusy(ev.currentTarget, run()); ov.remove();
+        await withBusy(ev.currentTarget, run()); S.close();
         /* «آخر المحفوظ» يُسجَّل أيضًا في «سجل الإنجاز» تسميعَ «حفظ» فيتحدّث «آخر حفظ» (الآية فارغة = السورة كلها) */
         let rec = '';
         if (data.last) rec = addHifz(st, data.last, dt) ? '، وأُضيف «آخر المحفوظ» إلى سجل الإنجاز' : ' (لم يُضف «آخر المحفوظ» إلى سجل الإنجاز: يسجّله معلم الحلقة أو مشرفها)';
@@ -262,20 +277,48 @@
     };
   }
 
+  /* ===== المنهج في «الفصول»: من سورة وآية إلى سورة وآية (اختياري كله) =====
+     الآية اختيارية: «من» بلا آية = الآية 1، و«إلى» بلا آية = آخر آية في سورتها. وفي السورة نفسها لا تكون «من» بعد «إلى». */
+  const surahOpts = cur => `<option value="">— السورة —</option>${SURAHS.map(([n], i) => `<option value="${i + 1}" ${+cur === i + 1 ? 'selected' : ''}>${esc(n)}</option>`).join('')}`;
+  function manHTML(p, m, label) {
+    m = m || {};
+    const ay = (n, val, ph) => `<input type="number" inputmode="numeric" class="qtay" name="${p}_${n}" min="1" step="1" value="${val ?? ''}" placeholder="${ph}" aria-label="${label} — آية">`;
+    return `<div class="qtmanb"><div class="qtmanl muted">${esc(label)} <small>(اختياري)</small></div>
+      <div class="qtmrow"><span class="qtmw">من</span><select name="${p}_fs" aria-label="${label} — من سورة">${surahOpts(m.fs)}</select>${ay('fa', m.fa, 'آية 1')}</div>
+      <div class="qtmrow"><span class="qtmw">إلى</span><select name="${p}_ts" aria-label="${label} — إلى سورة">${surahOpts(m.ts)}</select>${ay('ta', m.ta, 'آخرها')}</div></div>`;
+  }
+  /* يقرأ المنهج ويكمل الافتراضي: null إن تُرك فارغًا، و{ err, el } عند الخطأ */
+  function readMan(M, p, label) {
+    const q = n => M.querySelector(`[name="${p}_${n}"]`); if (!q('fs')) return null;
+    const fs = +q('fs').value || 0, ts = +q('ts').value || 0, fa0 = q('fa').value.trim(), ta0 = q('ta').value.trim();
+    if (!fs && !ts && !fa0 && !ta0) return null;
+    if (!fs) return { err: `${label}: اختر سورة «من»`, el: q('fs') };
+    if (!ts) return { err: `${label}: اختر سورة «إلى»`, el: q('ts') };
+    const fn = SURAHS[fs - 1][1], tn = SURAHS[ts - 1][1];
+    const fa = fa0 ? Math.round(+fa0) : 1, ta = ta0 ? Math.round(+ta0) : tn;
+    if (!(fa >= 1 && fa <= fn)) return { err: `${label}: آية «${SURAHS[fs - 1][0]}» من 1 إلى ${fn}`, el: q('fa') };
+    if (!(ta >= 1 && ta <= tn)) return { err: `${label}: آية «${SURAHS[ts - 1][0]}» من 1 إلى ${tn}`, el: q('ta') };
+    if (fs === ts && fa > ta) return { err: `${label}: في السورة نفسها تكون آية «من» قبل آية «إلى»`, el: q('fa') };
+    return { fs, fa, ts, ta };
+  }
+  const manText = m => (m && m.fs ? `${SURAHS[m.fs - 1][0]} ${m.fa} – ${SURAHS[m.ts - 1][0]} ${m.ta}` : '');
+
   /* ===== استمارة «الفصول»: الفصل والاختبار، ثم الأسئلة ودرجة الجهد، والإجمالي يُحسب فورًا =====
      الاختبار المسجّل من قبل (الفصل والنوع نفسهما) يُفتح بدرجاته ويُعدَّل، بأسئلته ودرجاته العظمى كما سُجّل،
      فتغيير «إدارة الاختبارات» لا يغيّر ما سُجّل. */
-  async function termForm(st) {
+  async function termForm(st, host) {
     let L = [];
     try { L = (await listOf(st)).filter(t => t.kind === 'term'); } catch (e) { /* قبل تنفيذ tests.sql: يظهر الخطأ عند الحفظ */ }
     const h = halaqaOf(st), C = cfg();
     const found = (tm, ex) => L.find(t => +t.data?.term === +tm && t.data?.exam === ex);
     /* الفصل الذي فيه تاريخ اليوم، وأول اختبار فيه لم يُسجَّل بعد */
     const tm0 = termOfDate(today()), pick = [tm0, (EXAMS.find(([ex]) => !found(tm0, ex)) || EXAMS[0])[0]];
-    const ov = document.createElement('div'); ov.className = 'overlay';
-    ov.innerHTML = `<div class="modal wide qtform"><h2>الفصول: ${esc(st.name)}</h2>
-      <p class="muted qtsub">${esc(hLabel(st))}</p>
-      <label class="qtterm">الفصل <b class="req">*</b><select name="term">${TERMS.map(([v, l, r]) => `<option value="${v}" ${pick[0] === v ? 'selected' : ''}>${l} (${r})${found(v, 'mid') && found(v, 'final') ? ' ✓' : ''}</option>`).join('')}</select></label>
+    if (host && !host.isConnected) return;   // انتقل المستخدم إلى تبويب آخر أثناء التحميل
+    const S = shell(host, 'الفصول', st), ov = S.ov;
+    ov.innerHTML = `${S.open}
+      <div class="lbl-s">الفصل <b class="req">*</b></div>
+      <div class="qtterm"><select name="term" aria-label="الفصل">${TERMS.map(([v, l]) => `<option value="${v}" ${pick[0] === v ? 'selected' : ''}>${l}${found(v, 'mid') && found(v, 'final') ? ' ✓' : ''}</option>`).join('')}</select>
+        <span class="tag qtrange" data-qtrange>${esc((TERMS.find(t => t[0] === pick[0]) || [])[2] || '')}</span></div>
       <div class="lbl-s">الاختبار <b class="req">*</b></div><div class="chips">${EXAMS.map(([v, l]) => `<label class="chip-r chip-t"><input type="radio" name="exam" value="${v}" ${pick?.[1] === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
       <p class="qtexist" data-qtexist hidden></p>
       <label class="qtdate">التاريخ<input type="date" name="dt" value="${today()}" max="${today()}"></label>
@@ -283,8 +326,7 @@
       <label>ملاحظات <span class="muted">(اختياري)</span><textarea name="note" rows="2" maxlength="1000"></textarea></label>
       <div class="qttotal" data-qttot></div>
       <div class="row"><button type="button" class="btn primary" data-qtsave>حفظ النتيجة</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
-    document.body.appendChild(ov);
-    const M = ov.querySelector('.modal'), box = M.querySelector('[data-qtqs]'), tot = M.querySelector('[data-qttot]'), ex = M.querySelector('[data-qtexist]');
+    const M = S.mount(), box = M.querySelector('[data-qtqs]'), tot = M.querySelector('[data-qttot]'), ex = M.querySelector('[data-qtexist]');
     const sel = n => (n === 'term' ? M.querySelector('[name="term"]')?.value : M.querySelector(`[name="${n}"]:checked`)?.value) || '';
     let cur = null;   // { old, qs, effortMax }
     const draw = () => {
@@ -293,24 +335,43 @@
       const old = found(tm, xk), d = old?.data || {};
       const qs = old && Array.isArray(d.qs) && d.qs.length ? d.qs.map(q => ({ k: q.k, l: q.l, max: +q.max || 0 })) : qsOf(C[xk]);
       const effortMax = old ? +d.effortMax || 0 : +C[xk].effortMax || 0;
-      cur = { old, qs, effortMax };
+      cur = { old, qs, effortMax, ded: { ...DED_DEF, ...(old?.data?.ded || dedCfg()) } };   // المسجّل يُعدَّل بخصمه وقت تسجيله
       ex.hidden = !old;
       if (old) ex.textContent = `سُجّل هذا الاختبار من قبل (${String(old.date || '').slice(0, 10)}${old.by ? ' — ' + old.by : ''}): الحفظ يعدّل نتيجته.`;
       const v = k => (d.qs || []).find(q => q.k === k) || {};
-      box.innerHTML = `<fieldset class="tfs"><legend>الأسئلة</legend>
-        ${qs.map(q => `<div class="qtq"><b class="qtql">${esc(q.l)}</b>
-          <span class="qtman"><span class="muted">المنهج: من</span><input name="${q.k}_f" maxlength="80" value="${esc(v(q.k).from ?? v(q.k).surah ?? '')}" placeholder="مثال: الملك" aria-label="المنهج من — ${esc(q.l)}"><span class="muted">إلى</span><input name="${q.k}_t" maxlength="80" value="${esc(v(q.k).to ?? '')}" placeholder="مثال: نوح" aria-label="المنهج إلى — ${esc(q.l)}"></span>
-          <span class="qtg"><input type="number" inputmode="decimal" name="${q.k}_g" min="0" max="${q.max}" step="0.5" value="${v(q.k).grade ?? ''}" aria-label="درجة ${esc(q.l)}"><span class="muted">/ ${fmtN(q.max)}</span></span></div>`).join('')}
-        </fieldset>
+      /* درجة السؤال = الدرجة كاملة − (عدد كل نوع × خصمه)؛ والنتيجة المسجلة قبل العدادات تبدأ من درجتها */
+      const gradeRow = q => {
+        const o = v(q.k), c = o.cnt || {}, base = old && !o.cnt && o.grade != null ? +o.grade : q.max;
+        return `<div class="qtq qtqc" data-q="${q.k}" data-base="${base}" data-max="${q.max}"><b class="qtql">${esc(q.l)}</b>
+          <span class="qtg"><input type="number" name="${q.k}_g" readonly class="qtauto" tabindex="-1" aria-label="درجة ${esc(q.l)}"><span class="muted">/ ${fmtN(q.max)}</span></span>
+          <div class="qtctrs">${CNT.map(([k, l]) => `<span class="qtctr"><button type="button" class="qtcbtn" data-inc="${k}" aria-label="${l}: زيادة">${l}</button><b class="qtcn" data-n="${k}">${Math.min(CNT_MAX, +c[k] || 0)}</b><button type="button" class="qtundo" data-dec="${k}" title="تراجع" aria-label="${l}: تراجع">↶</button></span>`).join('')}</div></div>`;
+      };
+      const nq = qs.filter(q => q.k === 'new'), rq = qs.filter(q => q.k !== 'new');
+      box.innerHTML = `<fieldset class="tfs"><legend>الجديد</legend>${manHTML('new', v('new').man, 'منهج الجديد')}${nq.map(gradeRow).join('')}</fieldset>
+        ${rq.length ? `<fieldset class="tfs"><legend>المراجعة</legend>${manHTML('rev', v(rq[0].k).man, 'منهج المراجعة')}${rq.map(gradeRow).join('')}</fieldset>` : ''}
         ${effortMax ? `<fieldset class="tfs"><legend>درجات تكميلية</legend><div class="qtq"><b class="qtql">الجهد</b><span class="qtg"><input type="number" inputmode="decimal" name="effort" min="0" max="${effortMax}" step="0.5" value="${d.effort ?? ''}" aria-label="درجة الجهد"><span class="muted">/ ${fmtN(effortMax)}</span></span></div></fieldset>` : ''}`;
       if (old) { M.querySelector('[name="dt"]').value = String(old.date || today()).slice(0, 10); M.querySelector('[name="note"]').value = d.note || ''; }
+      box.querySelectorAll('.qtqc').forEach(rowGrade);
       calc();
     };
+    const cntOf = r => Object.fromEntries(CNT.map(([k]) => [k, +r.querySelector(`[data-n="${k}"]`).textContent || 0]));
+    function rowGrade(r) {
+      const D = cur?.ded || dedCfg(), c = cntOf(r);
+      const g = Math.max(0, Math.min(+r.dataset.max, +r.dataset.base - CNT.reduce((a, [k]) => a + c[k] * (+D[k] || 0), 0)));
+      r.querySelector('input').value = fmtN(g);
+      r.querySelectorAll('[data-dec]').forEach(b => { b.disabled = !c[b.dataset.dec]; });
+      r.querySelectorAll('[data-inc]').forEach(b => { b.classList.toggle('max', c[b.dataset.inc] >= CNT_MAX); });
+    }
+    ov.addEventListener('click', e => {
+      const b = e.target.closest('[data-inc], [data-dec]'); if (!b) return;
+      const r = b.closest('.qtqc'), k = b.dataset.inc || b.dataset.dec, el = r.querySelector(`[data-n="${k}"]`), n = +el.textContent || 0;
+      el.textContent = b.dataset.inc ? Math.min(CNT_MAX, n + 1) : Math.max(0, n - 1);
+      rowGrade(r); calc();
+    });
     const read = () => {
       if (!cur) return null;
       const g = n => num(M.querySelector(`[name="${n}"]`)?.value ?? '');
-      const tx = n => (M.querySelector(`[name="${n}"]`)?.value || '').trim();
-      const qs = cur.qs.map(q => ({ ...q, from: tx(q.k + '_f'), to: tx(q.k + '_t'), grade: g(q.k + '_g') }));
+      const qs = cur.qs.map(q => { const r = box.querySelector(`.qtqc[data-q="${q.k}"]`); return { ...q, grade: g(q.k + '_g'), cnt: r ? cntOf(r) : null }; });
       const effort = cur.effortMax ? g('effort') : null;
       const max = qs.reduce((a, q) => a + q.max, 0) + cur.effortMax;
       const total = qs.reduce((a, q) => a + (q.grade || 0), 0) + (effort || 0);
@@ -321,9 +382,12 @@
       const pct = r.max ? Math.round((r.total / r.max) * 100) : 0;
       tot.innerHTML = `الإجمالي: <b>${fmtN(r.total)}</b> من ${fmtN(r.max)} <span class="muted">(<bdi>${pct}%</bdi>)</span>`;
     }
-    ov.addEventListener('change', e => { if (e.target.name === 'term' || e.target.name === 'exam') draw(); });
+    ov.addEventListener('change', e => {
+      if (e.target.name === 'term') M.querySelector('[data-qtrange]').textContent = (TERMS.find(t => t[0] === +e.target.value) || [])[2] || '';
+      if (e.target.name === 'term' || e.target.name === 'exam') draw();
+    });
     ov.addEventListener('input', e => { if (/_g$|^effort$/.test(e.target.name || '')) calc(); });
-    ov.querySelector('[data-close]').onclick = () => ov.remove();
+    ov.querySelector('[data-close]').onclick = S.close;
     ov.querySelector('[data-qtsave]').onclick = async evt => {
       const tm = +sel('term'), xk = sel('exam'), dt = M.querySelector('[name="dt"]').value, r = read();
       if (!tm) { toast('اختر الفصل'); return; }
@@ -334,7 +398,10 @@
         if (q.grade < 0 || q.grade > q.max) { toast(`درجة «${q.l}» من 0 إلى ${fmtN(q.max)}`); M.querySelector(`[name="${q.k}_g"]`).focus(); return; }
       }
       if (r.effort != null && (r.effort < 0 || r.effort > cur.effortMax)) { toast(`درجة الجهد من 0 إلى ${fmtN(cur.effortMax)}`); M.querySelector('[name="effort"]').focus(); return; }
-      const data = { term: tm, exam: xk, qs: r.qs.map(q => ({ k: q.k, l: q.l, from: q.from, to: q.to, grade: q.grade, max: q.max })), effort: r.effort || 0, effortMax: cur.effortMax, total: r.total, max: r.max, note: (M.querySelector('[name="note"]').value || '').trim() };
+      /* المنهج: منهج للجديد، ومنهج واحد للمراجعة يُحفظ مع كل سؤال من أسئلتها */
+      const mNew = readMan(M, 'new', 'منهج الجديد'); if (mNew?.err) { toast(mNew.err); mNew.el?.focus(); return; }
+      const mRev = readMan(M, 'rev', 'منهج المراجعة'); if (mRev?.err) { toast(mRev.err); mRev.el?.focus(); return; }
+      const data = { term: tm, exam: xk, qs: r.qs.map(q => ({ k: q.k, l: q.l, man: (q.k === 'new' ? mNew : mRev) || null, cnt: q.cnt, grade: q.grade, max: q.max })), ded: cur.ded, effort: r.effort || 0, effortMax: cur.effortMax, total: r.total, max: r.max, note: (M.querySelector('[name="note"]').value || '').trim() };
       const old = cur.old;
       const run = async () => {
         if (CLOUD) {
@@ -347,7 +414,7 @@
           save();
         }
       };
-      try { await withBusy(evt.currentTarget, run()); ov.remove(); toast(`حُفظت نتيجة ${termName(tm)} (${examName(xk)}) لـ ${st.name}`); }
+      try { await withBusy(evt.currentTarget, run()); S.close(); toast(`حُفظت نتيجة ${termName(tm)} (${examName(xk)}) لـ ${st.name}`); }
       catch (err) { toast(/test_(add|upd)|PGRST202|404/i.test(String(err.message || err)) ? 'تحتاج الاختبارات إلى تنفيذ supabase/tests.sql على الخادم.' : 'تعذّر الحفظ: ' + (err.message || err)); }
     };
     draw();
@@ -355,53 +422,58 @@
 
   /* ===== استمارة «إتقان»: الجزء، وأربعة أسئلة، والإجمالي والنتيجة (ناجح / لم يجتز) تُحسب فورًا =====
      كل محاولة تُسجَّل وحدها (الإعادة بعد عدم الاجتياز محاولة جديدة)، ومعها درجتها العظمى ونسبة النجاح وقتها. */
-  function itqanForm(st) {
-    const h = halaqaOf(st), C = icfg(), qMax = +C.qMax || 0, max = qMax * IQ_N, pass = +C.pass || 0;
-    const ov = document.createElement('div'); ov.className = 'overlay';
-    ov.innerHTML = `<div class="modal wide qtform"><h2>إتقان: ${esc(st.name)}</h2>
-      <p class="muted qtsub">${esc(hLabel(st))}</p>
+  function itqanForm(st, host) {
+    const C = icfg(), qMax = +C.qMax || 0, max = qMax * IQ_N, pass = +C.pass || 0;
+    const S = shell(host, 'إتقان', st), ov = S.ov;
+    ov.innerHTML = `${S.open}
       <div class="two"><label>الجزء <b class="req">*</b><select name="juz"><option value="">— اختر —</option>${JUZ.map(j => `<option>${esc(j)}</option>`).join('')}</select></label>
         <label>التاريخ<input type="date" name="dt" value="${today()}" max="${today()}"></label></div>
       <fieldset class="tfs"><legend>الدرجة</legend>
-        <div class="chips qtmode"><label class="chip-r chip-t"><input type="radio" name="mode" value="qs" checked><span>درجة لكل سؤال</span></label><label class="chip-r chip-t"><input type="radio" name="mode" value="total"><span>الدرجة الإجمالية مرة واحدة</span></label></div>
-        <div data-mode="qs">${Array.from({ length: IQ_N }, (_, i) => `<div class="qtq"><b class="qtql">السؤال ${['الأول', 'الثاني', 'الثالث', 'الرابع'][i]}</b>
-          <span class="qtg"><input type="number" inputmode="decimal" name="q${i + 1}" min="0" max="${qMax}" step="0.25" aria-label="درجة السؤال ${i + 1}"><span class="muted">/ ${fmtN(qMax)}</span></span></div>`).join('')}</div>
-        <div data-mode="total" hidden><div class="qtq"><b class="qtql">الدرجة الإجمالية</b>
-          <span class="qtg"><input type="number" inputmode="decimal" name="tot" min="0" max="${max}" step="0.25" aria-label="الدرجة الإجمالية"><span class="muted">/ ${fmtN(max)}</span></span></div></div>
+        ${Array.from({ length: IQ_N }, (_, i) => `<div class="qtq qtqc" data-i="${i}"><b class="qtql">السؤال ${['الأول', 'الثاني', 'الثالث', 'الرابع'][i]}</b>
+          <span class="qtg"><input type="number" name="q${i + 1}" readonly class="qtauto" tabindex="-1" value="${fmtN(qMax)}" aria-label="درجة السؤال ${i + 1}"><span class="muted">/ ${fmtN(qMax)}</span></span>
+          ${ctrHTML(CNT)}</div>`).join('')}
+        <div class="qtq qtsumrow"><b class="qtql">المجموع</b>
+          <span class="qtg"><input type="number" inputmode="decimal" name="tot" min="0" max="${max}" step="0.25" placeholder="${fmtN(max)}" aria-label="المجموع"><span class="muted">/ ${fmtN(max)}</span></span>
+          <small class="muted qtsumhint" data-sumhint></small></div>
       </fieldset>
       <label>ملاحظات <span class="muted">(اختياري)</span><textarea name="note" rows="2" maxlength="1000"></textarea></label>
       <div class="qttotal" data-qttot></div>
       <div class="row"><button type="button" class="btn primary" data-qtsave>حفظ النتيجة</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
-    document.body.appendChild(ov);
-    const M = ov.querySelector('.modal'), tot = M.querySelector('[data-qttot]');
-    /* «الدرجة الإجمالية مرة واحدة»: خانة واحدة بدل الأسئلة الأربعة */
-    const mode = () => M.querySelector('[name="mode"]:checked')?.value || 'qs';
-    const grades = () => (mode() === 'total' ? [num(M.querySelector('[name="tot"]').value)] : Array.from({ length: IQ_N }, (_, i) => num(M.querySelector(`[name="q${i + 1}"]`).value)));
+    const M = S.mount(), tot = M.querySelector('[data-qttot]');
+    /* كل سؤال يبدأ بدرجته كاملة، ويُخصم منه بعدادات خطأ / تردد / تجويد (الخصم من «إدارة الاختبارات»).
+       إذا استُعمل أي عداد يُجمع «المجموع» تلقائيًا ويُقفل؛ وإلا يُكتب المجموع مباشرة (فارغًا = الدرجة كاملة) */
+    const D = dedCfg(), rows = () => [...M.querySelectorAll('.qtqc')];
+    const counts = () => rows().map(r => cntIn(r));
+    const used = () => counts().some(c => CNT.some(([k]) => c[k] > 0));
+    const qv = () => counts().map(c => Math.max(0, qMax - dedSum(c, D)));
+    const totEl = M.querySelector('[name="tot"]'), hint = M.querySelector('[data-sumhint]');
+    const mode = () => (used() ? 'qs' : 'total');
+    const grades = () => (mode() === 'total' ? [totEl.value.trim() === '' ? max : num(totEl.value)] : qv());
     const result = gs => { const total = gs.reduce((a, g) => a + (g || 0), 0), pct = max ? (total / max) * 100 : 0; return { total, pct, passed: pct >= pass }; };
-    ov.addEventListener('change', e => { if (e.target.name === 'mode') { M.querySelectorAll('[data-mode]').forEach(d => { d.hidden = d.dataset.mode !== mode(); }); calc(); } });
+    const syncSum = () => {
+      const g = qv(); rows().forEach((r, i) => { r.querySelector('input').value = fmtN(g[i]); });
+      const auto = mode() === 'qs';
+      if (auto) totEl.value = fmtN(g.reduce((a, x) => a + x, 0));
+      else if (totEl.readOnly) totEl.value = '';   // رُجعت العدادات كلها إلى الصفر: يُفتح المجموع للكتابة
+      totEl.readOnly = auto; totEl.classList.toggle('qtauto', auto);
+      hint.textContent = auto ? 'يُجمع تلقائيًا من درجات الأسئلة' : 'استعمل عدادات الأسئلة فيُجمع تلقائيًا، أو اكتب المجموع مباشرة (فارغًا = الدرجة كاملة)';
+    };
+    ov.addEventListener('click', e => { const b = e.target.closest('.qtqc [data-inc], .qtqc [data-dec]'); if (!b) return; bump(b); syncSum(); calc(); });
     const calc = () => {
       const gs = grades(), r = result(gs), all = gs.every(g => g != null);
       tot.innerHTML = `الإجمالي: <b>${fmtN(r.total)}</b> من ${fmtN(max)} <span class="muted">(<bdi>${fmtN(r.pct)}%</bdi>)</span>`
         + (all ? ` <span class="tag ${r.passed ? 'tag-ok' : 'tag-no'}">${r.passed ? 'ناجح' : 'لم يجتز'}</span>` : '')
         + `<small class="muted qtpass">شرط النجاح: <bdi>${fmtN(pass)}%</bdi> فأكثر</small>`;
     };
-    ov.addEventListener('input', e => { if (/^(q\d|tot)$/.test(e.target.name || '')) calc(); });
-    ov.querySelector('[data-close]').onclick = () => ov.remove();
+    ov.addEventListener('input', e => { if (e.target.name === 'tot') calc(); });
+    ov.querySelector('[data-close]').onclick = S.close;
     ov.querySelector('[data-qtsave]').onclick = async evt => {
       const juz = M.querySelector('[name="juz"]').value, dt = M.querySelector('[name="dt"]').value, gs = grades();
       if (!juz) { toast('اختر الجزء'); M.querySelector('[name="juz"]').focus(); return; }
       if (!dt) { toast('حدّد التاريخ'); return; }
-      if (mode() === 'total') {
-        const el = M.querySelector('[name="tot"]');
-        if (gs[0] == null) { toast('اكتب الدرجة الإجمالية'); el.focus(); return; }
-        if (gs[0] < 0 || gs[0] > max) { toast(`الدرجة الإجمالية من 0 إلى ${fmtN(max)}`); el.focus(); return; }
-      } else for (let i = 0; i < IQ_N; i++) {
-        const el = M.querySelector(`[name="q${i + 1}"]`);
-        if (gs[i] == null) { toast(`اكتب درجة السؤال ${i + 1}`); el.focus(); return; }
-        if (gs[i] < 0 || gs[i] > qMax) { toast(`درجة السؤال ${i + 1} من 0 إلى ${fmtN(qMax)}`); el.focus(); return; }
-      }
-      const r = result(gs), btn = evt.currentTarget;
-      const data = { juz, qs: mode() === 'total' ? null : gs, qMax, total: r.total, max, pct: Math.round(r.pct * 100) / 100, pass, passed: r.passed, note: (M.querySelector('[name="note"]').value || '').trim() };
+      if (mode() === 'total' && (gs[0] == null || gs[0] < 0 || gs[0] > max)) { toast(`المجموع من 0 إلى ${fmtN(max)}`); totEl.focus(); return; }
+      const r = result(gs), btn = evt.currentTarget, byQ = mode() === 'qs';
+      const data = { juz, qs: byQ ? gs : null, cnt: byQ ? counts() : null, ded: byQ ? D : null, qMax, total: r.total, max, pct: Math.round(r.pct * 100) / 100, pass, passed: r.passed, note: (M.querySelector('[name="note"]').value || '').trim() };
       /* لم يجتز: تنبيه (رسالته من «إدارة الاختبارات»)، وبالموافقة يُحفظ في «متابعة» بدل «إتقان» */
       const kind = r.passed ? 'itqan' : 'follow';
       if (!r.passed) data.itqan = true;
@@ -410,7 +482,7 @@
           if (CLOUD) await window.Cloud.rpc('test_add', { sid: st.id, knd: kind, dt, dat: data });
           else { (db.tests = db.tests || []).push({ id: uid(), studentId: st.id, kind, date: dt, data, by: me()?.name || '', byMember: session?.id || '', ts: new Date().toISOString() }); save(); }
         };
-        try { await withBusy(btn, run()); ov.remove(); toast(r.passed ? `حُفظ إتقان ${juz} لـ ${st.name}: ناجح` : `لم يجتز ${st.name} إتقان ${juz}: نُقل الاختبار إلى «متابعة»`); }
+        try { await withBusy(btn, run()); S.close(); toast(r.passed ? `حُفظ إتقان ${juz} لـ ${st.name}: ناجح` : `لم يجتز ${st.name} إتقان ${juz}: نُقل الاختبار إلى «متابعة»`); }
         catch (err) { toast(/test_add|PGRST202|404/i.test(String(err.message || err)) ? 'تحتاج الاختبارات إلى تنفيذ supabase/tests.sql على الخادم.' : 'تعذّر الحفظ: ' + (err.message || err)); }
       };
       if (r.passed) { commit(); return; }
@@ -424,7 +496,7 @@
       cf.querySelector('[data-qtok]').onclick = () => { cf.remove(); commit(); };
       cf.querySelector('[data-qtok]').focus({ preventScroll: true });
     };
-    calc();
+    syncSum(); calc();
   }
   /* ===== بطاقة الاختبار في السجل: الاختبار، ثم التاريخ والمختبر (إن وُجدا)، ثم الدرجة ونسبتها في كبسولة، ثم التفاصيل ===== */
   const line = (l, v) => `<div class="sfr"><span>${esc(l)}</span><b>${v}</b></div>`;
@@ -442,6 +514,47 @@
     const title = `إتقان ${esc(d.juz || '')} <span class="tag ${cls}">${d.passed ? 'ناجح' : d.itqan ? 'لم يجتز — يعيد الإتقان' : 'لم يجتز'}</span>`;
     const grade = `<span class="qtsum">${fmtN(+d.total || 0)} / ${fmtN(+d.max || 0)}</span> ${pctTag(+d.pct || 0, cls)} <span class="muted qtneed">النجاح <bdi>${fmtN(+d.pass || 0)}%</bdi></span>`;
     return card(t, title, grade, d.note ? line('ملاحظات', esc(d.note)) : '');   // بلا تفاصيل درجات الأسئلة
+  }
+
+  /* ===== «نافذة الاختبارات» من زر الطالب: تبويب لكل نوع بالترتيب (متابعة · إتقان · الفصول)؛
+     فيه استمارته لمن يحق له التسجيل، وتحتها سجل هذا النوع للطالب؛ ومن يرى فقط (المحاسب والإداري) يرى السجل وحده ===== */
+  function testsWindow(st, first) {
+    const W = [['follow', 'متابعة', canTest, followForm], ['itqan', 'إتقان', canItqan, itqanForm], ['term', 'الفصول', canTerm, termForm]];
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    ov.innerHTML = `<div class="modal wide qtwin"><h2>الاختبارات: ${esc(st.name)}</h2><p class="muted qtsub">${esc(hLabel(st))}</p>
+      <div class="qttabs qtwtabs" role="tablist">${W.map(([k, l]) => `<button type="button" role="tab" class="btn sm" data-qtw="${k}">${l}</button>`).join('')}</div>
+      <div class="qtwpane"></div></div>`;
+    document.body.appendChild(ov);
+    const pane = ov.querySelector('.qtwpane');
+    let all = null, cur = '';
+    const logOf = async (box, k) => {
+      try { if (!all) all = await listOf(st); } catch (e) { box.textContent = /test_list|PGRST202|404/i.test(String(e.message || e)) ? 'تحتاج الاختبارات إلى تنفيذ supabase/tests.sql على الخادم.' : 'تعذّر تحميل السجل.'; return; }
+      const L = all.filter(t => t.kind === k).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.ts || '').localeCompare(String(a.ts || '')));
+      box.className = 'qtlog'; box.innerHTML = L.length ? L.map(itemHTML).join('') : `<p class="muted">لم يُسجَّل له اختبار «${esc(KINDS[k])}» بعد.</p>`;
+      const s = box.closest('details')?.querySelector('summary .qtn'); if (s) s.textContent = L.length || '';
+    };
+    const show = k => {
+      cur = k;
+      ov.querySelectorAll('[data-qtw]').forEach(b => { const on = b.dataset.qtw === k; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+      pane.replaceChildren();
+      const [, l, can, form] = W.find(x => x[0] === k), ok = can(st);
+      if (ok) { const host = document.createElement('div'); pane.appendChild(host); form(st, host); }
+      const lg = document.createElement('details'); lg.className = 'qtwlog'; lg.open = !ok;
+      lg.innerHTML = `<summary>سجل «${l}» <span class="qtn"></span></summary><div class="qtlog muted">…</div>`;
+      pane.appendChild(lg); logOf(lg.querySelector('.qtlog'), k);
+    };
+    ov.addEventListener('click', e => {
+      const t = e.target.closest('[data-qtw]'); if (t) { show(t.dataset.qtw); return; }
+      const d = e.target.closest('.qtwlog [data-qtdel]'); if (!d) return;
+      ask('حذف هذا الاختبار؟', async () => {
+        try {
+          if (CLOUD) await window.Cloud.rpc('test_del', { tid: d.dataset.qtdel });
+          else { db.tests = (db.tests || []).filter(x => x.id !== d.dataset.qtdel); save(); }
+          all = null; dropCache(); toast('حُذف الاختبار'); const box = pane.querySelector('.qtwlog .qtlog'); if (box) await logOf(box, cur);
+        } catch (err) { toast('تعذّر الحذف: ' + (err.message || err)); }
+      });
+    });
+    show(first || (W.find(w => w[2](st)) || W[0])[0]);
   }
 
   /* ===== سجل الاختبارات ===== */
@@ -470,7 +583,7 @@
       + opt('ملاحظات التجويد', esc([...(d.taj || []), d.tajOther].filter(Boolean).join('، '))) + opt('ملاحظات', esc(d.note || '')));
   }
   /* السجل بثلاثة تبويبات (متابعة · الفصول · إتقان) وعدد كل نوع. يُستعمل في ملف الطالب وفي «سجل الاختبارات» من زر الصف */
-  const TABS = [['follow', 'متابعة'], ['term', 'الفصول'], ['itqan', 'إتقان']];
+  const TABS = [['follow', 'متابعة'], ['itqan', 'إتقان'], ['term', 'الفصول']];
   async function mountLog(root, st) {
     root.innerHTML = '<div class="qttabs" role="tablist"></div><div class="qtlog muted">…</div>';
     const tabs = root.querySelector('.qttabs'), box = root.querySelector('.qtlog');
@@ -535,6 +648,9 @@
         <label>${FIELDS[1][1]}<input type="number" min="0" step="0.5" data-f="revMax" value="${C[k].revMax}"></label>
         <label>${FIELDS[2][1]}<input type="number" min="0" step="0.5" data-f="effortMax" value="${C[k].effortMax}"></label>
         <p class="qtcfgsum">الدرجة الكلية: <b data-qtcfgsum>${fmtN(examMax(C[k]))}</b></p></fieldset>`).join('')}
+        <fieldset class="tfs" data-qtcfgd><legend>الخصم في أسئلة «الفصول» و«الإتقان»</legend>
+          <p class="muted" style="font-size:.82rem;margin:0 0 .4rem">كل سؤال يبدأ بدرجته كاملة، ويُخصم منه لكل ضغطة على العداد (من 0 إلى 10):</p>
+          ${CNT.map(([k, l]) => `<label>خصم ${l} الواحد<input type="number" min="0" step="0.25" data-dd="${k}" value="${dedCfg()[k]}"></label>`).join('')}</fieldset>
         <fieldset class="tfs" data-qtcfgi><legend>اختبار الإتقان</legend>
           <label>درجة السؤال (أربعة أسئلة)<input type="number" min="0" step="0.25" data-i="qMax" value="${icfg().qMax}"></label>
           <label>شرط النجاح: نسبة لا تقل عن (%)<input type="number" min="0" max="100" step="0.25" data-i="pass" value="${icfg().pass}"></label>
@@ -615,6 +731,12 @@
       v.revN = v.revN === 1 ? 1 : 2;
       out[fs.dataset.qtcfg] = v;
     }
+    const fd = document.querySelector('[data-qtcfgd]');
+    if (fd) {
+      const ded = {};
+      for (const [k, l] of CNT) { const v = num(fd.querySelector(`[data-dd="${k}"]`).value); if (v == null || v < 0) { toast(`خصم ${l}: اكتب رقمًا`); fd.querySelector(`[data-dd="${k}"]`).focus(); return; } ded[k] = v; }
+      out.ded = ded;
+    }
     const fi = document.querySelector('[data-qtcfgi]');
     if (fi) {
       const qMax = num(fi.querySelector('[data-i="qMax"]').value), pass = num(fi.querySelector('[data-i="pass"]').value);
@@ -659,6 +781,7 @@
   async function homeFill(card) {
     const k = home.tab, box = card.querySelector('.qthlist'), more = card.querySelector('.qthmore');
     card.querySelectorAll('[data-qthtab]').forEach(b => { b.classList.toggle('on', b.dataset.qthtab === k); b.setAttribute('aria-selected', b.dataset.qthtab === k); });
+    const bk = card.querySelector('[data-qtbulk]'); if (bk) bk.hidden = k !== 'itqan';   // «إضافة متعددة» في تبويب الإتقان وحده
     let c = home.cache[k];
     if (!c || Date.now() - c.at > 60000) {
       box.innerHTML = '<p class="muted">…</p>';
@@ -835,7 +958,17 @@
   const dropCache = () => { home.cache = {}; };
   document.addEventListener('click', e => { if (e.target.closest('[data-qtsave], [data-qtok], .overlay [data-yes]')) setTimeout(dropCache, 0); }, true);
 
-  window.QLTests = { canTest, canTerm, followForm, termForm, logView };
+  /* سطر الاختبار في «سجل الإنجاز» (kurrasa.js): النوع، وما اختُبر فيه، والدرجة */
+  function summary(t) {
+    const d = t.data || {}, g = (a, b) => `${fmtN(+a || 0)} / ${fmtN(+b || 0)}`;
+    if (t.kind === 'itqan' || d.itqan) return { type: 'إتقان', place: d.juz || '', grade: `${g(d.total, d.max)} · ${d.passed ? 'ناجح' : 'لم يجتز'}`, ok: !!d.passed, bad: !d.passed, note: d.note || '' };
+    if (t.kind === 'term') return { type: 'الفصول', place: `${termName(d.term)} — ${examName(d.exam)}`, grade: g(d.total, d.max), note: d.note || '' };
+    const parts = PARTS.filter(([k]) => d.parts?.[k]).map(([k, l]) => `${l}: ${d.parts[k].surah}`);
+    if (d.last?.surah) parts.unshift(`آخر المحفوظ: ${d.last.surah}${d.last.ayah ? ' ' + d.last.ayah : ''}`);
+    const errs = PARTS.reduce((a, [k]) => a + ROWS.reduce((b, [rk]) => b + (+d.parts?.[k]?.[rk] || 0), 0), 0);
+    return { type: 'متابعة', place: parts.join(' · '), grade: errs ? `ملاحظات: ${errs}` : '', note: [...(d.taj || []), d.tajOther].filter(Boolean).join('، ') + (d.note ? (d.taj?.length || d.tajOther ? ' — ' : '') + d.note : '') };
+  }
+  window.QLTests = { summary, listOf: st => listOf(st), canTest, canTerm, followForm, termForm, logView };
 
   const css = document.createElement('style');
   css.textContent = `.qtmenu{position:fixed;z-index:65;display:flex;flex-direction:column;min-width:12rem;padding:.3rem;border:1px solid var(--line);border-radius:12px;background:var(--card,#fff);box-shadow:0 10px 28px rgba(10,18,35,.18)}
@@ -854,13 +987,29 @@
     .qtih{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.2rem}.qtih .grow{flex:1}
     .qtitem .sfr{display:flex;gap:.6rem;padding:.35rem .1rem;border-bottom:1px solid var(--line)}.qtitem .sfr:last-child{border-bottom:0}
     .qtitem .sfr span{flex:0 0 8.5rem;color:var(--muted);font-size:.9rem}.qtitem .sfr b{flex:1;min-width:0;font-weight:600}
-    .qtterm{max-width:22rem}
+    .qtqc{flex-wrap:wrap}.qtctrs{flex-basis:100%;display:flex;flex-wrap:wrap;gap:.4rem .8rem;margin:.1rem 0 .2rem}
+    .qtctr{display:inline-flex;align-items:center;gap:.3rem}
+    .qtcbtn{font:inherit;font-weight:700;font-size:.85rem;padding:.2rem .75rem;border-radius:999px;border:1.5px solid var(--gold,#c9a35a);background:transparent;color:var(--text);cursor:pointer;touch-action:manipulation}
+    .qtcbtn:active{transform:scale(.96)}.qtcbtn.max{opacity:.5}
+    .qtcn{min-width:1.4rem;text-align:center;font-size:1rem}
+    .qtundo{font:inherit;font-size:.9rem;line-height:1;width:1.7rem;height:1.7rem;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;padding:0}
+    .qtundo:disabled{opacity:.35;cursor:default}
+    .qtterm{display:flex;align-items:center;gap:.5rem .7rem;flex-wrap:wrap;margin:0 0 .8rem}.qtterm select{flex:1 1 11rem;max-width:16rem;width:auto;margin:0}
+    .qtrange{flex:none;font-weight:700;font-size:.85rem;padding:.25rem .75rem;background:transparent;border:1.5px solid var(--gold,#c9a35a);color:var(--text)}
+    .qtq.qtsumrow{border-top:2px solid var(--gold,#c9a35a)!important;margin-top:.35rem;padding-top:.6rem}.qtsumrow .qtql{font-weight:800}
+    .qtsumhint{flex-basis:100%;font-size:.8rem}.qtauto{background:var(--navy-l,#eaeef5)!important;font-weight:800;cursor:not-allowed}
     .qtsubq + .qtsubq{margin-top:.6rem;padding-top:.6rem;border-top:1px dashed var(--line)}.qtsubh{display:block;margin:0 0 .3rem;font-size:.92rem}
     .qtscopebar{display:flex;justify-content:flex-end;margin:0 0 .8rem}.qtscopebar .btn{display:inline-flex;align-items:center;gap:.4rem}
     .qtsq{width:100%;margin:0 0 .6rem}.qtslist{display:flex;flex-direction:column}
     .qtsrow{display:flex;align-items:center;gap:.6rem;padding:.45rem .1rem;border-bottom:1px solid var(--line)}.qtsrow>div{flex:1;min-width:0;display:flex;flex-direction:column}
     .qtscp{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:0 1rem}.qtscp .chk{display:flex;gap:.4rem;align-items:center;margin:.15rem 0}
-    .qterr{margin-inline-start:.25rem;font-weight:600}
+    .qterr{margin-inline-start:.6rem;font-weight:600}
+    .qtitem .sfr b .tag{margin-inline-start:.55rem}.qtitem .sfr b .tag + .tag{margin-inline-start:.35rem}
+    /* أخطاء · تشكيل · تردد في الاستمارة: كبسولات، وبينها وبين الاختيارات مسافة */
+    .qtrl{flex:0 0 auto!important;display:inline-block;min-width:4.4rem;text-align:center;padding:.1rem .6rem;border-radius:999px;font-weight:700;font-size:.85rem;background:transparent;border:1.5px solid var(--gold,#c9a35a);color:var(--text);margin-inline-end:.5rem}
+    .qtwin{max-width:720px}.qtwtabs{position:sticky;top:3.1rem;z-index:2;background:var(--glass-strong,var(--card,#fff));padding:.3rem 0;margin:0 0 .5rem}
+    .qtembed > .row{margin-top:.6rem}.qtwlog{margin:.9rem 0 0;border:1px solid var(--line);border-radius:12px;padding:.45rem .7rem}.qtwlog > summary{cursor:pointer;font-weight:700}.qtwlog .qtlog{margin-top:.5rem}
+    .qthome .bar .btn[hidden]{display:none}
     .qtbulk{max-width:820px}.qtbrows{display:flex;flex-direction:column;gap:.1rem}
     .qtbrow{display:flex;align-items:flex-start;gap:.45rem .6rem;flex-wrap:wrap;padding:.5rem 0;border-bottom:1px solid var(--line)}
     .qtbrow .qtbname{flex:1 1 15rem;min-width:0;margin:0}.qtbrow .qtbname input{margin:0}.qtbrow [data-bh]{display:block;margin-top:.15rem;font-size:.78rem}
@@ -875,7 +1024,10 @@
     .qtexist{margin:.2rem 0 .6rem;padding:.4rem .6rem;border:1px solid var(--line);border-radius:8px;font-size:.86rem;font-weight:700;color:var(--amber,#9a6a12)}
     .qtq{display:flex;align-items:center;gap:.5rem .7rem;flex-wrap:wrap;padding:.35rem 0}.qtq + .qtq{border-top:1px solid var(--line)}
     .qtql{flex:0 0 9.5rem;font-size:.92rem}.qtq select{flex:1 1 10rem;width:auto;margin:0}
-    .qtman{flex:1 1 16rem;display:flex;align-items:center;gap:.35rem;min-width:0}.qtman input{flex:1 1 5rem;min-width:0;width:auto;margin:0}.qtman .muted{flex:none;font-size:.85rem}
+    .qtmanb{margin:0 0 .5rem;padding:0 0 .5rem;border-bottom:1px dashed var(--line);min-width:0}.qtmanl{font-size:.85rem;margin:0 0 .3rem}
+    .qtmrow{display:flex;align-items:center;gap:.4rem;min-width:0;margin:0 0 .35rem}.qtmrow:last-child{margin-bottom:0}
+    .qtmw{flex:0 0 1.9rem;font-size:.88rem;color:var(--muted)}.qtmrow select{flex:1 1 auto;min-width:0;width:auto;margin:0}
+    .qtmrow .qtay{flex:0 0 5.2rem;width:5.2rem;min-width:0;margin:0;text-align:center}
     .qtg{display:inline-flex;align-items:center;gap:.35rem;flex:none}.qtg input{width:5.5rem;margin:0;text-align:center}
     .qttotal{margin:.4rem 0 0;padding:.55rem .8rem;border-radius:10px;border:1.5px solid var(--navy,#13294b);font-size:1.02rem}
     .qttotal:empty{display:none}.qtsum{font-weight:800}

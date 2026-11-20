@@ -6,6 +6,10 @@
      (الدفعات وإيصالاتها، وغياب المعلمين، وقوائم التحصيل، والإشعارات)، حتى لا تختلط الأمور.
    - شريط ثابت أعلى الشاشة يذكّر بالوضع، وفيه «رجوع إلى المدير». إعادة تحميل الصفحة تعيد المدير أيضًا.
      وفي الشريط نفسه قائمتا الفئة والشخص: التبديل منهما إلى غيره مباشرة، دون الرجوع إلى المدير أولًا.
+   - العرض على الأجهزة (بدل قسم «المعاينة» الذي أُزيل): في الشريط «الحاسوب · التابلت · الجوال». التابلت والجوال يفتحان التطبيق نفسه
+     في إطار بمقاس الجهاز (تعمل فيه تنسيقات الشاشات الصغيرة كما على الجهاز)، يعمل فيه المدير بصفة الشخص نفسه عملًا كاملًا.
+     الإطار نسخة من التطبيق بالعنوان نفسه ومعه «#qframe=الفئة:المعرّف»، فيبدأ فيها العمل بصفته تلقائيًا ويُخفي شريطه؛
+     وعند الرجوع إلى «الحاسوب» أو إلى Admin تُحدَّث بيانات الصفحة الأصلية بما سُجّل في الإطار.
    يُحمَّل بعد perms.js و fees.js وقبل app-actions.js. */
 (() => {
   document.addEventListener('DOMContentLoaded', () => { try { if (!VFILES.includes('./actas.js')) VFILES.push('./actas.js'); } catch (e) { /* ignore */ } });
@@ -17,6 +21,11 @@
   const sessRole = k => (k === 'gmanager' ? 'supervisor' : k);
   let act = null;   // { role (فئة الجلسة), cat (الفئة المختارة في القائمة), id, name, adminId, adminName, feeIds, absIds }
   window.QLActAs = () => act;
+  /* الأجهزة: [المفتاح، الاسم، العرض، الارتفاع] */
+  const DEVS = [['desk', 'الحاسوب'], ['tab', 'التابلت', 820, 1180], ['mob', 'الجوال', 390, 844]];
+  let dev = 'desk';
+  const FRAMED = window.top !== window && /^#qframe=/.test(location.hash);
+  if (FRAMED) document.documentElement.classList.add('qframe');
 
   /* ===== الصلاحيات بصفة الشخص: استثناؤه ← اختيار فئته ← الافتراضي (كما يحسبها الخادم له) ===== */
   if (window.Perms) {
@@ -44,8 +53,8 @@
     session = { role, id };
     ui.tab = null; ui.hid = ''; ui.nav = false;
     document.querySelectorAll('.overlay').forEach(o => o.remove());
-    render(); bar(); window.scrollTo(0, 0);
-    toast(`تعمل الآن بصفة ${roleL(cat)} «${m.name}»`);
+    render(); bar(); window.scrollTo(0, 0); frame();
+    if (!FRAMED) toast(`تعمل الآن بصفة ${roleL(cat)} «${m.name}»`);
   }
   function exit() {
     if (!act) return;
@@ -53,8 +62,66 @@
     session = { role: 'admin', id: act.adminId };
     act = null; ui.tab = null; ui.hid = ''; ui.nav = false;
     document.querySelectorAll('.overlay').forEach(o => o.remove());
+    dev = 'desk'; frame();
     render(); bar(); window.scrollTo(0, 0);
     toast('رجعت إلى حساب Admin');
+  }
+
+  /* ===== العرض على الأجهزة: إطار بمقاس التابلت أو الجوال فيه التطبيق بصفة الشخص نفسه ===== */
+  function frame() {
+    if (FRAMED) return;
+    let f = document.getElementById('asframe');
+    const d = DEVS.find(x => x[0] === dev);
+    if (!act || !d || dev === 'desk') {
+      if (f) { f.remove(); document.documentElement.classList.remove('asframe-on'); syncBack(); }
+      return;
+    }
+    const src = location.pathname + location.search + '#qframe=' + encodeURIComponent(act.cat + ':' + act.id);
+    if (!f) {
+      f = document.createElement('div'); f.id = 'asframe';
+      f.innerHTML = '<div class="asfw"><iframe title="العرض على الجهاز"></iframe></div><p class="asfcap"></p>';
+      document.body.appendChild(f); document.documentElement.classList.add('asframe-on');
+    }
+    const ifr = f.querySelector('iframe');
+    ifr.width = d[2]; ifr.height = d[3];
+    if (ifr.dataset.src !== src) { ifr.dataset.src = src; ifr.src = src; }
+    f.querySelector('.asfcap').textContent = `${d[1]} (${d[2]}×${d[3]}) · ${roleL(act.cat)} «${act.name}» · ما تسجّله هنا يُكتب باسمك`;
+    fitFrame();
+  }
+  /* الإطار بمقاس الجهاز الحقيقي، مصغّرًا ليتسع في الشاشة */
+  function fitFrame() {
+    const f = document.getElementById('asframe'); if (!f) return;
+    const ifr = f.querySelector('iframe'), W = +ifr.width + 20, H = +ifr.height + 20;
+    const k = Math.min(1, (f.clientWidth - 24) / W, (f.clientHeight - 56) / H);
+    ifr.style.transform = `scale(${k})`;
+    const w = f.querySelector('.asfw'); w.style.width = W * k + 'px'; w.style.height = H * k + 'px';
+  }
+  window.addEventListener('resize', fitFrame);
+  /* بعد إغلاق الإطار: بيانات الصفحة الأصلية بما سُجّل فيه (الخادم، أو نسخة الجهاز في الوضع المحلي) */
+  function syncBack() {
+    try {
+      if (typeof CLOUD !== 'undefined' && CLOUD) { if (typeof cloudRefresh === 'function') cloudRefresh(true).then(() => render()).catch(() => { /* ignore */ }); }
+      else if (typeof load === 'function') { db = load(); render(); }
+    } catch (e) { /* ignore */ }
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('#actasbar [data-asdev]'); if (!b || !act) return;
+    dev = b.dataset.asdev; bar(); frame();
+  });
+  /* داخل الإطار: العمل بصفة الشخص المذكور في العنوان تلقائيًا (والتبديل من الشريط في الصفحة الأصلية يغيّر العنوان) */
+  if (FRAMED) {
+    const go = async () => {
+      const [cat, id] = decodeURIComponent(location.hash.replace(/^#qframe=/, '')).split(':');
+      for (let i = 0; i < 120; i++) {
+        if (act && act.cat === cat && act.id === id) return;
+        const ok = people(cat).some(m => m.id === id);
+        if (ok && act) { swap(cat, id); return; }
+        if (ok && session?.role === 'admin') { enter(cat, id); return; }
+        await new Promise(r => setTimeout(r, 150));
+      }
+    };
+    document.addEventListener('DOMContentLoaded', () => setTimeout(go, 300));
+    window.addEventListener('hashchange', go);
   }
   window.QLActExit = exit;
 
@@ -100,7 +167,20 @@
     #actasbar select,#actasbar .qcombo-in{width:auto;max-width:15rem;min-height:32px;margin:0;padding:0 .5rem;border:0;border-radius:8px;background:#fff;color:#8a4b0f;font:inherit;font-weight:700}
     #actasbar .qcombo{width:auto;max-width:15rem;margin:0}
     html.actas body{padding-top:var(--actas-h,44px)}html.actas .content .top{top:var(--actas-h,44px)}
-    .side .actas-btn{display:block;width:100%;margin:.45rem 0 0;font-size:.82rem}`;
+    .side .actas-btn{display:block;width:100%;margin:.45rem 0 0;font-size:.82rem}
+    #actasbar .asdev{display:inline-flex;gap:.2rem;padding:.15rem;border-radius:10px;background:rgba(255,255,255,.18)}
+    #actasbar .asdev .btn{background:transparent!important;color:#fff!important;min-height:28px;padding:0 .6rem}#actasbar .asdev .btn.on{background:#fff!important;color:#8a4b0f!important}
+    #asframe{position:fixed;top:var(--actas-h,44px);inset-inline:0;bottom:0;z-index:58;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;padding:12px;background:#0b111a}
+    #asframe .asfw{position:relative;flex:none;direction:ltr}
+    #asframe iframe{position:absolute;top:0;left:0;transform-origin:top left;border:10px solid #1f2733;border-radius:26px;background:#fff;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+    #asframe .asfcap{margin:0;color:#cfd6e0;font-size:.82rem;text-align:center}
+    html.asframe-on body{overflow:hidden}
+    html.qframe #actasbar,html.qframe #demobar{display:none!important}
+    html.qframe body{padding-top:0!important}html.qframe .content .top{top:0!important}
+    /* نسخة العرض (demo.js): نافذة الترحيب لا تظهر داخل الإطار، وشريط العمل بصفة تحت شريط نسخة العرض */
+    html.qframe .overlay:has(.demo-pick){display:none!important}
+    html.demo #actasbar{top:var(--demo-h,44px)}html.demo.actas body{padding-top:calc(var(--demo-h,44px) + var(--actas-h,44px))}
+    html.demo.actas .content .top{top:calc(var(--demo-h,44px) + var(--actas-h,44px))}html.demo #asframe{top:calc(var(--demo-h,44px) + var(--actas-h,44px))}`;
   document.head.appendChild(css);
   function bar() {
     let b = document.getElementById('actasbar');
@@ -112,6 +192,7 @@
     b.innerHTML = `<span>تعمل الآن بصفة</span>
       <select data-asbr aria-label="الفئة">${ROLES.map(([k, l]) => `<option value="${k}" ${k === act.cat ? 'selected' : ''} ${people(k).length ? '' : 'disabled'}>${l}</option>`).join('')}</select>
       <select data-asbp aria-label="الشخص">${ppl.map(m => `<option value="${esc(m.id)}" ${m.id === act.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
+      <span class="asdev" role="group" aria-label="العرض على">${DEVS.map(([k, l]) => `<button type="button" class="btn sm ${k === dev ? 'on' : ''}" data-asdev="${k}">${l}</button>`).join('')}</span>
       <small>كل ما تسجّله يُكتب باسمك</small><button type="button" class="btn sm" data-actas-exit>رجوع إلى Admin</button>`;
     requestAnimationFrame(() => document.documentElement.style.setProperty('--actas-h', b.offsetHeight + 'px'));
   }

@@ -1,4 +1,7 @@
 'use strict';
+/* ============ «الدفتر» (نافذة الحضور) داخل «الطلاب» ============
+   الزر والنافذة اسمهما «الدفتر». على الهاتف يُعرض كل طالب بطاقةً (الاسم، ثم حاضر/غائب ومتأخر وآخر حفظ، ثم الأزرار)
+   بتنسيق صفوف الجدول نفسه (CSS)، فتبقى كل الأزرار ومعالجاتها كما هي. */
 /* ============ «الحضور» نافذة داخل «الطلاب» ============
    كان تبويبًا في شريط «الطلاب» (الطلاب · الحضور · الاشتراكات · تحصيل المعلمين)؛ صار زر «الحضور» في صف أدوات جدول الطلاب
    (يسار البحث والقوائم)، يفتح نافذة فيها مساحة عمل الحضور نفسها (attWork في nav.js): المكان والحلقة والتاريخ، وجدول الحلقة
@@ -45,9 +48,41 @@
     body:has(main > .qatt):has(> .overlay.qpage) main > .qatt > .modal{visibility:hidden}
     body:has(main > .qatt) > .overlay.qpage:has(~ .overlay.qpage) > .modal{visibility:hidden}
     @media (min-width:861px){body:has(main > .qatt) > .overlay.qpage > .modal{max-width:860px!important;min-height:var(--qattH,0px)}}
-    [data-attopen] svg{width:18px;height:18px}`;
+    [data-attopen] svg{width:18px;height:18px}
+    /* الهاتف: كل صف بطاقة (# والاسم، ثم الحضور، ثم آخر حفظ، ثم الأزرار)؛ الصفوف المخفية بالبحث أو «المزيد» تبقى مخفية */
+    /* أزرار صف الطالب في «خيارات» (⋮): على الهاتف قائمة بأسماء الأزرار، وعلى الشاشة الواسعة تبقى أيقونات في الصف */
+    .qatt-acts{position:relative;display:inline-flex;align-items:center}
+    .qatt-kebab{display:none!important}
+    .qatt-menu{display:contents}
+    @media (max-width:640px){
+      .qatt .tbl:not(#qz0){overflow:visible!important;max-height:none!important;border:0!important;width:auto!important;max-width:none!important;display:block!important}
+      .qatt .tbl > table:not(#qz0):not(#qz1){display:block;width:100%!important;min-width:0!important;border:0}
+      .qatt .tbl tbody{display:block}
+      .qatt .tbl tr:has(> th){display:none}
+      /* صف الطالب: الرقم والاسم، ثم الحضور بجانبه إن اتسع المكان (وإلا تحته)، ثم الكراسة و«خيارات»؛ و«آخر حفظ» سطر تحتها */
+      .qatt .tbl tr:not(.pgx):not([hidden]):has(> td){display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .5rem;padding:.6rem .2rem;border-bottom:1px solid var(--line);background:transparent!important}
+      .qatt-kebab{display:inline-flex!important;width:40px;height:36px;padding:0!important;align-items:center;justify-content:center;border-radius:10px}
+      .qatt-menu{display:none;position:absolute;z-index:30;inset-inline-end:0;top:calc(100% + 4px);flex-direction:column;gap:.2rem;padding:.4rem;min-width:12.5rem;width:max-content;max-width:calc(100vw - 2rem);background:var(--bg,#fff);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 28px rgba(0,0,0,.35)}
+      .qatt-acts.open .qatt-menu{display:flex}
+      .qatt-menu > .btn:not(#qz0):not(#qz1){display:flex!important;width:100%!important;min-width:0!important;height:auto!important;min-height:0!important;justify-content:flex-start;align-items:center;gap:.6rem;padding:.55rem .7rem!important;margin:0!important;font-size:.92rem!important;text-align:start;background:transparent!important;color:var(--text)!important;border:0!important;border-radius:8px!important;box-shadow:none!important}
+      .qatt-menu > .btn:not(#qz0):not(#qz1):hover{background:var(--navy-l,#eaeef5)!important}
+      .qatt-menu > .btn::after{content:attr(title);flex:1;white-space:nowrap}
+      .qatt-menu > .btn svg{flex:none;width:18px!important;height:18px!important}
+      .qatt .tbl tr > td{display:block;position:static!important;padding:0!important;border:0!important;background:transparent!important;min-width:0;white-space:normal!important;box-shadow:none!important}
+      .qatt .tbl tr > td:first-child{order:0;flex:0 0 1.6rem;color:var(--muted);font-size:.85rem;text-align:center}
+      .qatt .tbl tr > td.qnm{order:1;flex:1 1 8rem;font-weight:700;font-size:1.02rem}
+      .qatt .tbl tr > td.attcell{order:2;flex:0 0 auto;display:flex;gap:.35rem}
+      .qatt .tbl tr > td.attcell .btn:not(#qz0){width:auto!important;min-width:0!important;padding:.25rem .7rem!important;justify-content:center}
+      .qatt .tbl tr > td.noprint{order:3;flex:0 0 auto;display:flex;justify-content:flex-end}
+      .qatt .tbl tr > td.noprint .qatt-acts{gap:.35rem}.qatt .tbl tr > td.noprint [data-qkbook]{width:40px;height:36px;padding:0!important;display:inline-flex;align-items:center;justify-content:center;border-radius:10px}
+      .qatt .tbl tr > td:not(:first-child):not(.qnm):not(.attcell):not(.noprint){order:4;flex:1 1 100%;padding-inline-start:2.1rem!important;font-size:.85rem;color:var(--muted)}
+      /* الهاتف الضيق: الاسم ومعه الكراسة و«خيارات» في السطر الأول، والحضور تحته */
+      @media (max-width:440px){.qatt .tbl tr > td.noprint{order:2}.qatt .tbl tr > td.attcell{order:3;flex-basis:100%;padding-inline-start:2.1rem!important}}
+      .qatt .tbl tr > td:not(:first-child):not(.qnm):not(.attcell):not(.noprint)::before{content:'آخر حفظ: '}
+    }`;
   document.head.appendChild(css);
   const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/><path d="M9 15l2 2 4-4"/></svg>';
+  const KEBAB = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
   const BACK = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
   let open = false, top = 0;
   const isAdm = () => typeof session !== 'undefined' && session?.role === 'admin';
@@ -105,13 +140,29 @@
       const ADD = (typeof ADD_ICONS !== 'undefined' && ADD_ICONS.quick) || '+';
       if (session?.role === 'admin' || window.Perms?.can?.('students.add')) all.insertAdjacentHTML('afterend', `<button type="button" class="btn icon-only" data-qadd data-attadd title="إضافة طالب" aria-label="إضافة طالب">${ADD}</button>`);
     }
+    /* أزرار كل صف داخل «خيارات» (⋮): تبقى الأزرار نفسها بمعالجاتها، وتُعرض قائمةً على الهاتف (CSS أعلاه) */
+    C.querySelectorAll('tr > td.noprint').forEach(td => {
+      if (td.querySelector('.qatt-acts') || !td.querySelector('button')) return;
+      const box = document.createElement('div'); box.className = 'qatt-acts';
+      box.innerHTML = `<button type="button" class="btn qatt-kebab" data-qattmore aria-label="خيارات" title="خيارات" aria-haspopup="menu" aria-expanded="false">${KEBAB}</button><div class="qatt-menu" role="menu"></div>`;
+      const menu = box.querySelector('.qatt-menu'); [...td.childNodes].forEach(n => menu.appendChild(n));
+      td.appendChild(box);
+    });
     return t.innerHTML;
   }
+  /* فتح «خيارات» وإغلاقها: قائمة واحدة مفتوحة، وتُغلق بالاختيار منها أو بالضغط خارجها */
+  const closeMenus = except => document.querySelectorAll('.qatt-acts.open').forEach(b => { if (b !== except) { b.classList.remove('open'); b.querySelector('[data-qattmore]')?.setAttribute('aria-expanded', 'false'); } });
+  document.addEventListener('click', e => {
+    const k = e.target.closest('[data-qattmore]');
+    if (k) { const box = k.closest('.qatt-acts'), on = !box.classList.contains('open'); closeMenus(box); box.classList.toggle('open', on); k.setAttribute('aria-expanded', on); return; }
+    const inMenu = e.target.closest('.qatt-menu > *');
+    if (inMenu || !e.target.closest('.qatt-acts')) closeMenus();
+  });
   function place() {
     const main = document.querySelector('main'); if (!main) return;
     main.querySelector(':scope > .qatt')?.remove();
     if (!open || !onStu()) return;
-    main.insertAdjacentHTML('beforeend', `<div class="overlay qpage qatt"><div class="modal qaddw"><div class="mhead"><button type="button" class="qpback" data-attclose aria-label="رجوع" title="رجوع">${BACK}</button><h2>الحضور</h2></div>${attHtml()}</div></div>`);
+    main.insertAdjacentHTML('beforeend', `<div class="overlay qpage qatt"><div class="modal qaddw"><div class="mhead"><button type="button" class="qpback" data-attclose aria-label="رجوع" title="رجوع">${BACK}</button><h2>الدفتر</h2></div>${attHtml()}</div></div>`);
     const m = main.querySelector(':scope > .qatt > .modal'); if (m && top) m.scrollTop = top;
   }
   function close() {
@@ -137,7 +188,7 @@
       window.QLStuLite = open && ui.svw !== 'att';
       let h; try { h = baseStu.apply(this, arguments); } finally { window.QLStuLite = false; }
       if (typeof h !== 'string' || ui.svw === 'att' || !canAtt()) return h;
-      return h.replace(/(<div class="qseg" data-sstfseg|<select data-sstf)/, `<button type="button" class="btn" data-attopen>${ICON}الحضور</button>$1`);
+      return h.replace(/(<div class="qseg" data-sstfseg|<select data-sstf)/, `<button type="button" class="btn" data-attopen>${ICON}الدفتر</button>$1`);
     };
     new MutationObserver(() => { try { watch(); } catch (e) { console.error('attwin:', e); } }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
   });

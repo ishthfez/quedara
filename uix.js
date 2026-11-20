@@ -128,7 +128,9 @@
      السطر الأول: الاسم وأزرار الصف بجانبه، ثم «الحلقة · الحالة»، ثم «آخر حفظ».
      تُبنى من صفوف الجدول نفسه بعد تطبيق «صلاحيات صفحة الطلاب» (stuperm.js): العمود المخفي لا يظهر، والزر المخفي لا يُنسخ،
      و«يظهر بلا ضغط» يبقى كذلك. الجدول يبقى للحاسوب وللطباعة والتنزيل. */
-  const NARROW = () => window.matchMedia('(max-width:640px)').matches;
+  /* الهاتف والتابلت: جدول «الطلاب» عريض (أعمدة وأزرار كثيرة) فكان يُمرَّر جانبيًا على التابلت ويخفي «آخر حفظ» والأزرار؛
+     البطاقات حتى 1100px، وفي عمودين من 700px */
+  const NARROW = () => window.matchMedia('(max-width:1100px)').matches;
   const KEBAB = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
   /* قائمة «خيارات» في بطاقة الطالب: تبقى داخل الشاشة، وتُغلق بالاختيار منها أو بالضغط خارجها، وواحدة مفتوحة فقط */
   document.addEventListener('toggle', e => {
@@ -282,7 +284,11 @@
     .content .top .ttl{display:flex;align-items:center;gap:.5rem}.qttlico{display:inline-flex;flex:none}.qttlico svg{width:22px;height:22px}
     .qhcl{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:.1rem .8rem}.qhcl label{margin:.15rem 0}
     .qscards{display:none}
-    @media (max-width:640px){
+    @media (min-width:700px) and (max-width:1100px){
+      .qscards{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:1.4rem}
+      .qscards .qsc{border-top:0!important;border-bottom:1px solid var(--line,#eee6d6)}
+    }
+    @media (max-width:1100px){
       main .card .tbl:has(~ .qscards){display:none!important}
       .qscards{display:block}
       .qsc.pgx{display:none}
@@ -411,7 +417,75 @@
       [...tbl.rows].forEach(r => ix.forEach(i => { const c = r.cells[i]; if (c && c.style.display !== 'none') c.style.display = 'none'; }));
     });
   }
-  const after = () => { try { histLabels(); titleIcon(); applyHome(); trimMonths(); dupTitle(); markPaid(); homeLinks(); scopeTrim(); if (NARROW()) stuCards(); } catch (e) { /* ignore */ } };
+  /* ===== الهاتف: الجدول الذي لا يتسع لعرض الشاشة يُعرض صفوفًا مكدّسة (كل صف بطاقة: «العنوان: القيمة») =====
+     بدل التمرير الجانبي الذي يخفي أعمدة وأزرارًا (العاملون، حلقات المدير العام، السجل…). يُطبَّق فقط حين يفيض الجدول فعلًا،
+     ما عدا كشف المرتبات (جدول إدخال)، وجدول «الطلاب» (له بطاقاته)، و«الدفتر» (attwin.js). العناوين من صف الرأس. */
+  const PHONE = () => window.matchMedia('(max-width:640px)').matches;
+  /* مربعات الإحصاء (.grid .stat: تقدمي، لوحة المدير…) بشكل عدادات «الرئيسية»: البيان يمينًا والقيمة يسارًا بالحجم نفسه */
+  /* زر حالة الطالب: «منتظم» أخضر و«منقطع» أحمر (ولو كان للعرض فقط بلا ضغط) */
+  function statColors() {
+    document.querySelectorAll('[data-stat]').forEach(b => {
+      const t = (b.textContent || '').trim(), on = /منتظم/.test(t), off = /منقطع/.test(t);
+      b.classList.toggle('qst-on', on); b.classList.toggle('qst-off', off);
+    });
+  }
+  function statRows() {
+    try { statColors(); } catch (e) { /* ignore */ }
+    document.querySelectorAll('main .grid:not(.qstatrow)').forEach(g => {
+      const S = g.querySelectorAll(':scope > .stat'); if (!S.length) return;
+      g.classList.add('qstatrow'); S.forEach(s => { s.classList.add('feerow', 'fr-plain'); if ((s.querySelector('b')?.textContent || '').trim().length > 9) s.classList.add('qstatwide'); });   // قيمة طويلة (آخر موضع حفظ): سطر كامل
+    });
+  }
+  function stackTables() {
+    try { statRows(); } catch (e) { /* ignore */ }
+    const on = PHONE();
+    document.querySelectorAll('main .tbl > table, .overlay .tbl > table').forEach(t => {
+      if (!on) { t.classList.remove('qstack'); return; }
+      if (t.closest('.qatt') || t.classList.contains('qstack-no') || t.closest('.paytbl') || t.parentElement.matches('.paytbl') || t.parentElement.nextElementSibling?.classList.contains('qscards')) return;
+      const head = [...t.rows].find(r => r.querySelector('th') && !r.querySelector('td')); if (!head) return;
+      const H = [...head.cells].map(c => (c.textContent || '').trim());
+      [...t.rows].forEach(r => { if (r === head) return; [...r.cells].forEach((c, i) => { const l = c.colSpan > 1 ? '' : H[i] || ''; if (c.dataset.l !== l) c.dataset.l = l; }); });
+      if (!t.classList.contains('qstack')) { const wrap = t.parentElement; if (t.scrollWidth > wrap.clientWidth + 4) t.classList.add('qstack'); }
+    });
+  }
+  const scss = document.createElement('style');
+  scss.textContent = `/* العدادات (الرئيسية وغيرها): القيمة بحجم خط البيان نفسه */
+  .feerow:not(#qz0):not(#qz1) > b,.feerow:not(#qz0):not(#qz1) > span{font-size:inherit!important;line-height:1.5}
+  .btn[data-stat].qst-on:not(#qz0){background:color-mix(in srgb,#2e9e45 16%,transparent)!important;color:#1f7a3a!important;border:1px solid color-mix(in srgb,#2e9e45 55%,transparent)!important;opacity:1!important;filter:none!important;font-weight:700}
+  .btn[data-stat].qst-off:not(#qz0){background:color-mix(in srgb,#c0392b 16%,transparent)!important;color:#b8322a!important;border:1px solid color-mix(in srgb,#c0392b 55%,transparent)!important;opacity:1!important;filter:none!important;font-weight:700}
+  html.qdark .btn[data-stat].qst-on:not(#qz0){color:#7fd18a!important}html.qdark .btn[data-stat].qst-off:not(#qz0){color:#ff8a7a!important}
+  /* كبسولة «حلقة» بلون واضح */
+  .hpill:not(#qz0){background:#c9a35a!important;color:#1f1606!important;font-weight:800!important;opacity:1!important}
+  /* البيان بلون (هادئ) والقيمة بلون آخر بحسب نوع العداد */
+  .feerow:not(#qz0):not(#qz1) > span:first-child,.grid.qstatrow > .stat.feerow:not(#qz0) > span{color:var(--muted,#6b7280)!important}
+  .feerow.fr-ok:not(#qz0):not(#qz1) > b{color:#1f7a3a!important}.feerow.fr-no:not(#qz0):not(#qz1) > b{color:#b8322a!important}
+  .feerow.fr-info:not(#qz0):not(#qz1) > b{color:#1f5fa8!important}.feerow.fr-plain:not(#qz0):not(#qz1) > b{color:#9a6a12!important}
+  html.qdark .feerow.fr-ok:not(#qz0):not(#qz1) > b{color:#7fd18a!important}html.qdark .feerow.fr-no:not(#qz0):not(#qz1) > b{color:#ff8a7a!important}
+  html.qdark .feerow.fr-info:not(#qz0):not(#qz1) > b{color:#8ab4f8!important}html.qdark .feerow.fr-plain:not(#qz0):not(#qz1) > b{color:#e6b96a!important}
+  html.qdark .feerow:not(#qz0):not(#qz1) > span:first-child,html.qdark .grid.qstatrow > .stat.feerow:not(#qz0) > span{color:#a5aebb!important}
+  .grid.qstatrow{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))!important;gap:.45rem!important}
+  .grid.qstatrow > .stat.feerow:not(#qz0){display:flex!important;flex-direction:row-reverse;justify-content:space-between;align-items:center;gap:.4rem;text-align:start!important;border:0!important;border-radius:10px!important;padding:.5rem .65rem!important;margin:0!important;font-size:.82rem!important;min-height:0!important;box-shadow:none!important;background:var(--navy-l,#eef1f6)!important;color:var(--navy,#13294b)!important}
+  html.qdark .grid.qstatrow > .stat.feerow:not(#qz0){background:color-mix(in srgb,var(--navy) 28%,#141c28)!important;color:#a5aebb!important}
+  .grid.qstatrow > .stat.feerow > b{font-weight:900;margin:0!important;min-width:0;overflow-wrap:anywhere;text-align:end}
+  .grid.qstatrow > .stat.feerow > span{font-weight:700;margin:0!important;white-space:nowrap}
+  .grid.qstatrow > .stat.feerow.qstatwide{grid-column:1/-1}
+  @media (max-width:640px){
+    .tbl:has(> table.qstack){overflow:visible!important;max-height:none!important;border:0!important;width:auto!important;max-width:none!important;display:block!important}
+    table.qstack,table.qstack > tbody{display:block;width:100%!important;min-width:0!important;border:0}
+    .tbl > table.qstack:not(#qz0):not(#qz1){width:100%!important}   /* أقوى من «عرض الجدول بقدر محتواه» (active.js) */
+    table.qstack tr:has(> th):not(:has(> td)){display:none}
+    table.qstack tr:not(.pgx):not([hidden]):has(> td){display:block;padding:.55rem .25rem;border-bottom:1px solid var(--line,#eee6d6);background:transparent!important}
+    table.qstack tr > td{display:flex;align-items:center;justify-content:space-between;gap:.4rem .8rem;flex-wrap:wrap;position:static!important;padding:.2rem 0!important;border:0!important;background:transparent!important;text-align:start!important;white-space:normal!important;min-width:0;box-shadow:none!important}
+    table.qstack tr > td::before{content:attr(data-l);flex:0 0 auto;color:var(--muted);font-size:.82rem;font-weight:400}
+    table.qstack tr > td[data-l=""]::before{content:none}
+    table.qstack tr > td[data-l=""]{justify-content:flex-start}
+    table.qstack tr > td:first-child{font-weight:700}
+    table.qstack tr.sum > td{font-weight:800}
+  }`;
+  document.head.appendChild(scss);
+  window.matchMedia('(max-width:640px)').addEventListener?.('change', () => { try { stackTables(); } catch (e) { /* ignore */ } });
+
+  const after = () => { try { histLabels(); titleIcon(); applyHome(); trimMonths(); dupTitle(); markPaid(); homeLinks(); scopeTrim(); if (NARROW()) stuCards(); stackTables(); } catch (e) { /* ignore */ } };
   /* ===== 8) إعادة تحميل الصفحة تُبقي المستخدم في الصفحة نفسها =====
      التبويب محفوظ في المتصفح (halaqat_tab)، لكن أول عرض بعد التحميل يأتي قبل اكتمال قائمة الحساب (الصلاحيات، صفحة «الطلاب» للعاملين…)
      فيُعاد إلى «الرئيسية». يُحفظ هنا التبويب المطلوب ويُرجع إليه متى ظهر في القائمة، ما لم ينتقل المستخدم بنفسه أو تمضِ 20 ثانية. */
@@ -432,9 +506,9 @@
   };
   /* النوافذ والقوائم التي تُفتح بعد العرض (نموذج الدفعة، كشف التحصيل…) */
   let q = false;
-  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { histLabels(); trimMonths(); titleIcon(); applyHome(); dupTitle(); markPaid(); homeLinks(); scopeTrim(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } } catch (e) { /* ignore */ } }); })
+  new MutationObserver(() => { if (q) return; q = true; requestAnimationFrame(() => { q = false; try { histLabels(); trimMonths(); titleIcon(); applyHome(); dupTitle(); markPaid(); homeLinks(); scopeTrim(); if (NARROW()) { stuCards(); setTimeout(() => { try { stuCards(); } catch (e) { /* ignore */ } }, 300); } stackTables(); } catch (e) { /* ignore */ } }); })
     .observe(document.body, { childList: true, subtree: true });
   /* تكبير الشاشة أو تدويرها إلى العرض الضيق */
-  window.matchMedia('(max-width:640px)').addEventListener?.('change', e => { if (e.matches) after(); });
+  window.matchMedia('(max-width:1100px)').addEventListener?.('change', e => { if (e.matches) after(); });
   window.QLUix = { firstMonth, hiddenFor, CATS, stuCards };
 })();

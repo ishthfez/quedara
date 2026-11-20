@@ -273,7 +273,7 @@
     ['students', 'التعليم'], ['mine', 'التعليم'], ['teachers', 'التعليم'], ['halaqat', 'التعليم'], ['att', 'التعليم'], ['hist', 'التعليم'], ['absence', 'التعليم'],
     ['fees', 'المالية'], ['tcollect', 'المالية'], ['collect', 'المالية'], ['payroll', 'المالية'],
     ['news', 'التواصل'], ['notes', 'التواصل'],
-    ['settings', 'النظام'], ['preview', 'النظام'],
+    ['settings', 'النظام'],
     ['profile', 'حسابي']];
   const MI = new Map(MASTER.map(([k], i) => [k, i])), GRP = new Map(MASTER.map(([k, g]) => [k, g || '']));
   const HOME = {};
@@ -418,8 +418,8 @@
   lcss.textContent = `.login .logo-wrap{margin-bottom:.6rem}.login .appname{text-align:center;margin:0 0 1.1rem;font-size:clamp(1.25rem,5vw,1.6rem);font-weight:800;color:var(--navy,#13294b);letter-spacing:.01em}`;
   document.head.appendChild(lcss);
   /* ===== التكبير والتصغير في كل جدول، لكل الفئات =====
-     جداول الصفحات لها أزرار الحجم من قبل (tables.js)؛ وهنا تُضاف لجداول النوافذ المنبثقة (طلاب الحلقة، بطاقة الموظف، السجل…)
-     ولجداول «المعاينة». الحجم واحد لكل الجداول ويُحفظ على الجهاز. */
+     جداول الصفحات لها أزرار الحجم من قبل (tables.js)؛ وهنا تُضاف لجداول النوافذ المنبثقة (طلاب الحلقة، بطاقة الموظف، السجل…).
+     الحجم واحد لكل الجداول ويُحفظ على الجهاز. */
   const zcss = document.createElement('style');
   zcss.textContent = `.overlay .tbl table{font-size:calc(.95rem * var(--tz,1))}.ztools{display:flex;justify-content:flex-end;gap:.3rem;margin:.2rem 0 .35rem}
     .ztools .btn{width:auto;min-width:34px;padding:0 .45rem;font-weight:700;font-size:.85rem}
@@ -436,21 +436,6 @@
   }
   new MutationObserver(ms => { if (ms.some(m => [...m.addedNodes].some(n => n.nodeType === 1 && (n.classList?.contains('overlay') || n.closest?.('.overlay'))))) requestAnimationFrame(() => zoomify(document)); })
     .observe(document.body, { childList: true, subtree: true });
-  /* المعاينة: الإطار صفحة مستقلة؛ تُلفّ كلماته، وتوضع أزرار الحجم فوق جداوله (تكبير داخل الإطار وحده) */
-  document.addEventListener('load', e => {
-    const f = e.target; if (!f?.classList?.contains('pvif')) return;
-    try {
-      const d = f.contentDocument; pillify(d.body);
-      const cur = () => +d.documentElement.style.getPropertyValue('--tz') || 1;
-      d.querySelectorAll('main .tbl').forEach(t => { if (t.querySelector('table td')) t.insertAdjacentHTML('beforebegin', zBar('data-pvtz', Math.round(cur() * 100) + '%')); });
-      d.addEventListener('click', ev => {
-        const b = ev.target.closest('[data-pvtz]'); if (!b) return;
-        const k = +b.dataset.pvtz, z = k ? Math.min(1.8, Math.max(0.7, Math.round((cur() + k * 0.1) * 10) / 10)) : 1;
-        d.documentElement.style.setProperty('--tz', z); d.querySelectorAll('[data-pvtzv]').forEach(x => { x.textContent = Math.round(z * 100) + '%'; });
-      });
-      d.head.insertAdjacentHTML('beforeend', '<style>main [data-pvtz]{pointer-events:auto!important;opacity:1!important}</style>');
-    } catch (err) { /* ignore */ }
-  }, true);
   /* ===== النوافذ المنبثقة: تمرير لطيف داخل النافذة، ورأس ثابت فيه زر إغلاق ×، وأزرار الحفظ ثابتة أسفلها =====
      - التمرير داخل النافذة وحدها (لا تتحرك الصفحة خلفها ولا «يهرب» التمرير إليها)، والجدول العريض يُمرَّر أفقيًا داخل إطاره.
      - لا تمرير داخل تمرير: الجداول داخل النافذة تأخذ طولها كاملًا وتتمرر مع النافذة.

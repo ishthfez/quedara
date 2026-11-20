@@ -22,7 +22,7 @@
   ];
   const TOOLS = [
     ['t:add', 'إضافة (طالب، معلم، عضو)', '.qadd,[data-act="addTeacher"],[data-act="addMember"]'],
-    ['t:att', 'الحضور', '[data-attopen]'],
+    ['t:att', 'الدفتر', '[data-attopen]'],
     ['t:acopen', 'كشوف التحصيل', '[data-acopen]'],
     ['t:feeCfg', 'إعدادات الاشتراك', '[data-fee-cfg],[data-feecfg]'],
     ['t:feeBulk', 'تعيين لنتائج البحث', '[data-fee-bulk],[data-feebulk]'],

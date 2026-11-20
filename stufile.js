@@ -174,6 +174,12 @@
     .sftools{display:flex;gap:.35rem;align-self:flex-start;margin-inline-start:auto}
     .sfdl{position:relative}.sfmenu{position:absolute;inset-inline-end:0;top:110%;z-index:5;display:flex;flex-direction:column;min-width:9rem;padding:.3rem;border:1px solid var(--line);border-radius:10px;background:var(--card,#fff);box-shadow:0 8px 24px rgba(10,18,35,.15)}
     .sfmenu[hidden]{display:none}.sfmenu button{font:inherit;text-align:start;padding:.45rem .6rem;border:0;border-radius:8px;background:none;color:var(--text);cursor:pointer}.sfmenu button:hover{background:var(--navy-l)}
+    /* كل قسم في إطار خفيف بمسافة بينه وبين ما قبله، فلا تتزاحم الأقسام */
+    .sfile .sfsec{margin:1rem 0 0;padding:.2rem .9rem .9rem;border:1px solid var(--line);border-radius:14px;background:color-mix(in srgb,var(--navy,#13294b) 4%,transparent)}
+    html.qdark .sfile .sfsec{background:color-mix(in srgb,#ffffff 3%,transparent)}
+    .sfile .sfsec > .sf-h:first-child{margin-top:.8rem}
+    .sfile .sfgrid .sfr:last-child,.sfile .sfgrid .sfr:nth-last-child(2):nth-child(odd){border-bottom:0}
+    .sfile .sfacts{margin-top:1rem}
     .sf-h{margin:1.1rem 0 .5rem;padding:.25rem .9rem;display:inline-block;border-radius:10px;color:#fff;font-size:.95rem;background:linear-gradient(135deg,var(--gold),var(--gold-d))}
     .sfgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:0 1.2rem}
     .sfr{display:flex;gap:.6rem;padding:.45rem .1rem;border-bottom:1px solid var(--line)}.sfr span{flex:0 0 8.5rem;color:var(--muted);font-size:.9rem}.sfr b{flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere}
