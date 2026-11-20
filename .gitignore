@@ -2,3 +2,6 @@ node_modules/
 .vercel/
 .DS_Store
 *.log
+# يكتبهما Vercel عند البناء (buildCommand في vercel.json)
+version.txt
+ver.js
