@@ -1,6 +1,5 @@
 {
   "cleanUrls": true,
-  "buildCommand": "V=${VERCEL_GIT_COMMIT_SHA:-$(date +%s)}; echo $V > version.txt; echo \"window.APP_VER='$V';\" > ver.js",
   "headers": [
     {
       "source": "/(.*)",
