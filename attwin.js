@@ -69,16 +69,27 @@
       .qatt-menu > .btn::after{content:attr(title);flex:1;white-space:nowrap}
       .qatt-menu > .btn svg{flex:none;width:18px!important;height:18px!important}
       .qatt .tbl tr > td{display:block;position:static!important;padding:0!important;border:0!important;background:transparent!important;min-width:0;white-space:normal!important;box-shadow:none!important}
-      .qatt .tbl tr > td:first-child{order:0;flex:0 0 1.6rem;color:var(--muted);font-size:.85rem;text-align:center}
-      .qatt .tbl tr > td.qnm{order:1;flex:1 1 8rem;font-weight:700;font-size:1.02rem}
+      /* الأحجام مضروبة في حجم خط الجدول (--tz) ليعمل زر التكبير والتصغير على البطاقات أيضًا */
+      .qatt .tbl tr > td:first-child{order:0;flex:0 0 1.6rem;color:var(--muted);font-size:calc(.85rem * var(--tz,1));text-align:center}
+      .qatt .tbl tr > td.qnm{order:1;flex:1 1 8rem;font-weight:700;font-size:calc(1.02rem * var(--tz,1))}
+      .qatt .tbl tr > td.qnm .sname{font-size:inherit!important}
       .qatt .tbl tr > td.attcell{order:2;flex:0 0 auto;display:flex;gap:.35rem}
       .qatt .tbl tr > td.attcell .btn:not(#qz0){width:auto!important;min-width:0!important;padding:.25rem .7rem!important;justify-content:center}
       .qatt .tbl tr > td.noprint{order:3;flex:0 0 auto;display:flex;justify-content:flex-end}
       .qatt .tbl tr > td.noprint .qatt-acts{gap:.35rem}.qatt .tbl tr > td.noprint [data-qkbook]{width:40px;height:36px;padding:0!important;display:inline-flex;align-items:center;justify-content:center;border-radius:10px}
-      .qatt .tbl tr > td:not(:first-child):not(.qnm):not(.attcell):not(.noprint){order:4;flex:1 1 100%;padding-inline-start:2.1rem!important;font-size:.85rem;color:var(--muted)}
+      .qatt .tbl tr > td:not(:first-child):not(.qnm):not(.attcell):not(.noprint){order:4;flex:1 1 100%;padding-inline-start:2.1rem!important;font-size:calc(.85rem * var(--tz,1));color:var(--muted)}
       /* الهاتف الضيق: الاسم ومعه الكراسة و«خيارات» في السطر الأول، والحضور تحته */
       @media (max-width:440px){.qatt .tbl tr > td.noprint{order:2}.qatt .tbl tr > td.attcell{order:3;flex-basis:100%;padding-inline-start:2.1rem!important}}
       .qatt .tbl tr > td:not(:first-child):not(.qnm):not(.attcell):not(.noprint)::before{content:'آخر حفظ: '}
+      /* «آخر حفظ» يبدأ من اليمين مع الاسم لا في الوسط */
+      .qatt .tbl tr > td:not(:first-child):not(.qnm):not(.attcell):not(.noprint):not(#qz0){text-align:start!important}
+      /* الشريط: «منتظم/منقطع» ثم حجم الخط والإشعار في سطر واحد، ومربع البحث في السطر التالي بعرضه كاملًا */
+      .qatt .tblprint.qtb:not(#qz0){flex-wrap:wrap!important;align-items:center;gap:.45rem!important}
+      .qatt .tblprint.qtb > .bar > .mtabs:not(#qz0){order:1!important}
+      .qatt .tblprint.qtb > .qzoom:not(.bar):not(#qz0){order:2!important}
+      .qatt .tblprint.qtb > .bar > [data-mnote="*"]:is(.btn,button):not(#qz0){order:3!important}
+      .qatt .tblprint.qtb > .bar > [data-attadd]:is(.btn,button):not(#qz0){order:4!important}
+      .qatt .tblprint.qtb > .bar > input[data-mq]:not(#qz0){order:9!important;flex:1 1 100%!important;max-width:none!important;min-width:0!important;width:100%!important}
     }`;
   document.head.appendChild(css);
   const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/><path d="M9 15l2 2 4-4"/></svg>';

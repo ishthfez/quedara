@@ -85,7 +85,7 @@
     main .bar [data-act="importMembers"],main .bar [data-act="dupOpen"],main .tblprint [data-act="importMembers"],main .tblprint [data-act="dupOpen"]{display:none!important}
     .qzoom{position:relative;display:inline-flex}
     .qzoom > .btn{width:auto;min-width:38px;height:36px;padding:0 .45rem;gap:.2rem;font:700 .8rem Arial,sans-serif}
-    .qzpop{position:fixed;z-index:90;background:var(--card,#fff);border:1px solid var(--line,#e5e7eb);border-radius:14px;box-shadow:0 10px 28px rgba(15,25,50,.22);padding:.6rem .7rem;display:flex;flex-direction:column;align-items:center;gap:.4rem;user-select:none;-webkit-user-select:none}
+    .qzpop{position:fixed;z-index:10050;   /* فوق النوافذ المنبثقة (الدفتر وغيره: 9999) وإلا فُتح خلفها فلا يُرى */background:var(--card,#fff);border:1px solid var(--line,#e5e7eb);border-radius:14px;box-shadow:0 10px 28px rgba(15,25,50,.22);padding:.6rem .7rem;display:flex;flex-direction:column;align-items:center;gap:.4rem;user-select:none;-webkit-user-select:none}
     .qzpop small{font:700 .78rem Arial,sans-serif;color:var(--muted,#777)}
     .qzpop b{font:700 .85rem Arial,sans-serif;color:var(--navy,#13294b)}
     .qztrack{position:relative;display:block;width:40px;height:180px;touch-action:none;cursor:ns-resize;outline:none}
@@ -210,6 +210,36 @@
     if (pop && pop._btn === b) closePop(); else openPop(b);
   });
   window.addEventListener('resize', () => { if (pop && !dragging && pop._btn && !pop._btn.isConnected) closePop(); });
+  /* ===== الجوال: تكبير تلقائي إن كان خط الجداول صغيرًا جدًا =====
+     ما لم يختر المستخدم حجمًا بنفسه (لا قيمة محفوظة): أول جدول ظاهر يُقاس خطه، فإن كان أصغر من 14px
+     يُرفع «حجم خط الجدول» حتى يبلغها (حتى 160%). لا يُحفظ، فاختيار المستخدم من الزر يبقى هو المعتمد بعد ذلك. */
+  /* كل جدول جديد يظهر يُقاس أول صف فيه (الخلايا وأزرارها)، ويُرفع الحجم فقط ولا يُخفض */
+  const AUTO_PX = 14, seenT = new WeakSet();
+  let autoOff = false, autoQ = false;
+  function autoZoom() {
+    autoQ = false;
+    let saved = null; try { saved = localStorage.getItem(ZK); } catch (e) { /* ignore */ }
+    if (saved !== null) { autoOff = true; return; }   // اختار المستخدم حجمًا بنفسه
+    if (!window.matchMedia('(max-width:640px)').matches) return;
+    let px = 0;
+    document.querySelectorAll('.overlay .tbl > table, main .tbl > table').forEach(t => {
+      if (seenT.has(t) || !t.offsetParent) return;
+      const r = [...t.rows].find(x => x.cells.length && x.querySelector('td') && x.offsetParent); if (!r) return;
+      seenT.add(t);
+      [...r.querySelectorAll('td, td .btn')].forEach(e => {
+        if (!e.offsetParent || !(e.textContent || '').trim() || e.querySelector('td')) return;
+        const f = parseFloat(getComputedStyle(e).fontSize) || 0; if (f && (!px || f < px)) px = f;
+      });
+    });
+    if (!px || px >= AUTO_PX - 0.5) return;
+    const cur = curZ(), v = Math.max(ZMIN, Math.min(160, Math.round(cur * AUTO_PX / px)));
+    if (v <= cur) return;
+    document.documentElement.style.setProperty('--tz', v / 100);
+    document.querySelectorAll('[data-qzv],[data-tzv]').forEach(x => { x.textContent = v + '%'; });
+    window.dispatchEvent(new Event('resize'));
+  }
+  const autoObs = new MutationObserver(() => { if (autoOff) { autoObs.disconnect(); return; } if (!autoQ) { autoQ = true; requestAnimationFrame(autoZoom); } });
+  autoObs.observe(document.body, { childList: true, subtree: true });
   /* ===== زر «تعديل رؤوس الأعمدة» (القلم): يظهر فقط حين يُشغَّل من «الإعدادات» ===== */
   const HK = 'qheads_on';
   const headsOn = () => { try { return localStorage.getItem(HK) === '1'; } catch (e) { return false; } };

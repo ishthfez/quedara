@@ -146,14 +146,21 @@
     if (e.target.closest?.('.qsc-menu > *')) { const d = e.target.closest('details.qsc-more'); if (d) setTimeout(() => { d.open = false; }, 0); return; }
     document.querySelectorAll('details.qsc-more[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
   });
-  const hidden = el => !el || getComputedStyle(el).display === 'none' || el.style.display === 'none';
+  /* فحص التنسيق (getComputedStyle) مكلف على الجوال، وكان يُجرى لكل زر في كل صف (أكثر من ألف مرة لكل بناء).
+     الصفوف كلها فيها الأزرار نفسها، فيكفي فحص كل نوع مرة: المفتاح عمود الخلية ونوع العنصر وصنفه وأسماء سماته (لا قيمها).
+     الذاكرة تُفرَّغ مع كل بناء للبطاقات (stuCards)، فتغيير الصلاحيات يظهر في البناء التالي */
+  let CSM = new Map();
+  const ckey = el => { const td = el.closest?.('td, th'); return (td ? td.cellIndex : -1) + '|' + el.tagName + '|' + el.className + '|' + [...el.attributes].map(a => a.name).filter(n => n !== 'style' && n !== 'title' && n !== 'aria-label').sort().join(',') + '|' + (el.getAttribute('style') || ''); };
+  const cstyle = el => { const k = ckey(el); let v = CSM.get(k); if (!v) { const c = getComputedStyle(el); v = { display: c.display, pe: c.pointerEvents, opacity: c.opacity, filter: c.filter }; CSM.set(k, v); } return v; };
+  const hidden = el => !el || el.style.display === 'none' || cstyle(el).display === 'none';
   const cloneLive = el => {   // نسخة تحمل حالة «يظهر بلا ضغط» كما هي في الجدول
-    const c = el.cloneNode(true), cs = getComputedStyle(el);
-    if (cs.pointerEvents === 'none') c.style.cssText += ';pointer-events:none;cursor:not-allowed;opacity:' + cs.opacity + ';filter:' + cs.filter;
+    const c = el.cloneNode(true), cs = cstyle(el);
+    if (cs.pe === 'none') c.style.cssText += ';pointer-events:none;cursor:not-allowed;opacity:' + cs.opacity + ';filter:' + cs.filter;
     return c;
   };
   function stuCards() {
     if (!session || ui.tab !== 'students') return;
+    CSM = new Map();
     document.querySelectorAll('main .card .tbl > table').forEach(tbl => {
       const head = tbl.rows[0]; if (!head) return;
       const H = [...head.cells].map(c => c.textContent.trim()), ix = n => H.indexOf(n);
@@ -178,8 +185,11 @@
       const frag = document.createDocumentFragment();
       [...tbl.rows].slice(1).forEach(r => {
         if (!r.cells.length || r.classList.contains('sum')) return;
+        /* ما أخفاه «المزيد» (pager.js) لا تُبنى له بطاقة أصلًا: كانت تُبنى بطاقات كل الطلاب (مئات) مع فحص تنسيق كل زر فيها
+           (getComputedStyle) ثم تُخفى، وهذا أثقل ما في فتح الصفحة على الجوال. «المزيد» يغيّر بصمة الجدول فتُبنى بطاقاته حينها */
+        if (r.classList.contains('pgx')) return;
         const nm = cell(r, 'الاسم'); if (!nm) return;
-        const card = document.createElement('div'); card.className = r.classList.contains('pgx') ? 'qsc pgx' : 'qsc';   // ما أخفاه «المزيد» (pager.js) يُخفى من البطاقات أيضًا
+        const card = document.createElement('div'); card.className = 'qsc';
         const top = document.createElement('div'); top.className = 'qsc-t';
         const name = document.createElement('div'); name.className = 'qsc-n'; [...nm.childNodes].forEach(n => name.appendChild(n.nodeType === 1 ? cloneLive(n) : n.cloneNode(true)));
         /* أزرار الصف كلها في زر «خيارات» واحد (⋮) يفتح قائمة بأسمائها، بدل صف أزرار بجانب الاسم */
