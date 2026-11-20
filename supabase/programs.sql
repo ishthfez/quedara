@@ -344,7 +344,9 @@ $$;
 
 -- ---------------------------------------------------------------- المرشحون والتسجيل
 -- الطلاب الذين يحق للمستخدم تسجيلهم، مع عدد أجزائهم ومستوييهم المباشرين وأعلى مستوى سابق ومجموعاتهم الناجحة غير المُقرّة
-create or replace function public.prog_candidates(pid uuid)
+-- off: الخادم يعيد 1000 صف على الأكثر، فتُطلب القائمة على دفعات
+drop function if exists public.prog_candidates(uuid);
+create or replace function public.prog_candidates(pid uuid, off int default 0)
 returns table (student_id uuid, name text, halaqa_id uuid, juz int, allowed text[], prev jsonb, groups text[], entered boolean)
 language sql stable security definer set search_path = public as $$
   select s.id, s.name, s.halaqa_id, public.prog_juz_count(pid, s.id), public.prog_allowed(public.prog_juz_count(pid, s.id)),
@@ -355,7 +357,8 @@ language sql stable security definer set search_path = public as $$
   from members s left join halaqat h on h.id = s.halaqa_id
   where s.role = 'student' and coalesce(s.info ->> 'status', '') <> 'منقطع'
     and (public.prog_is_org(pid) or h.supervisor_id in (select public.my_ids()) or h.teacher_id in (select public.my_ids()))
-  order by s.name
+  order by s.name, s.id
+  limit 1000 offset greatest(coalesce(off, 0), 0)
 $$;
 
 -- إقرار احتساب مجموعة إتقان لأجزائها (المشرف أو من هو أعلى)
