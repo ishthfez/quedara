@@ -1,6 +1,7 @@
 // =====================================================================
 //  Edge Function: admin-users (منشورة باسم dynamic-worker)
-//  إنشاء حسابات الدخول للأعضاء وتغيير كلمات مرورهم — للإداري فقط.
+//  إنشاء حسابات الدخول للأعضاء وتغيير كلمات مرورهم — للإداري فقط،
+//  ولمنظم الدورة المكثفة: حسابات طلاب دورته المؤقتين فقط (temp_accounts.sql).
 //  يحتاج المفتاح السري، وهو متاح هنا تلقائيًا كمتغير بيئة على خوادم Supabase
 //  ولا يصل أبدًا إلى المتصفح. التحقق من JWT من البوابة مقفول، لأن الدالة تتحقق بنفسها.
 // =====================================================================
@@ -30,11 +31,25 @@ Deno.serve(async (req) => {
   // التحقق من أن الطالب إداري، بصلاحياته هو لا بصلاحيات الخادم
   const caller = createClient(url, anonKey, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } });
   const { data: isAdmin, error: e0 } = await caller.rpc('is_admin');
-  if (e0 || !isAdmin) return json({ error: 'غير مصرح: هذه العملية للإداري فقط' }, 403);
+  if (e0) return json({ error: 'غير مصرح: هذه العملية للإداري فقط' }, 403);
 
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   let body: any;
   try { body = await req.json(); } catch { return json({ error: 'طلب غير صالح' }, 400); }
+
+  /* غير المدير: منظم الدورة المكثفة يُنشئ ويحذف حسابات الطلاب المؤقتين (الخارجيين) في دورته فقط.
+     الحكم من الخادم بصلاحيات الطالب نفسه (prog_temp_ok في temp_accounts.sql)، ولا مشاركة حسابات هنا */
+  if (!isAdmin) {
+    const items: any[] = Array.isArray(body?.items) ? body.items : [];
+    const ids: string[] = body?.action === 'provision' ? items.map((x) => String(x?.member_id ?? ''))
+      : body?.action === 'remove' ? [String(body?.member_id ?? '')] : [];
+    if (!ids.length || ids.length > 50 || ids.some((x) => !x)) return json({ error: 'غير مصرح: هذه العملية للإداري فقط' }, 403);
+    if (body.action === 'provision' && items.some((x) => x?.share_with)) return json({ error: 'غير مصرح' }, 403);
+    for (const id of ids) {
+      const { data: ok, error: eT } = await caller.rpc('prog_temp_ok', { mid: id });
+      if (eT || !ok) return json({ error: 'غير مصرح: هذه العملية للإداري فقط' }, 403);
+    }
+  }
 
   // provision: إنشاء حساب دخول لكل عضو (أو تحديث كلمة مروره إن كان له حساب)
   // body.items = [{ member_id, password, share_with? }]
