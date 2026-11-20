@@ -511,9 +511,20 @@
   }
   function itqanItem(t) {
     const d = t.data || {}, cls = d.passed ? 'tag-ok' : 'tag-no';
-    const title = `إتقان ${esc(d.juz || '')} <span class="tag ${cls}">${d.passed ? 'ناجح' : d.itqan ? 'لم يجتز — يعيد الإتقان' : 'لم يجتز'}</span>`;
+    const iq = t._iq === 'last' ? ' <span class="tag tag-ok">المحتسبة</span>' : t._iq === 'old' ? ' <span class="tag">محاولة سابقة</span>' : '';
+    const title = `إتقان ${esc(d.juz || '')} <span class="tag ${cls}">${d.passed ? 'ناجح' : d.itqan ? 'لم يجتز — يعيد الإتقان' : 'لم يجتز'}</span>${iq}`;
     const grade = `<span class="qtsum">${fmtN(+d.total || 0)} / ${fmtN(+d.max || 0)}</span> ${pctTag(+d.pct || 0, cls)} <span class="muted qtneed">النجاح <bdi>${fmtN(+d.pass || 0)}%</bdi></span>`;
     return card(t, title, grade, d.note ? line('ملاحظات', esc(d.note)) : '');   // بلا تفاصيل درجات الأسئلة
+  }
+  /* تبويب «إتقان»: كل المحاولات، الناجحة والتي لم تجتز (المحفوظة في «متابعة»)، مجمّعة بالجزء.
+     القائمة مرتبة من الأحدث، فأول محاولة في كل جزء هي المحتسبة (تُحسب الدرجة الأخيرة) */
+  const ofKind = (L, k) => (k === 'itqan' ? L.filter(t => t.kind === 'itqan' || t.data?.itqan) : L.filter(t => t.kind === k));
+  function listHTML(list, k) {
+    if (k !== 'itqan') return list.map(itemHTML).join('');
+    const g = new Map();
+    list.forEach(t => { const j = String(t.data?.juz || '—'); if (!g.has(j)) g.set(j, []); g.get(j).push(t); });
+    return [...g].map(([j, arr]) => arr.length < 2 ? itemHTML(arr[0])
+      : `<div class="qtiq"><div class="qtiqh">${esc(j)} <span class="muted">· ${arr.length} محاولات، والمحتسبة الأخيرة</span></div>${arr.map((t, i) => itemHTML({ ...t, _iq: i ? 'old' : 'last' })).join('')}</div>`).join('');
   }
 
   /* ===== «نافذة الاختبارات» من زر الطالب: تبويب لكل نوع بالترتيب (متابعة · إتقان · الفصول)؛
@@ -529,8 +540,8 @@
     let all = null, cur = '';
     const logOf = async (box, k) => {
       try { if (!all) all = await listOf(st); } catch (e) { box.textContent = /test_list|PGRST202|404/i.test(String(e.message || e)) ? 'تحتاج الاختبارات إلى تنفيذ supabase/tests.sql على الخادم.' : 'تعذّر تحميل السجل.'; return; }
-      const L = all.filter(t => t.kind === k).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.ts || '').localeCompare(String(a.ts || '')));
-      box.className = 'qtlog'; box.innerHTML = L.length ? L.map(itemHTML).join('') : `<p class="muted">لم يُسجَّل له اختبار «${esc(KINDS[k])}» بعد.</p>`;
+      const L = ofKind(all, k).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.ts || '').localeCompare(String(a.ts || '')));
+      box.className = 'qtlog'; box.innerHTML = L.length ? listHTML(L, k) : `<p class="muted">لم يُسجَّل له اختبار «${esc(KINDS[k])}» بعد.</p>`;
       const s = box.closest('details')?.querySelector('summary .qtn'); if (s) s.textContent = L.length || '';
     };
     const show = k => {
@@ -589,9 +600,9 @@
     const tabs = root.querySelector('.qttabs'), box = root.querySelector('.qtlog');
     let L = [], cur = '';
     const paint = () => {
-      tabs.innerHTML = TABS.map(([k, l]) => { const n = L.filter(t => t.kind === k).length; return `<button type="button" role="tab" class="btn sm ${k === cur ? 'on' : ''}" aria-selected="${k === cur}" data-qttab="${k}">${l}${n ? ` <span class="qtn">${n}</span>` : ''}</button>`; }).join('');
-      const list = L.filter(t => t.kind === cur);
-      box.className = 'qtlog'; box.innerHTML = list.length ? list.map(itemHTML).join('') : `<p class="muted">لم يُسجَّل له اختبار «${esc(KINDS[cur])}» بعد.</p>`;
+      tabs.innerHTML = TABS.map(([k, l]) => { const n = ofKind(L, k).length; return `<button type="button" role="tab" class="btn sm ${k === cur ? 'on' : ''}" aria-selected="${k === cur}" data-qttab="${k}">${l}${n ? ` <span class="qtn">${n}</span>` : ''}</button>`; }).join('');
+      const list = ofKind(L, cur);
+      box.className = 'qtlog'; box.innerHTML = list.length ? listHTML(list, cur) : `<p class="muted">لم يُسجَّل له اختبار «${esc(KINDS[cur])}» بعد.</p>`;
     };
     const load = async () => {
       try { L = await listOf(st); }
@@ -978,6 +989,7 @@
     .qtgrid{display:flex;flex-direction:column;gap:.35rem}.qtrow{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
     .qtrl{flex:0 0 3.6rem;font-weight:700;font-size:.9rem}.qtrow .chips{margin:0}
     .qtlog{display:flex;flex-direction:column;gap:.7rem}
+    .qtiq{display:flex;flex-direction:column;gap:.45rem;padding:.5rem;border:1px dashed var(--line);border-radius:14px}.qtiqh{font-weight:700;font-size:.9rem}
     .qttabs{display:flex;gap:.35rem;flex-wrap:wrap;margin:0 0 .6rem}.qttabs:empty{display:none}
     .qtn{display:inline-block;min-width:1.3rem;padding:0 .3rem;border-radius:999px;font-size:.75rem;line-height:1.3rem;background:var(--navy-l,#eaeef5);color:var(--navy,#13294b)}
     .qtpass{display:block;margin-top:.2rem;font-size:.8rem}
