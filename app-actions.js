@@ -1093,7 +1093,10 @@ const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return 
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
 async function checkUpdate() {
   if (verBusy || navigator.onLine === false || !/^https?:/.test(location.protocol)) return;
-  if (Date.now() - (+lsGet(SIG_AT) || 0) < CHECK_EVERY) return;
+  /* التحديث اليدوي للصفحة (سحب الشاشة للأسفل على الجوال) يفحص فورًا بلا انتظار الساعة */
+  let manual = false; try { manual = !checkUpdate.done && performance.getEntriesByType('navigation')[0]?.type === 'reload'; } catch (e) { /* ignore */ }
+  checkUpdate.done = true;
+  if (!manual && Date.now() - (+lsGet(SIG_AT) || 0) < CHECK_EVERY) return;
   verBusy = true; lsSet(SIG_AT, String(Date.now()));
   try {
     const s = await verSig();
@@ -1196,6 +1199,16 @@ window.QL = { get db() { return db; }, get session() { return session; }, me, IC
 /* العمل بدون إنترنت: تسجيل عامل الخدمة، وشارة تظهر عند انقطاع الاتصال */
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => { /* بيئة لا تدعمه */ }); });
+  /* عامل خدمة جديد (إصدار جديد من sw.js) تولّى الصفحة: إعادة تحميل واحدة لتظهر الملفات الجديدة فورًا،
+     إلا أول تثبيت على الجهاز (لا عامل سابق) أو نافذة مفتوحة أو حقل قيد الكتابة */
+  const hadSW = !!navigator.serviceWorker.controller; let swReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadSW || swReloaded) return;
+    const typing = document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+    if (document.querySelector('.overlay') || typing || window.Cloud?.busy) return;
+    try { if (CLOUD && session && window.Cloud.pendingCount(db)) return; } catch (e) { /* ignore */ }   // تغييرات لم تُرسل بعد: يكفي التحديث التالي
+    swReloaded = true; location.reload();
+  });
 }
 const netPill = () => {
   let el = document.getElementById('netpill');
