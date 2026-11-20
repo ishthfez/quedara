@@ -501,9 +501,8 @@
      فيُعاد إلى «الرئيسية». يُحفظ هنا التبويب المطلوب ويُرجع إليه متى ظهر في القائمة، ما لم ينتقل المستخدم بنفسه أو تمضِ 20 ثانية. */
   /* المهلة تبدأ من أول عرض اكتملت فيه بيانات الحساب (على الجوال قد يتأخر التحميل من الخادم)، لا من فتح الصفحة.
      وإن مُسحت ذاكرة الجلسة (الجوال) أُخذ التبويب من نسخة الجهاز الاحتياطية إن كانت حديثة (12 ساعة). */
-  let want = null, wantUntil = 0;
-  try { want = JSON.parse(sessionStorage.getItem('halaqat_tab') || '{}').tab || null; } catch (e) { /* ignore */ }
-  if (!want) try { const l = JSON.parse(localStorage.getItem('halaqat_tab_l') || '{}'); if (l.tab && Date.now() - (l.at || 0) < 12 * 3600e3) { want = l.tab; if (l.msub) ui.msub = l.msub; } } catch (e) { /* ignore */ }
+  let want = window.QL_WANT_TAB || null, wantUntil = 0;   // قرأه app.js قبل أول عرض (الحفظ بعده قد يكون «الرئيسية» المؤقتة)
+  if (want === 'home' || want === 'dash') want = null;
   document.addEventListener('click', e => { if (e.target.closest?.('[data-act="tab"],[data-act="logout"],[data-act="switchMode"]')) want = null; }, true);
   const restoreTab = () => {
     if (!want || !session) return;

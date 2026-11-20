@@ -244,6 +244,10 @@ const saveUI = () => { try { localStorage.setItem(UIKEY, JSON.stringify({ sideW:
 const clampW = w => Math.max(SIDE_MIN, Math.min(SIDE_MAX, Math.round(w) || SIDE_W));
 let tabPref = {};
 try { tabPref = JSON.parse(ss.get('halaqat_tab') || '{}') || {}; } catch (e) { /* ignore */ }
+/* التبويب المطلوب بعد إعادة التحميل يُقرأ هنا قبل أي عرض: أول عرض على الخادم يأتي قبل اكتمال الصلاحيات
+   فيُرجع إلى «الرئيسية» ويحفظها فوق التبويب الحقيقي قبل أن يقرأه uix.js. ونسخة الجهاز إن مُسحت ذاكرة الجلسة (الجوال) */
+if (!tabPref.tab) try { const l = JSON.parse(localStorage.getItem('halaqat_tab_l') || '{}'); if (l.tab && Date.now() - (l.at || 0) < 12 * 3600e3) tabPref = { tab: l.tab, msub: l.msub }; } catch (e) { /* ignore */ }
+window.QL_WANT_TAB = tabPref.tab || null;
 const ui = { fcat: '', nav: false, sideW: clampW(uiPref.sideW), collapsed: !!uiPref.collapsed, pick: null, tab: tabPref.tab || null, hid: '', date: today(), fh: '', psub: 'personal', msub: tabPref.msub || 'teachers', shown: {}, sel: new Set() };
 /* آخر تبويب مفتوح يُستعاد عند إعادة تحميل الصفحة */
 const saveTab = () => {

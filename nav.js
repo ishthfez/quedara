@@ -689,12 +689,15 @@
     let sqT = 0;
     document.addEventListener('input', e => {
       const box = e.target.closest?.('main [data-sq]'); if (!box) return;
-      ui.sq = box.value; clearTimeout(sqT);
+      /* موضع المؤشر يُحفظ مع كل حرف (لا مرة قبل الرسم): ما يُكتب أثناء إعادة الرسم كان يُعاد بعده المؤشر إلى موضع قديم
+         فتدخل الحروف التالية في وسط الكلمة وتختلط */
+      ui.sq = box.value; ui.sqCaret = box.selectionStart ?? box.value.length; clearTimeout(sqT);
       sqT = setTimeout(() => {
-        const caret = box.selectionStart ?? box.value.length;
+        const live = document.querySelector('main [data-sq]');
+        if (live) { ui.sq = live.value; ui.sqCaret = live.selectionStart ?? live.value.length; }
         render();
         /* بعد أن يُدمج الشريط في صف الأدوات (يتم في الإطار التالي) */
-        const refocus = () => { const b = document.querySelector('main [data-sq]'); if (b && document.activeElement !== b) { b.focus({ preventScroll: true }); const c = Math.min(caret, b.value.length); try { b.setSelectionRange(c, c); } catch (err) { /* ignore */ } } };
+        const refocus = () => { const b = document.querySelector('main [data-sq]'); if (b && document.activeElement !== b) { if (b.value !== ui.sq) b.value = ui.sq; b.focus({ preventScroll: true }); const c = Math.min(ui.sqCaret ?? b.value.length, b.value.length); try { b.setSelectionRange(c, c); } catch (err) { /* ignore */ } } };
         /* toolbar.js ينقل الشريط في الإطار التالي فيفقد المربع التركيز؛ يُعاد التركيز في الإطار نفسه بعد النقل مباشرة
            (طلب الإطار بعد مراقب التغييرات) فلا تضيع حروف تُكتب بينهما */
         refocus(); queueMicrotask(() => requestAnimationFrame(refocus)); requestAnimationFrame(() => requestAnimationFrame(refocus)); setTimeout(refocus, 80);
