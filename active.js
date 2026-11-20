@@ -208,13 +208,14 @@
 
   /* ===== المعاينة: آخر إصدار دائمًا ===== */
   document.addEventListener('DOMContentLoaded', () => {
-    try { document.querySelectorAll('script[src]').forEach(sc => { const f = './' + sc.getAttribute('src').replace(/^\.\//, ''); if (!VFILES.includes(f)) VFILES.push(f); }); } catch (e) { /* ignore */ }
+    /* ملفات التطبيق وحدها: سكربت من نطاق آخر (مثل ما يضيفه Vercel في نسخ المعاينة) يصير «./https://…» فيفشل فحص الإصدار كله */
+    try { document.querySelectorAll('script[src]').forEach(sc => { const s = sc.getAttribute('src'); if (/^([a-z]+:)?\/\//i.test(s)) return; const f = './' + s.replace(/^\.\//, ''); if (!VFILES.includes(f)) VFILES.push(f); }); } catch (e) { /* ignore */ }
   });
   const PVK = 'qpv_restore';
   const onPv = () => { try { return ui.tab === 'preview' && session?.role === 'admin'; } catch (e) { return false; } };
   let pvLast = 0, restore = null;
   try { restore = JSON.parse(sessionStorage.getItem(PVK) || 'null'); sessionStorage.removeItem(PVK); } catch (e) { /* ignore */ }
-  const pvCheck = () => { if (!onPv() || typeof checkUpdate !== 'function' || Date.now() - pvLast < 20000) return; pvLast = Date.now(); checkUpdate(); };
+  const pvCheck = () => { if (!onPv() || typeof checkUpdate !== 'function' || Date.now() - pvLast < 20000) return; pvLast = Date.now(); checkUpdate(); };   // الفحص مرة كل ساعة على الأكثر (كل فحص نحو 70 طلبًا من باقة Vercel)
   /* بعد إعادة التحميل: النوع والشخص والجهاز كما كانت */
   function doRestore() {
     if (!restore || !onPv()) return;

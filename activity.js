@@ -104,11 +104,19 @@
   async function load(append) {
     if (!live()) { W.err = 'السجل يعمل مع الخادم فقط.'; paint(); return; }
     W.busy = true; paint();
+    /* طلب أحدث يُلغي ما قبله: ردٌّ أبطأ لتبويب أو بحث سابق كان يحل محل القائمة الصحيحة */
+    const seq = W.seq = (W.seq || 0) + 1;
     try {
-      const until = append && W.list.length ? W.list[W.list.length - 1].at : null;
+      /* الصفحة التالية من وقت آخر صف نفسه (لا قبله): الخادم يأخذ ما قبل الوقت المعطى، فكانت تضيع الصفوف التي تشاركه الوقت؛
+         وما ظهر من قبل يُحذف بمعرّفه */
+      const lastAt = append && W.list.length ? W.list[W.list.length - 1].at : null;
+      const until = lastAt ? new Date(new Date(lastAt).getTime() + 1).toISOString() : null;
       const r = (await rpc('act_list', { who: W.role, what: W.kind, q: W.q.trim(), until_at: until, lim: 100 })) || [];
-      W.list = append ? W.list.concat(r) : r; W.more = r.length === 100; W.err = '';
-    } catch (e) { W.err = errMsg(e); }
+      if (seq !== W.seq) return;
+      if (append) { const have = new Set(W.list.map(x => x.id)), fresh = r.filter(x => !have.has(x.id)); W.list = W.list.concat(fresh); W.more = r.length === 100 && fresh.length > 0; }
+      else { W.list = r; W.more = r.length === 100; }
+      W.err = '';
+    } catch (e) { if (seq !== W.seq) return; W.err = errMsg(e); }
     W.busy = false; paint();
   }
   function body() {

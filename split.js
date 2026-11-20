@@ -35,16 +35,18 @@
         const cand = hs.filter(h => !claimed.has(h.id) && (!h.placeId || (place && h.placeId === place.id))).sort((a, b) => (counts.get(b.id) || 0) - (counts.get(a.id) || 0));
         const target = cand[0] && (counts.get(cand[0].id) || 0) > 0 ? cand[0] : (cand.find(h => place && h.placeId === place.id) || null);
         if (target) claimed.add(target.id);
-        out.push({ tname: T.name, t, tm: m, pname: g.name, place, target, found, missing, sup: (hs[0] || {}).supervisorId || '', on: !!t && found.length > 0 });
+        /* لم يُطابَق مكان واحد بعينه لكن الاسم يشبه مكانًا موجودًا (أو أكثر): لا يُنشأ مكان مكرر، ويُحدَّد يدويًا */
+        const amb = !place && db.places.some(p => { const a = norm(p.name), b = norm(g.name); return a && b && (a.includes(b) || b.includes(a)); });
+        out.push({ tname: T.name, t, tm: m, pname: g.name, place, amb, target, found, missing, sup: (hs[0] || {}).supervisorId || '', on: !!t && found.length > 0 && !amb });
       });
     });
     G = out;
   }
   function previewHtml() {
     if (!G.length) return empty('لا توجد صفوف في الملف.');
-    const rows = G.map((g, i) => `<tr><td><input type="checkbox" data-spg="${i}" ${g.on ? 'checked' : ''} ${g.t && g.found.length ? '' : 'disabled'} style="width:auto;margin:0"></td>
+    const rows = G.map((g, i) => `<tr><td><input type="checkbox" data-spg="${i}" ${g.on ? 'checked' : ''} ${g.t && g.found.length && !g.amb ? '' : 'disabled'} style="width:auto;margin:0"></td>
       <td>${g.t ? esc(g.t.name) : `<span class="tag tag-no">لم أجد المعلم</span> ${esc(g.tname)}`}</td>
-      <td>${g.place ? esc(g.place.name) : `<span class="tag">مكان جديد</span> ${esc(g.pname)}`}</td>
+      <td>${g.place ? esc(g.place.name) : g.amb ? `<span class="tag tag-no">يشبه أكثر من مكان</span> ${esc(g.pname)} <small class="muted">— وحّد اسمه في الملف أو في «الحلقات»</small>` : `<span class="tag">مكان جديد</span> ${esc(g.pname)}`}</td>
       <td>${!g.t ? '<span class="muted">— لن يُنفَّذ شيء —</span>' : g.target ? `${esc(halaqaLabel(g.target))}${g.target.placeId ? '' : ' <small class="muted">(ستأخذ المكان)</small>'}` : '<span class="tag">حلقة ثانية جديدة للمعلم في هذا المكان</span>'}</td>
       <td>${g.found.length}${g.missing.length ? ` <small class="muted">· لم يُعثر على ${g.missing.length}</small>` : ''}</td></tr>`).join('');
     const miss = G.filter(g => g.missing.length);
@@ -54,7 +56,7 @@
   function apply(ov) {
     let moved = 0, madeH = 0, madeP = 0;
     const newPlaces = new Map();
-    G.filter(g => g.on && g.t).forEach(g => {
+    G.filter(g => g.on && g.t && !g.amb).forEach(g => {
       let place = g.place;
       if (!place) { place = newPlaces.get(norm(g.pname)); if (!place) { place = { id: uid(), name: g.pname, type: 'مسجد', address: '' }; db.places.push(place); newPlaces.set(norm(g.pname), place); madeP++; } }
       let h = g.target;

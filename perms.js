@@ -59,7 +59,10 @@
     const groups = [...new Set([...FIXED.map(f => f[0]), ...DEFS.map(d => d.group || 'صلاحيات قابلة للتوزيع')])];
     const rows = groups.map(g => {
       const fixed = FIXED.filter(f => f[0] === g).map(([, label, base]) => `<tr><td>${esc(label)}</td>${ROLE_COLS.map(([r]) => `<td style="text-align:center">${base.includes(r) ? yes : no}</td>`).join('')}<td style="text-align:center">${base.length ? '<small class="muted">ثابتة</small>' : '<span class="tag">للمدير فقط</span>'}</td></tr>`).join('');
-      const dist = DEFS.filter(d => (d.group || 'صلاحيات قابلة للتوزيع') === g).map(d => `<tr><td><b>${esc(d.label)}</b>${d.desc ? `<br><small class="muted">${esc(d.desc)}</small>` : ''}</td>${ROLE_COLS.map(([r, l]) => `<td style="text-align:center"><input type="checkbox" data-prole="${r}" data-perm="${esc(d.key)}" ${roleHas(c, r, d.key) ? 'checked' : ''} aria-label="${esc(d.label)} — ${l}"></td>`).join('')}<td style="text-align:center"><small class="muted">قابلة للتوزيع</small></td></tr>`).join('');
+      const dist = DEFS.filter(d => (d.group || 'صلاحيات قابلة للتوزيع') === g).map(d => `<tr><td><b>${esc(d.label)}</b>${d.desc ? `<br><small class="muted">${esc(d.desc)}</small>` : ''}</td>${ROLE_COLS.map(([r, l]) => (d.roles && !d.roles.includes(r) && !roleHas(c, r, d.key)   /* ممنوحة من قبل لهذه الفئة: تظهر خانتها ليُلغيها المدير */
+        /* صلاحية لا تعمل في واجهة هذه الفئة (d.roles): لا تُعرض خانتها، فمنحها لا يفعل شيئًا في الواجهة أو يمنح كتابة على الخادم بلا أزرار */
+        ? '<td style="text-align:center"><span class="muted" title="لا تنطبق على هذه الفئة">—</span></td>'
+        : `<td style="text-align:center"><input type="checkbox" data-prole="${r}" data-perm="${esc(d.key)}" ${roleHas(c, r, d.key) ? 'checked' : ''} aria-label="${esc(d.label)} — ${l}"></td>`)).join('')}<td style="text-align:center"><small class="muted">قابلة للتوزيع</small></td></tr>`).join('');
       return `<tr class="sum"><td colspan="${ROLE_COLS.length + 2}">${esc(g)}</td></tr>${fixed}${dist}`;
     }).join('');
     const ids = Object.keys(c.members), people = staff();

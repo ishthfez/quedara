@@ -22,7 +22,9 @@
     const small = db.halaqat.filter(h => !dropIds.has(h.id) && N(h) > 0 && N(h) <= LIM).sort((a, b) => N(a) - N(b));
     const emptyH = db.halaqat.filter(h => !dropIds.has(h.id) && N(h) === 0);
     /* 4) الأماكن الفارغة (بلا أي حلقة الآن) */
-    const emptyP = db.places.filter(p => !db.halaqat.some(h => h.placeId === p.id));
+    /* ما عدا مكانًا مسندًا لإداري (info.places): مكان جديد لم تُنشأ حلقاته بعد كان يُحذف فيفقده الإداري */
+    const ofAdmin = p => (db.placeadmins || []).some(a => Array.isArray(a.info?.places) && a.info.places.includes(p.id));
+    const emptyP = db.places.filter(p => !db.halaqat.some(h => h.placeId === p.id) && !ofAdmin(p));
     return { n, N, dups, small, emptyH, emptyP };
   }
   /* الحلقات المقترحة لنقل طلاب حلقة صغيرة: حلقات المكان نفسه، ثم حلقات المعلم نفسه، ثم البقية */
@@ -69,7 +71,11 @@
       /* 3) الفارغة */
       S.emptyH.forEach(h => { if (on('eh:' + h.id)) del.add(h.id); });
       const before = db.halaqat.length;
-      db.halaqat = db.halaqat.filter(h => !(del.has(h.id) && !db.students.some(s => s.halaqaId === h.id)));
+      /* حلقة لها قائمة تحصيل لم تُؤكَّد (تُحفظ على الخادم بدوالها، فلا ينقلها الدمج) تبقى حتى تُراجَع القائمة، وإلا بقيت القائمة بلا حلقة */
+      const openColl = id => (db.collections || []).some(c => c.status !== 'done' && c.halaqaId === id);
+      const keptForColl = [...del].filter(openColl).length;
+      db.halaqat = db.halaqat.filter(h => !(del.has(h.id) && !db.students.some(s => s.halaqaId === h.id) && !openColl(h.id)));
+      if (keptForColl) setTimeout(() => toast(`بقيت ${keptForColl} حلقة لها قائمة تحصيل لم تُراجَع — احذفها بعد مراجعتها`), 1500);
       delH = before - db.halaqat.length;
       /* 4) الأماكن الفارغة (المحددة وما زالت بلا حلقات) */
       const pb = db.places.length;

@@ -45,12 +45,19 @@ Deno.serve(async (req) => {
     for (const it of items) {
       try {
         if (!it.password || String(it.password).length < 6) throw new Error('كلمة المرور 6 أحرف أو أرقام على الأقل');
-        const { data: m, error } = await admin.from('members').select('id, name, user_id, login_email').eq('id', it.member_id).single();
+        const { data: m, error } = await admin.from('members').select('id, name, role, user_id, login_email').eq('id', it.member_id).single();
         if (error || !m) throw new Error('العضو غير موجود');
         let userId = m.user_id as string | null, email = m.login_email as string | null;
+        /* الحساب المشترك (شخص واحد بأكثر من صفة: معلم ومشرف مثلًا) يُتحقَّق منه هنا لا في المتصفح وحده:
+           لا مشاركة مع حساب مدير أو مدير عام، ولا لطالب أو معه، ويجب أن يتطابق الاسم. كان يكفي تطابق الاسم في المتصفح،
+           فطالب يُضاف باسم المدير نفسه يأخذ حسابه وتُغيَّر كلمة مرور المدير إلى كلمة الطالب */
         if (!userId && it.share_with) {
-          const { data: o } = await admin.from('members').select('user_id, login_email').eq('id', it.share_with).single();
-          if (o?.user_id) { userId = o.user_id; email = o.login_email; }
+          const { data: o } = await admin.from('members').select('name, role, user_id, login_email').eq('id', it.share_with).single();
+          const norm = (s: unknown) => String(s ?? '').replace(/[ً-ْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim();
+          const okShare = o?.user_id && m.role !== 'student' && o.role !== 'student' && o.role !== 'admin' && o.role !== 'gmanager'
+            && m.role !== 'admin' && m.role !== 'gmanager' && norm(o.name) === norm(m.name);
+          if (okShare) { userId = o!.user_id; email = o!.login_email; }
+          // وإلا: حساب دخول مستقل جديد لهذا العضو (لا خطأ)
         }
         if (userId) {
           const { error: e1 } = await admin.auth.admin.updateUserById(userId, { password: String(it.password) });
@@ -75,11 +82,19 @@ Deno.serve(async (req) => {
 
   // remove: حذف حساب الدخول لعضو (لا يُحذف إن كان مشتركًا مع عضو آخر بنفس الاسم)
   if (body.action === 'remove') {
-    const { data: m } = await admin.from('members').select('id, user_id').eq('id', body.member_id).single();
+    const { data: m } = await admin.from('members').select('id, role, user_id').eq('id', body.member_id).single();
     if (!m?.user_id) return json({ ok: true });
+    /* لا يحذف المدير حساب دخوله هو، ولا حساب آخر مدير (فلا يبقى التطبيق بلا مدير) */
+    const { data: me } = await caller.auth.getUser();
+    if (me?.user?.id && me.user.id === m.user_id) return json({ error: 'لا يمكنك حذف حساب دخولك أنت' }, 400);
+    if (m.role === 'admin') {
+      const { count: admins } = await admin.from('members').select('id', { count: 'exact', head: true }).eq('role', 'admin').not('user_id', 'is', null);
+      if ((admins ?? 0) <= 1) return json({ error: 'هذا آخر حساب مدير له دخول' }, 400);
+    }
     const { count } = await admin.from('members').select('id', { count: 'exact', head: true }).eq('user_id', m.user_id);
-    await admin.from('members').update({ user_id: null, login_email: null }).eq('id', m.id);
-    if ((count ?? 0) <= 1) await admin.auth.admin.deleteUser(m.user_id);
+    const { error: e4 } = await admin.from('members').update({ user_id: null, login_email: null }).eq('id', m.id);
+    if (e4) return json({ error: String(e4.message ?? e4) }, 500);
+    if ((count ?? 0) <= 1) { const { error: e5 } = await admin.auth.admin.deleteUser(m.user_id); if (e5) return json({ error: String(e5.message ?? e5) }, 500); }
     return json({ ok: true });
   }
 

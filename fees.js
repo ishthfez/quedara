@@ -538,7 +538,11 @@
   });
   document.addEventListener('change', e => {
     if (!('fmonth' in (e.target.dataset || {}))) return;
-    const [y, m] = e.target.value.split('-').map(Number); st.y = y; st.m = m; render();
+    const [y, m] = e.target.value.split('-').map(Number); st.y = y; st.m = m;
+    /* الشهر المختار يُقرأ من QLFees في بطاقة الاشتراكات (app-abs.js) وفي مستحقات العاملين (stuview.js)؛
+       ومن بلا صلاحيات الاشتراك (المعلم والمشرف) لا تصل summary إلى ضبطه، فكانت القائمة لا تغيّر شيئًا */
+    window.QLFees = { ...(window.QLFees || {}), y, m };
+    render();
   });
   document.addEventListener('click', e => {
     const p = e.target.closest('[data-fee-pay]'); if (p) { if (can('fees.collect')) pay(p.dataset.feePay); return; }
@@ -555,7 +559,7 @@
   /* ===== واجهة الدمج: تُضمّن أعمدة الاشتراك في جدول الطلاب ===== */
   window.QLFeesEmbed = {
     summary(list) {
-      if (!can('fees.collect') && !can('fees.amount')) return '';
+      if (!can('fees.collect') && !can('fees.amount')) { window.QLFees = { ...(window.QLFees || {}), y: st.y, m: st.m }; return ''; }
       let expected = 0, got = 0, paidN = 0, partN = 0, noneN = 0, freeN = 0, offN = 0, remaining = 0;
       const unpaid = [];
       list.forEach(s => {
@@ -609,4 +613,18 @@
       return `${can('fees.collect') ? `<button type="button" class="btn sm primary" data-fee-pay="${esc(s.id)}" ${cloudMissing() || fee === 0 ? 'disabled' : ''}>تحصيل</button>` : ''}${any ? `<button type="button" class="btn sm" data-fee-log="${esc(s.id)}">سجل الدفع</button>` : ''}${can('fees.amount') ? `<button type="button" class="btn sm" data-fee-assign="${esc(s.id)}">الفئة</button>` : ''}${remind}`;
     }
   };
+
+  /* إعدادات اشتراك قديمة (بلا discs أو بلا v): الجهاز يكمّلها بالخصومات الافتراضية (ومنها «أيتام» 100%)، والخادم يقرأ المحفوظ وحده
+     (fee_due_ym في supabase/fee_periods.sql)، فكان اليتيم معفى عند المدير ومطالبًا بالاشتراك عند المعلم. تُحفظ مكمّلة مرة واحدة عند المدير */
+  function saveDefaultDiscs() {
+    if (session?.role !== 'admin') return;
+    const c = db.settings?.priv_fees;
+    if (!c || typeof c !== 'object' || (Array.isArray(c.discs) && c.v)) return;
+    db.settings.priv_fees = { ...c, discs: cfgBase().discs, v: c.v || 3 };
+    save();
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const base = render;
+    render = function () { try { saveDefaultDiscs(); } catch (e) { console.error('fees discs:', e); } return base.apply(this, arguments); };
+  });
 })();

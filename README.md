@@ -8,7 +8,9 @@
 - البيانات **مشتركة بين كل الأجهزة** عبر Supabase، والصلاحيات الحقيقية مطبّقة على الخادم بقواعد RLS على كل الجداول (الواجهة لا تُعتمد للحماية).
 - يعمل التطبيق على نسخة محلية في قاعدة بيانات المتصفح (IndexedDB)، فيفتح ويعمل **بدون إنترنت**، وتُرسل التعديلات تلقائيًا عند عودة الاتصال (الفروق فقط).
 - المزامنة بالتغييرات فقط: كل مستخدم ينزّل نطاقه (المعلم حلقاته، والمشرف حلقاته…)، وتُحفظ آخر مزامنة على الجهاز فيُجلب عند الفتح ما تغيّر منذها فقط.
-- عامل الخدمة `sw.js`: الشبكة أولًا ثم النسخة المحفوظة؛ والتطبيق يكتشف الإصدار الجديد بنفسه.
+- عامل الخدمة `sw.js`: ملفات التطبيق من النسخة المحفوظة على الجهاز أولًا (بلا طلب للخادم)، توفيرًا لـ«CDN Requests» في باقة Vercel.
+- الإصدار الجديد: التطبيق يفحص بصمة ملفاته على الخادم مرة كل ساعة على الأكثر لكل جهاز (الوقت والبصمة محفوظان على الجهاز)، فإن تغيّرت مسح النسخة المحفوظة وأعاد التحميل. كل فحص نحو 70 طلبًا، فلا تُقصَّر المدة. لا خطوة بناء في `vercel.json`: إضافتها (`buildCommand`) أفشلت النشر.
+- اجمع التعديلات في commit واحد قدر الإمكان: كل commit يُنشر نشرًا مستقلًا على Vercel.
 
 ## الدخول وأنواع الحسابات
 
@@ -73,13 +75,20 @@
 1. `schema.sql` ثم `admin_bootstrap.sql` (أول حساب مدير)
 2. `sync_incremental.sql` ← `sync_scope.sql`
 3. `fees.sql` ← `fees_private.sql` ← `perms.sql` ← `accountant.sql` ← `student_edit.sql` ← `collections.sql` ← `notes.sql`
-4. `roles.sql` (الإداري والمدير العام) ← `notify.sql` (تأكيد الدفع والتذكير بالسداد للطلاب) ← `fees_systems.sql` (نظاما الحضور ومبالغ الأماكن والسنوات) ← `actas.sql` (العمل بصفة فئة أخرى) ← `place_halaqat.sql` (نطاق الإداري بحلقات بعينها داخل المكان) ← `transfers.sql` (نقل الطالب بموافقة المشرف) ← `cnotices.sql` (كشوف التحصيل) ← `absence_proof.sql` (إثبات غياب المعلمين ورصيد الإجازات) ← `leave_adj.sql` (تعديلات رصيد الإجازات للمشرف) ← `activity.sql` (سجل الأنشطة) ← `fee_periods.sql` (تغيير مبلغ الاشتراك ابتداءً من شهر) ← `news_ext.sql` (أهمية الإعلان ومدته) ← `halaqat_perm.sql` (الحلقات للمحاسب بصلاحية) ← `gmanager.sql` (إعلانات «المديرون العامون») ← `del_requests.sql` (حذف المحاسب بموافقة المدير) ← `perf_rls.sql` (سرعة قراءة الاشتراكات) ← `sup_notes.sql` (ملاحظات المشرف الخاصة في ملف الطالب)
+4. `roles.sql` (الإداري والمدير العام) ← `notify.sql` (تأكيد الدفع والتذكير بالسداد للطلاب) ← `fees_systems.sql` (نظاما الحضور ومبالغ الأماكن والسنوات) ← `actas.sql` (العمل بصفة فئة أخرى) ← `place_halaqat.sql` (نطاق الإداري بحلقات بعينها داخل المكان) ← `transfers.sql` (نقل الطالب بموافقة المشرف) ← `cnotices.sql` (كشوف التحصيل) ← `absence_proof.sql` (إثبات غياب المعلمين ورصيد الإجازات) ← `leave_adj.sql` (تعديلات رصيد الإجازات للمشرف) ← `activity.sql` (سجل الأنشطة) ← `fee_periods.sql` (تغيير مبلغ الاشتراك ابتداءً من شهر) ← `news_ext.sql` (أهمية الإعلان ومدته) ← `halaqat_perm.sql` (الحلقات للمحاسب بصلاحية) ← `gmanager.sql` (إعلانات «المديرون العامون») ← `del_requests.sql` (حذف المحاسب بموافقة المدير) ← `perf_rls.sql` (سرعة قراءة الاشتراكات) ← `sup_notes.sql` (ملاحظات المشرف الخاصة في ملف الطالب) ← `gmanager_role.sql` (المدير العام نوع حساب مستقل؛ ارفع `cloud.js` الجديد قبله) ← `gmanager_perms.sql` (نسخ صلاحيات المشرفين إلى المديرين العامين، مرة واحدة) ← `dues_month.sql` (مستحق قوائم التحصيل عن الشهر المختار) ← `security_guards.sql` (حماية الحلقات من إسنادها للنفس، وإعلانات المدير العام باسمه، والاسترجاع لا يغيّر نوع الحسابات؛ بعد `restore.sql`)
+
+> **تنبيه — دالة المزامنة `sync_check`:** معرّفة في عدة ملفات (`sync_scope.sql` و`fees.sql` و`accountant.sql` و`collections.sql` و`notes.sql` و`roles.sql` و`gmanager.sql` و`gmanager_role.sql`)، وآخر ملف يُنفَّذ منها هو الذي يبقى. أحدثها `gmanager_role.sql`. إن أعدت تنفيذ أي ملف أقدم منها فأعد تنفيذ `gmanager_role.sql` بعده، وإلا عادت المزامنة إلى نسخة قديمة (يفقد المدير العام نطاقه، أو لا تصل الاشتراكات وقوائم التحصيل). وكذلك `sync_tomb` في `sync_incremental.sql` و`sync_scope.sql`: أعد تنفيذ `sync_scope.sql` بعد `sync_incremental.sql` دائمًا.
 5. `backup.sql` ثم `select public.backup_new_token();` ← `backup_status.sql` ← `restore.sql`
 
-ودالة الخادم `supabase/functions/admin-users` (إنشاء حسابات الدخول) تُنشر من لوحة Supabase.
+ودالة الخادم `supabase/functions/admin-users` (إنشاء حسابات الدخول) تُنشر من لوحة Supabase (باسم `dynamic-worker`)، ويُعاد نشرها بعد كل تعديل عليها.
 
 ## التشغيل والنشر
 
 - محليًا: `python3 -m http.server 8000` ثم افتح `http://localhost:8000`. وللعمل بلا خادم: أضف `?local=1` إلى الرابط (البيانات في المتصفح وحده).
-- النشر: كل دفع إلى `main` ينشره Vercel تلقائيًا (Framework Preset = Other، بلا Build Command).
+- النشر: كل دفع إلى `main` يُنشر على Vercel (Framework Preset = Other، بلا Build Command).
+- النشر من GitHub Actions (`.github/workflows/deploy.yml`) حتى يبقى المستودع خاصًا ويعمل المتعاونون: باقة Vercel المجانية ترفض النشر المباشر من مستودع خاص لـ commit صاحبه غير صاحب حساب Vercel، والنشر هنا بمفتاح صاحب الحساب. الإعداد مرة واحدة:
+  1. Vercel ← Account Settings ← Tokens: أنشئ مفتاحًا.
+  2. GitHub ← Settings ← Secrets and variables ← Actions: أضف `VERCEL_TOKEN` (المفتاح) و`VERCEL_ORG_ID` و`VERCEL_PROJECT_ID` (من Vercel ← المشروع ← Settings ← General: Project ID؛ ومعرّف الحساب من Account Settings ← General: Vercel ID).
+  3. بعد أن ينجح أول نشر من تبويب Actions: أضف `"git": { "deploymentEnabled": false }` إلى `vercel.json` (فلا يحاول Vercel النشر المباشر ثم يُرفض)، ثم اجعل المستودع خاصًا.
+- لا تُكتب بيانات أشخاص (أسماء، أرقام، حالات) في الكود أبدًا: كل ملف هنا يُنشر على الموقع كما هو. مكانها قاعدة البيانات أو ملف يستورده المدير.
 - بعد التحديث: **Ctrl+Shift+R** على الحاسوب، أو إغلاق التطبيق وفتحه على الجوال.

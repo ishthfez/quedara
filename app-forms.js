@@ -111,7 +111,12 @@ function fieldTargets(kind) {
   (db.fields[kind] || []).forEach(f => L.push({ id: 'extra:' + f.key, label: f.label, syn: [] }));
   return L;
 }
+/* خلية تاريخ في Excel تُقرأ رقمًا تسلسليًا (مثل 40544 = 2011-01-01): يُحوَّل في حقول التاريخ وحدها.
+   خمسة أرقام فقط (1927 فما بعد)، فسنة الميلاد المكتوبة وحدها (مثل 1990) تبقى كما هي */
+const xlDate = v => (/^\d{5}(\.\d+)?$/.test(String(v).trim()) ? new Date(Date.UTC(1899, 11, 30) + Math.floor(+v) * 864e5).toISOString().slice(0, 10) : v);
+const isDateField = id => { const [t, a, b] = id.split(':'); return id === 'info:birth' || (t === 'prof' && (PROF[a]?.fields || []).some(f => f[0] === b && f[2] === 'date')); };
 function setField(m, id, v) {
+  if (isDateField(id)) v = xlDate(v);
   const [t, a, b] = id.split(':');
   if (t === 'core') { if (a === 'phone') m.phone = normPhone(v) || v; else if (a === 'pin') m.pin = v; }
   else if (t === 'prof') { m[a] = m[a] || {}; m[a][b] = v; }
@@ -223,8 +228,9 @@ function openImport(kind) {
     let n = 0, nh = 0, np = 0;
     const made = [];
     parsed.filter(r => !r.dup).forEach(r => {
-      let hid = '';
-      if (isS && r.halaqa) {
+      /* الحلقة بالمعرّف (importx.js) تُستعمل كما هي: الرجوع إلى اسمها كان يخلطها بحلقات أخرى بالاسم نفسه (مثل كل «حلقة بلا معلم») */
+      let hid = isS && r.hid && byId(db.halaqat, r.hid) ? r.hid : '';
+      if (!hid && isS && r.halaqa) {
         const k = halaqaQKeys(r.halaqa).find(x => hmap.has(x));
         if (k) hid = hmap.get(k);
         else if (createH) {
@@ -377,7 +383,9 @@ function studentForm(st) {
     const info = { nid: N.nid || '', address: val('address'), phone: normPhone(val('sphone')), whatsapp: normPhone(val('whatsapp')), joinDate: val('joinDate'), fee: val('fee') === '' ? '' : +val('fee'), pledge: $('[name=pledge]').checked,
       test: { read: val('tRead'), tajweed: val('tTaj'), hifz: val('tHifz') } };
     if (c === 'child') Object.assign(info, { birth: val('birth'), study: val('study'), grade: val('grade'), gName: val('gName'), gJob: val('gJob'), gPhone: normPhone(val('gPhone')), gWhatsapp: normPhone(val('gWhatsapp')), gRel: val('gRel'), gRelOther: val('gRel') === 'شخص آخر' ? val('gRelOther') : '' });
-    else Object.assign(info, { birthYear: val('age') ? new Date().getFullYear() - ageN : '', marital: val('marital'), qual: val('qual'), qualStatus: val('qualStatus'), job: val('job'), avail: val('avail') });
+    /* الكبير: سنة الميلاد من الرقم القومي متى وُجد (كما في newStudent)؛ من السن وحده كانت تُحسب أقل أو أكثر بسنة
+       (مواليد 1990-12-05 وعمره 35 في نوفمبر 2026 كانت تُحفظ 1991) */
+    else Object.assign(info, { birthYear: N.birth ? +N.birth.slice(0, 4) : val('age') ? new Date().getFullYear() - ageN : '', ...(N.birth ? { birth: N.birth } : {}), marital: val('marital'), qual: val('qual'), qualStatus: val('qualStatus'), job: val('job'), avail: val('avail') });
     Object.assign(st, { name, cat: c, halaqaId: val('halaqaId'), ...(CLOUD ? {} : { pin: val('pin') }), photo, info: { ...(st.info || {}), ...info } });
     /* رقم التواصل الأساسي: ولي الأمر للصغير، والطالب نفسه للكبير */
     st.phone = c === 'child' ? (info.gPhone || info.phone || st.phone || '') : (info.phone || st.phone || '');

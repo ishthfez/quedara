@@ -19,19 +19,27 @@ try {
     try {
       var fy = (window.QLFees && window.QLFees.y) || new Date().getFullYear();
       var fm = (window.QLFees && window.QLFees.m) || (new Date().getMonth() + 1);
-      var key = fy + '-' + fm;
-      if (_absCache.key === key) return _absCache;
+      /* يُعاد البناء متى تغيّر الحضور (المصفوفة أو عددها) لا الشهر وحده: كان لا يُلغى إلا من ملخص الاشتراكات،
+         فمن لا يرى الاشتراكات لا يرى غيابًا جديدًا حتى يعيد فتح التطبيق */
+      var att = db && db.attendance ? db.attendance : [];
+      var pool = window.QLStuPool || (db && db.students) || [];
+      var key = fy + '-' + fm + '|' + att.length + '|' + pool.length;
+      if (_absCache.key === key && _absCache.att === att) return _absCache;
       var prefix = fy + '-' + pad(fm);
       var absMap = {}, activeH = {};
       var stuH = {};
-      (db && db.students ? db.students : []).forEach(function(s) { stuH[s.id] = s.halaqaId; });
-      (db && db.attendance ? db.attendance : []).forEach(function(a) {
+      /* من القائمة الكاملة (QLStuPool من active.js): nav.js يضيّق db.students مؤقتًا عند البحث أو تصفية «المنقطعين»،
+         فكانت حلقة فيها حضور هذا الشهر تبدو بلا حضور فيظهر «غير مفعل» بدل صفر */
+      pool.forEach(function(s) { stuH[s.id] = s.halaqaId; });
+      att.forEach(function(a) {
         if (!a.date || a.date.indexOf(prefix) !== 0) return;
         var hid = stuH[a.studentId];
         if (hid) activeH[hid] = true;
         if (a.status === 'absent' || a.status === 'excused') absMap[a.studentId] = (absMap[a.studentId] || 0) + 1;
       });
-      _absCache = { key: key, absMap: absMap, activeH: activeH };
+      _absCache = { key: key, att: att, absMap: absMap, activeH: activeH };
+      /* صالح للرسم الحالي وحده (كفهرس المدفوع getPaid): تغيير حالة حضور موجود لا يغيّر العدد */
+      setTimeout(function() { _absCache.key = ''; }, 0);
     } catch(e) { _absCache = { key: '', absMap: {}, activeH: {} }; }
     return _absCache;
   }

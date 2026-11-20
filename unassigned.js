@@ -61,6 +61,8 @@
   document.addEventListener('DOMContentLoaded', () => {
   A.delHalaqa = d => {
     const h = byId(db.halaqat, d.id), n = db.students.filter(s => s.halaqaId === d.id).length;
+    /* قائمة تحصيل لم تُراجَع لهذه الحلقة (على الخادم): تُراجَع أولًا، وإلا بقيت بلا حلقة */
+    if ((db.collections || []).some(c => c.status !== 'done' && c.halaqaId === d.id)) { toast('لهذه الحلقة قائمة تحصيل لم تُراجَع بعد — راجعها في «تحصيل المعلمين» ثم احذف الحلقة'); return; }
     ask(`حذف ${h ? short(h) : 'الحلقة'}؟${n ? ` ينتقل طلابها (${n}) إلى «الأعضاء» ← «غير مصنف» حتى تختار لهم حلقة.` : ''}`, () => {
       db.halaqat = db.halaqat.filter(x => x.id !== d.id); db.students.forEach(s => { if (s.halaqaId === d.id) s.halaqaId = ''; });
       save(); render(); if (n) toast(`انتقل ${n} طالب إلى «غير مصنف»`);

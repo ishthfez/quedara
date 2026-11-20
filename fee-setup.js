@@ -114,13 +114,26 @@ try {
     } catch(e) { console.warn('fee-setup autoApply error:', e); }
   }
 
-  var tryAuto = function() {
-    try {
-      if (db && db.places && db.places.length && db.students && db.students.length && document.querySelector('.side')) autoApply();
-      else setTimeout(tryAuto, 1500);
-    } catch(e) {}
+  /* لم يعد يعمل تلقائيًا عند فتح التطبيق: كان يغيّر نظام الحضور لكل طلاب الأماكن المطابقة دون علم المدير،
+     ويكتب الأسعار في موضع لم يعد يُقرأ (بعد «تغيير المبلغ ابتداءً من شهر» تُقرأ أسعار الفترة السارية)، فتتغير المستحقات بلا سعر مطابق.
+     الضبط الآن من نافذة «ضبط اشتراكات الأماكن» وحدها، حيث يرى المدير المطابقة قبل التطبيق. */
+  void autoApply;
+  /* فترة المبالغ السارية الآن (كما في fees.js و fee-match.js): «2026» من يناير أو «2026-09» من سبتمبر */
+  var yearKey = function (cfg) {
+    var Y = cfg && cfg.years; if (!Y || typeof Y !== 'object') return null;
+    var ord = function (k) { return /^\d{4}$/.test(k) ? +k * 100 + 1 : /^\d{4}-(0[1-9]|1[0-2])$/.test(k) ? +k.slice(0, 4) * 100 + +k.slice(5) : null; };
+    var d = new Date(), now = d.getFullYear() * 100 + d.getMonth() + 1;
+    var ks = Object.keys(Y).filter(function (k) { return ord(k) != null; }).sort(function (a, b) { return ord(a) - ord(b); });
+    if (!ks.length) return null;
+    var k = ks.slice().reverse().find(function (x) { return ord(x) <= now; }); return k != null ? k : ks[0];
   };
-  setTimeout(tryAuto, 3000);
+  /* يكتب سعر المكان في الإعدادات العامة وفي الفترة السارية معًا (كما يفعل setPrices في fee-match.js) */
+  function writePlacePrice(cfg, pid, sys, fee) {
+    var targets = [cfg.places = (cfg.places && typeof cfg.places === 'object') ? cfg.places : {}];
+    var k = yearKey(cfg);
+    if (k) { cfg.years[k] = cfg.years[k] || {}; targets.push(cfg.years[k].places = (cfg.years[k].places && typeof cfg.years[k].places === 'object') ? cfg.years[k].places : {}); }
+    targets.forEach(function (P) { var o = P[pid] || { general: null, general3: null }; o[sys === '3' ? 'general3' : 'general'] = fee; P[pid] = o; });
+  }
 
   /* ---- نافذة يدوية ---- */
   function run() {
@@ -152,13 +165,10 @@ try {
       document.body.appendChild(ov);
       ov.querySelector('[data-close]').onclick = function() { ov.remove(); };
       ov.querySelector('[data-fsapply]').onclick = function() {
-        var cfg = db.settings.priv_fees || {};
-        var pFees = cfg.places && typeof cfg.places === 'object' ? JSON.parse(JSON.stringify(cfg.places)) : {};
+        var cfg = JSON.parse(JSON.stringify(db.settings.priv_fees || {}));
         var sysCount = 0;
         matched.forEach(function(r) {
-          var cur = pFees[r.place.id] || {};
-          if (r.match.sys === '3') pFees[r.place.id] = { general: cur.general || null, general3: r.match.fee };
-          else pFees[r.place.id] = { general: r.match.fee, general3: cur.general3 || null };
+          writePlacePrice(cfg, r.place.id, r.match.sys, r.match.fee);
           db.students.forEach(function(s) {
             var h = db.halaqat.find(function(x) { return x.id === s.halaqaId; });
             if (!h || h.placeId !== r.place.id) return;
@@ -167,7 +177,7 @@ try {
             else if (r.match.sys === '6' && curSys === '3') { s.info = Object.assign({}, s.info || {}, { feeSys: '6' }); sysCount++; }
           });
         });
-        db.settings.priv_fees = Object.assign({}, cfg, { places: pFees, _feeSetupApplied: true });
+        db.settings.priv_fees = Object.assign(cfg, { _feeSetupApplied: true });
         ov.remove(); save(); render();
         toast('\u062a\u0645: ' + matched.length + ' \u0645\u0643\u0627\u0646' + (sysCount ? ' \u0648\u0646\u0638\u0627\u0645 ' + sysCount + ' \u0637\u0627\u0644\u0628' : ''));
       };
@@ -175,7 +185,7 @@ try {
         var cfg = db.settings.priv_fees || {};
         db.settings.priv_fees = Object.assign({}, cfg, { _feeSetupApplied: false });
         ov.remove(); save();
-        toast('\u062a\u0645 \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0636\u0628\u0637 \u2014 \u0633\u064a\u064f\u0637\u0628\u0651\u0642 \u062a\u0644\u0642\u0627\u0626\u064a\u0627\u064b \u0639\u0646\u062f \u0627\u0644\u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0642\u0627\u062f\u0645');
+        toast('\u062a\u0645 \u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0636\u0628\u0637 \u2014 \u0627\u0636\u063a\u0637 \u00ab\u062a\u0637\u0628\u064a\u0642\u00bb \u0644\u0636\u0628\u0637 \u0627\u0644\u0623\u0645\u0627\u0643\u0646 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649');
       };
     } catch(e) { console.error('fee-setup run error:', e); }
   }

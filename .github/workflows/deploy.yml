@@ -1,0 +1,43 @@
+# النشر على Vercel من GitHub Actions
+# يجعل المستودع خاصًا ممكنًا مع بقاء عمل المتعاونين: في باقة Vercel المجانية يُرفض النشر المباشر من مستودع خاص
+# إن لم يكن صاحب الـ commit هو صاحب حساب Vercel؛ أما هنا فالنشر بمفتاح صاحب الحساب، أيًّا كان من رفع.
+# لا يفعل شيئًا حتى يُضاف VERCEL_TOKEN و VERCEL_ORG_ID و VERCEL_PROJECT_ID في:
+#   GitHub ← Settings ← Secrets and variables ← Actions
+# النشر للفرع main وحده (الموقع الأساسي)، ويمكن تشغيله يدويًا من تبويب Actions.
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # رقم الإصدار في version.txt و ver.js (buildCommand في vercel.json) = معرّف الـ commit
+      VERCEL_GIT_COMMIT_SHA: ${{ github.sha }}
+    steps:
+      - name: Check secrets
+        id: chk
+        run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+            echo "::notice::Vercel secrets are not set yet — skipping deploy."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.chk.outputs.skip != '1'
+      - name: Deploy (production)
+        if: steps.chk.outputs.skip != '1'
+        run: |
+          npx --yes vercel@39 pull --yes --environment=production --token="$VERCEL_TOKEN"
+          npx --yes vercel@39 build --prod --token="$VERCEL_TOKEN"
+          npx --yes vercel@39 deploy --prebuilt --prod --token="$VERCEL_TOKEN"

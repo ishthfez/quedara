@@ -48,7 +48,8 @@
     try {
       session = { role, id: m.id };
       ui.tab = tab; ui.hid = pv.hid;
-      db.myPerms = permsOf(role, m.id);
+      /* المدير العام بصلاحيات roles.gmanager كما يحسبها له الخادم (لا roles.supervisor)، متى عرف الخادم نوعه */
+      db.myPerms = permsOf(pv.k === 'gsup' && window.Cloud?.gmReady !== false ? 'gmanager' : role, m.id);
       const fn = VIEWS[role]?.[tab];
       const h = fn ? fn() : empty('هذه الصفحة غير متاحة.');
       pv.hid = ui.hid;
@@ -126,7 +127,7 @@
     act: (a, id) => { if (a === 'hstu') halaqaStudents(byId(db.halaqat, id)); else A[a]?.({ id }); },
     change: (k, v) => {
       if (k === 'hid') pv.hid = v;
-      else if (k === 'date') ui.date = v;
+      else if (k === 'date') { ui.date = v; if (v === today()) ui.dateAuto = v; }   // كما في اختيار التاريخ في app-actions.js: لا يُعطَّل انتقال التاريخ لليوم الجديد
       else if (k === 'chal' || k === 'cmon') { const el = document.createElement('input'); el.dataset[k] = ''; el.value = v; el.hidden = true; document.body.appendChild(el); el.dispatchEvent(new Event('change', { bubbles: true })); el.remove(); return; }
       else return;
       render();
