@@ -175,18 +175,19 @@ function leaveBalances(year) {
   return `<div class="card"><h2>رصيد الإجازات — ${year}</h2><div class="tbl"><table><tr><th>الاسم</th><th>نظام العمل</th><th>الرصيد</th><th>المخصوم</th><th>المتبقي</th><th>مثبت</th><th>إجمالي الغياب</th></tr>
     ${bal.map(x => `<tr><td class="nm">${esc(x.e.name)}</td><td>${esc(x.e.sys || '—')}</td><td>${x.b ?? '—'}</td><td>${x.used}</td><td class="net">${x.rest ?? '—'}</td><td>${x.proven}</td><td>${x.n}</td></tr>`).join('')}</table></div></div>`;
 }
-function absView() {
-  const { esc, empty, today } = Q(), p = P(), role = Q().session?.role, isAdmin = role === 'admin', canProof = proofRole();
-  const emps = p.employees.filter(e => e.status !== 'متوقف').slice().sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+/* استمارة تسجيل الغياب: تُفتح في نافذة منبثقة من زر «تسجيل غياب» تحت التبويبات (absOpen)،
+   والنافذة نفسها هي #absform فتعمل كل معالجات الاستمارة كما هي */
+function absFormHTML() {
+  const { esc, empty, today } = Q(), p = P(), isAdmin = Q().session?.role === 'admin', canProof = proofRole();
+  const emps = p.employees.filter(e => e.status !== 'متوقف');
   const dm = payMonthFor(today());
-  if (ab.y == null) { ab.y = dm.y; ab.m = dm.m; }
   const D = ab.draft;
   const places = [...new Set([...Q().placeNames(), ...p.employees.map(e => e.place).filter(Boolean), ...p.absences.map(a => a.place).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'ar'));
   const chip = (name, v, cur) => `<label class="chip-r chip-t"><input type="radio" name="${name}" value="${esc(v)}" ${cur === v ? 'checked' : ''}><span>${esc(v)}</span></label>`;
-  const form = !emps.length ? `<div class="card">${empty(isAdmin ? 'لا يوجد معلمون في سجل الموظفين. أضفهم من «المرتبات ← الموظفون».' : 'لا يوجد معلمون مسجلون بعد. تواصل مع الإدارة.')}</div>` : `
-  <div class="card absform" id="absform"><h2>تسجيل غياب معلم</h2>
+  if (!emps.length) return `<h2>تسجيل غياب</h2>${empty(isAdmin ? 'لا يوجد عاملون في سجل الموظفين. أضفهم من «المرتبات ← الموظفون».' : 'لا يوجد عاملون مسجلون بعد. تواصل مع الإدارة.')}`;
+  return `<h2>تسجيل غياب</h2>
     <fieldset class="tfs"><legend>بيانات الغياب</legend>
-      <div class="combo"><label>اسم المعلم <b class="req">*</b><input name="ename" data-pay="absEmpQ" value="${esc(emp(D.eid)?.name || D.ename || '')}" placeholder="اكتب جزءًا من الاسم واختر من القائمة" autocomplete="off"></label><input type="hidden" name="eid" value="${esc(D.eid || '')}"><div class="results" id="absEmpRes" hidden></div></div>
+      <div class="combo"><label>اسم العامل <b class="req">*</b><input name="ename" data-pay="absEmpQ" value="${esc(emp(D.eid)?.name || D.ename || '')}" placeholder="اكتب جزءًا من الاسم واختر من القائمة" autocomplete="off"></label><input type="hidden" name="eid" value="${esc(D.eid || '')}"><div class="results" id="absEmpRes" hidden></div></div>
       <div class="two"><label>اليوم <b class="req">*</b><input type="date" name="date" value="${esc(D.date || today())}" data-pay="absDate"></label><label>شهر المرتب<select name="pm">${Array.from({ length: 12 }, (_, i) => i + 1).map(m => `<option value="${m}" ${m === (D.pm || dm.m) ? 'selected' : ''}>شهر (${m}) ${D.py || dm.y}</option>`).join('')}</select></label></div>
       <p class="muted daynm" style="margin:-.4rem 0 .7rem;font-size:.85rem">${esc(dayName(D.date || today()))}</p>
       <label>مكان الحلقة <b class="req">*</b><select name="place" data-pay="absPlace"><option value="">— اختر —</option>${places.map(x => `<option ${D.place === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}<option value="__other" ${D.place === '__other' ? 'selected' : ''}>مكان آخر…</option></select></label>
@@ -200,15 +201,29 @@ function absView() {
       <label>ملاحظات <span class="muted">(اختياري)</span><textarea name="note" rows="2">${esc(D.note || '')}</textarea></label>
       ${canProof ? `<label>الإثبات<select name="proof" data-pay="absProofF"><option value="">— لاحقًا —</option><option ${D.proof === 'رصيد' ? 'selected' : ''}>رصيد</option>${khasmOK() ? `<option ${D.proof === 'خصم' ? 'selected' : ''}>خصم</option>` : ''}<option ${D.proof === 'مثبت' ? 'selected' : ''}>مثبت</option></select></label>` : ''}
     </fieldset>
-    <div class="row"><button type="button" class="btn primary" data-act="absSubmit">تسجيل الغياب</button><button type="button" class="btn" data-act="absReset">مسح النموذج</button></div>
-  </div>`;
+    <div class="row"><button type="button" class="btn primary" data-act="absSubmit">تسجيل الغياب</button><button type="button" class="btn" data-act="absReset">مسح النموذج</button></div>`;
+}
+function absOpen() {
+  document.querySelector('.overlay[data-absov]')?.remove();
+  const ov = document.createElement('div'); ov.className = 'overlay'; ov.dataset.absov = '';
+  ov.innerHTML = `<div class="modal absform" id="absform">${absFormHTML()}</div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+  absAuto();
+}
+const absClose = () => document.querySelector('.overlay[data-absov]')?.remove();
+function absView() {
+  const { esc, empty, today } = Q(), p = P(), role = Q().session?.role, isAdmin = role === 'admin', canProof = proofRole();
+  const dm = payMonthFor(today());
+  if (ab.y == null) { ab.y = dm.y; ab.m = dm.m; }
+  const form = `<div class="absopen-bar"><button type="button" class="btn primary" data-act="absOpen">+ تسجيل غياب</button></div>`;
   const list = p.absences.filter(a => a.y === ab.y && a.m === ab.m).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.ts || '').localeCompare(String(a.ts || '')));
   const myName = Q().me()?.name, myId = Q().session?.id;
   const by = new Map();
   list.forEach(a => { const k = a.eid; if (!by.has(k)) by.set(k, { name: emp(k)?.name || a.name, n: 0, p: 0, np: 0 }); const o = by.get(k); o.n++; if (a.perm === 'بإذن') o.p++; if (a.perm === 'بغير إذن') o.np++; });
   const sum = [...by.values()].sort((a, b) => b.n - a.n);
   const ys = [...new Set([ab.y, ...p.absences.map(a => a.y), new Date().getFullYear()])].sort((a, b) => b - a);
-  return `<div class="abs-grid">${form}
+  return `${form}<div class="abs-grid">
   <div class="card"><div class="bar"><h2 class="grow" style="margin:0">سجل الغياب</h2>
     <select data-pay="abY">${ys.map(y => `<option ${y === ab.y ? 'selected' : ''}>${y}</option>`).join('')}</select>
     <select data-pay="abM">${Array.from({ length: 12 }, (_, i) => i + 1).map(m => `<option value="${m}" ${m === ab.m ? 'selected' : ''}>شهر (${m})</option>`).join('')}</select>
@@ -307,20 +322,21 @@ const act = {
   absSubmit: () => {
     const D = absRead(), p = P(), { toast, uid, today } = Q();
     const e = emp(D.eid);
-    if (!e) { toast('اختر اسم المعلم من القائمة'); document.querySelector('#absform [name=ename]')?.focus(); return; }
+    if (!e) { toast('اختر اسم العامل من القائمة');document.querySelector('#absform [name=ename]')?.focus(); return; }
     if (!D.date) { toast('حدّد اليوم'); return; }
     const place = D.place === '__other' ? D.placeOther : D.place;
     if (!place) { toast('اختر مكان الحلقة'); return; }
     const reason = D.reason === 'أخرى' ? D.reasonOther : D.reason;
     if (!reason) { toast(D.reason === 'أخرى' ? 'اكتب السبب' : 'اختر السبب'); return; }
-    if (p.absences.some(a => a.eid === e.id && a.date === D.date)) { toast('غياب هذا المعلم في هذا اليوم مسجّل بالفعل'); return; }
+    if (p.absences.some(a => a.eid === e.id && a.date === D.date)) { toast('غياب هذا العامل في هذا اليوم مسجّل بالفعل'); return; }
     const pmM = D.pm || payMonthFor(D.date).m, pmY = D.pm ? absYear(+D.pm, D.date) : payMonthFor(D.date).y;
     p.absences.push({ id: uid(), y: pmY, m: pmM, date: D.date, eid: e.id, name: e.name, place, perm: D.perm, reason, proof: proofRole() ? D.proof : '', note: D.note, ts: new Date().toISOString(), by: Q().me()?.name || '', byMember: Q().session?.id || '' });
     ab.draft = { date: D.date, pm: D.pm, place: D.place, placeOther: D.placeOther };
     ab.y = pmY; ab.m = D.pm || ab.m;
-    Q().save(); Q().render(); toast('تم تسجيل غياب ' + e.name);
+    absClose(); Q().save(); Q().render(); toast('تم تسجيل غياب ' + e.name);
   },
-  absReset: () => { ab.draft = {}; Q().render(); },
+  absOpen: () => absOpen(),
+  absReset: () => { ab.draft = {}; if (document.querySelector('.overlay[data-absov]')) absOpen(); else Q().render(); },
   absPick: d => absPick(d.id),
   payDelAbs: d => Q().ask('حذف سجل الغياب؟', () => { const p = P(); p.absences = p.absences.filter(a => a.id !== d.id); Q().save(); Q().render(); }),
   paySet: () => {
@@ -556,6 +572,8 @@ document.addEventListener('click', e => {
   .absbal.ok{color:#1f6b3a;border-color:#9fd1b0;background:transparent}.absbal.no{color:#9a3b30;border-color:#e6b0aa;background:transparent}
   /* العمود لا يتسع بعرض جدول السجل (كان يجعل الصفحة أعرض من الجوال فيصغّرها المتصفح كلها): الجدول يتمرر داخل إطاره */
   .abs-grid{grid-template-columns:minmax(0,1fr)}.abs-grid > *{min-width:0}
-  @media (min-width:1101px){.abs-grid{grid-template-columns:minmax(300px,400px) minmax(0,1fr)}}`; document.head.appendChild(c); }
+  /* زر «تسجيل غياب» على يسار الصفحة تحت التبويبات، والاستمارة في نافذة منبثقة */
+  .absopen-bar{display:flex;justify-content:flex-end;margin:0 0 1rem}
+  .modal.absform{max-width:520px;position:static}`; document.head.appendChild(c); }
 window.Payroll = { view, absView, act, onInput, onChange, calc, newRow: (e, y, m) => rowFrom(e, y, m, prevMonthRows(y, m)), isClosed: (y, m) => isClosed(y, m) };
 })();

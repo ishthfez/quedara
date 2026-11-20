@@ -161,7 +161,7 @@
       const vis = r => (r ? [...r.querySelectorAll('td, td > *, button, select')].map(e => (hidden(e) ? 0 : 1)).join('') : '');
       /* محتوى الخلايا دون سماتها: تثبيت عمود الاسم (stk-c وموضعه) يغيّر سمات الخلية فقط، فلا يعيد بناء البطاقات */
       const inner = r => (r ? [...r.cells].reduce((a, c) => a + c.innerHTML.length, 0) : 0);
-      const wrap = tbl.parentElement, sig = [tbl.rows.length, H.join(','), inner(r1), inner(rN), vis(r1), (r1?.textContent || '').slice(0, 30)].join('|');
+      const wrap = tbl.parentElement, sig = [tbl.rows.length, H.join(','), inner(r1), inner(rN), vis(r1), (r1?.textContent || '').slice(0, 30), tbl.querySelectorAll('tr.pgx').length].join('|');
       /* البطاقات بعد الجدول، وقد يفصل بينهما سطر «عرض المزيد» (pager.js): يُبحث في الإخوة التالية حتى الجدول التالي،
          وتُحذف أي نسخة زائدة (كانت تُبنى نسخة ثانية فتظهر القائمة مرتين) */
       const found = [];
@@ -177,7 +177,7 @@
       [...tbl.rows].slice(1).forEach(r => {
         if (!r.cells.length || r.classList.contains('sum')) return;
         const nm = cell(r, 'الاسم'); if (!nm) return;
-        const card = document.createElement('div'); card.className = 'qsc';
+        const card = document.createElement('div'); card.className = r.classList.contains('pgx') ? 'qsc pgx' : 'qsc';   // ما أخفاه «المزيد» (pager.js) يُخفى من البطاقات أيضًا
         const top = document.createElement('div'); top.className = 'qsc-t';
         const name = document.createElement('div'); name.className = 'qsc-n'; [...nm.childNodes].forEach(n => name.appendChild(n.nodeType === 1 ? cloneLive(n) : n.cloneNode(true)));
         /* أزرار الصف كلها في زر «خيارات» واحد (⋮) يفتح قائمة بأسمائها، بدل صف أزرار بجانب الاسم */
@@ -285,6 +285,7 @@
     @media (max-width:640px){
       main .card .tbl:has(~ .qscards){display:none!important}
       .qscards{display:block}
+      .qsc.pgx{display:none}
       .qsc{padding:.6rem .15rem;border-top:1px solid var(--line,#eee6d6)}.qscards .qsc:first-child{border-top:0}
       .qsc-t{display:flex;align-items:flex-start;gap:.5rem}.qsc-n{flex:1;min-width:0;font-weight:700}.qsc-n .who{gap:.45rem}
       .qsc-a{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.3rem;max-width:58%}.qsc-a .btn{padding:.22rem .55rem!important;min-height:0!important;font-size:.8rem;margin:0!important}

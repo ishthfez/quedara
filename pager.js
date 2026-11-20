@@ -19,28 +19,32 @@
   const pageKey = () => `${session?.role}|${view()}|${ui.msub || ''}|${ui.svw || ''}`;
   const firstData = t => { const i = [...t.rows].findIndex(r => [...r.cells].some(x => x.tagName === 'TD')); return i < 0 ? t.rows.length : i; };
   const sig = new WeakMap();   // جدول لم يتغير منذ آخر مرة لا يُعاد فحصه (المراقب يعمل مع كل تغيير في الصفحة)
+  /* سطر الأزرار بعد الجدول، أو بعد بطاقات الطلاب على الهاتف (uix.js) حتى يكون في نهاية القائمة لا في أولها */
+  const afterCards = wrap => { let n = wrap; while (n.nextElementSibling?.classList?.contains('qscards')) n = n.nextElementSibling; return n; };
+  const lineOf = wrap => { const n = afterCards(wrap).nextElementSibling; return n?.classList?.contains('pgmore') ? n : null; };
+  const tableOf = box => { let n = box.previousElementSibling; while (n?.classList?.contains('qscards')) n = n.previousElementSibling; return n?.querySelector?.('table') || n; };
   function apply(t, key, force, skip) {
     t.classList.add('pgok');
     if (skip) return;
     const wrap = t.closest('.tbl') || t;
     const lim = limits.get(key) || STEP;
-    if (!force && t.rows.length <= STEP + 3 && !(wrap.nextElementSibling?.classList?.contains('pgmore'))) return;
+    if (!force && t.rows.length <= STEP + 3 && !lineOf(wrap)) return;
     const rows = [...t.rows].slice(firstData(t)).filter(r => !r.classList.contains('sum'));
     const cand = rows.filter(r => !r.hidden && r.style.display !== 'none');
     const k = `${key}|${rows.length}|${cand.length}|${lim}|${rows[0]?.rowIndex}`;
     if (!force && sig.get(t) === k) return;
     sig.set(t, k);
     rows.forEach(r => r.classList.remove('pgx'));
-    let btn = wrap.nextElementSibling?.classList?.contains('pgmore') ? wrap.nextElementSibling : null;
+    let btn = lineOf(wrap);
     if (cand.length <= STEP || lim >= cand.length) {
       if (btn && cand.length <= STEP) btn.remove();
-      else if (btn) setHtml(btn, `<small>يظهر الكل: ${cand.length}</small><button type="button" class="btn sm" data-pgless>عرض أقل</button>`);
+      else if (btn) { btn.dataset.lim = lim; setHtml(btn, `<button type="button" class="btn sm" data-pgless>عرض أقل</button>`); }
       return;
     }
     cand.slice(lim).forEach(r => r.classList.add('pgx'));
-    if (!btn) { btn = document.createElement('div'); btn.className = 'pgmore noprint'; wrap.after(btn); }
-    btn.dataset.pgkey = key;
-    setHtml(btn, `<small>يظهر ${lim} من ${cand.length}</small><button type="button" class="btn sm primary" data-pgmore>عرض المزيد (${Math.min(STEP, cand.length - lim)})</button><button type="button" class="btn sm" data-pgall>عرض الكل</button>`);
+    if (!btn) { btn = document.createElement('div'); btn.className = 'pgmore noprint'; afterCards(wrap).after(btn); }
+    btn.dataset.pgkey = key; btn.dataset.lim = lim;   // toolbar.js يحسب منه عدد «المزيد» حين تُجلب بقية الطلاب
+    setHtml(btn, `<button type="button" class="btn sm primary" data-pgmore>المزيد (${Math.min(STEP, cand.length - lim)})</button><button type="button" class="btn sm" data-pgall>الكل (${cand.length})</button>`);
   }
   /* لا يُعاد رسم الزر إن لم يتغير (وإلا أعاد المراقب التشغيل بلا نهاية) */
   const setHtml = (el, h) => { if (el.dataset.h !== h) { el.dataset.h = h; el.innerHTML = h; } };
@@ -60,7 +64,7 @@
   document.addEventListener('input', () => setTimeout(() => { document.querySelectorAll('.tbl table').forEach(t => sig.delete(t)); later(); }, 0));
   document.addEventListener('click', e => {
     const b = e.target.closest('.pgmore button'); if (!b) return;
-    const box = b.closest('.pgmore'), key = box.dataset.pgkey, t = box.previousElementSibling?.querySelector?.('table') || box.previousElementSibling;
+    const box = b.closest('.pgmore'), key = box.dataset.pgkey, t = tableOf(box);
     const total = t ? [...t.rows].slice(firstData(t)).filter(r => !r.classList.contains('sum') && !r.hidden && r.style.display !== 'none').length : 0;
     if (b.matches('[data-pgmore]')) limits.set(key, (limits.get(key) || STEP) + STEP);
     else if (b.matches('[data-pgall]')) limits.set(key, total);

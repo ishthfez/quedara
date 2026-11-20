@@ -304,7 +304,10 @@
         if (sm) { const shown = +((sm.textContent.match(/(\d+)/) || [])[1] || 0), all = /الكل/.test(sm.textContent); const t = `يظهر ${shown} من ${N}`; if (sm.textContent !== t && (all || shown)) sm.textContent = t; }
         if (!line.querySelector('[data-qstall]')) {
           const more = !line.querySelector('[data-pgmore]');
-          line.insertAdjacentHTML('beforeend', `<button type="button" class="btn sm ${more ? 'primary' : ''}" data-qstall>${more ? 'عرض المزيد' : 'عرض الكل'} </button>`);
+          /* عدد «المزيد»: الضغطة تجلب بقية الطلاب ثم يضيف pager.js خمسين على حدّه الحالي (line.dataset.lim)، فيُطرح المعروض الآن */
+          let w = line.previousElementSibling; while (w?.classList?.contains('qscards')) w = w.previousElementSibling;
+          const tb = w?.querySelector?.('table'), shown = tb ? [...tb.rows].filter(r => r.querySelector('td') && !r.classList.contains('sum') && !r.classList.contains('pgx')).length : 0;
+          line.insertAdjacentHTML('beforeend', `<button type="button" class="btn sm ${more ? 'primary' : ''}" data-qstall>${more ? `المزيد (${Math.max(1, Math.min(N, (+line.dataset.lim || 50) + 50) - shown)})` : `الكل (${N})`}</button>`);
         }
       }
     }
