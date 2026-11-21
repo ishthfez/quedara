@@ -1,9 +1,11 @@
 'use strict';
 /* الجزء الثالث: الإجراءات، وأحداث الصفحة، وقاعدة البيانات، والتشغيل */
-/* كلمة المرور 10 خانات: بادئة بحسب النوع + 6 أرقام (tech للمعلم، mang للمدير، stud للطالب، supe للمشرف، acnt للمحاسب) */
-const PASS_PREFIX = { teacher: 'tech', teachers: 'tech', admin: 'mang', admins: 'mang', student: 'stud', students: 'stud', supervisor: 'supe', supervisors: 'supe', accountant: 'acnt', accountants: 'acnt' };
-const PASS_RE = /^(tech|mang|stud|supe|acnt)\d{6}$/;
-const genPassK = kind => (PASS_PREFIX[kind] || 'user') + genPass();
+/* كلمة المرور الجديدة: حرفان للفئة + 8 أرقام عشوائية (te معلم، ma مدير، st طالب، su مشرف، ac محاسب، pa إداري)،
+   كانت 4 أحرف معروفة + 6 أرقام (900 ألف احتمال فقط لكل فئة، والفئة تُعرف من صفحة الدخول) فيسهل تخمينها.
+   الصيغة القديمة تبقى مقبولة للحسابات الموجودة، ولا تتغيّر كلمة أحد إلا بإنشاء كلمة جديدة له */
+const PASS_PREFIX = { teacher: 'te', teachers: 'te', admin: 'ma', admins: 'ma', student: 'st', students: 'st', supervisor: 'su', supervisors: 'su', accountant: 'ac', accountants: 'ac' };
+const PASS_RE = /^((tech|mang|stud|supe|acnt)\d{6}|(te|ma|st|su|ac|pa)\d{8})$/;
+const genPassK = kind => (PASS_PREFIX[kind] || 'us') + genDigits8();
 TAB_ICONS.print = svg('<path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/>');
 /* إعادة الرسم تحفظ موضع التمرير داخل الجداول: إن رُسم الجدول نفسه (نفس رأسه) يعود إلى موضعه بدل القفز للأعلى */
 const renderBase = render;
@@ -66,10 +68,17 @@ const A = {
     if (acc.pin === cur.pin) { go(); return; }
     openForm('كلمة مرور حساب ' + ROLE_L[d.r], [{ name: 'pin', label: 'كلمة المرور', type: 'password', required: true }], v => { if (v.pin !== acc.pin) return 'كلمة المرور غير صحيحة'; go(); });
   },
-  logout: () => {
-    ui.shown = {}; ui.pick = null; session = null; ss.del(SKEY); ss.del('halaqat_tab'); try { localStorage.removeItem('halaqat_tab_l'); } catch (e) { /* ignore */ } ui.tab = null; ui.sel = new Set();
-    if (CLOUD) { const s = db.settings; window.Cloud.signOut(); db = migrate({ ...window.Cloud.emptyDb(), settings: s }); }
-    render();
+  /* d موجود حين يضغط المستخدم «خروج» (فتُمسح بياناته من الجهاز)، وغائب حين يُخرَج تلقائيًا (انتهاء الجلسة: لا يُمسح شيء) */
+  logout: async d => {
+    const explicit = !!d;
+    if (explicit && CLOUD && session && window.Cloud.pendingCount(db)) {
+      try { await window.Cloud.push(db); } catch (e) { /* بلا اتصال */ }
+      if (window.Cloud.pendingCount(db)) {
+        ask('توجد تعديلات على هذا الجهاز لم تصل للخادم بعد (لا يوجد اتصال). الخروج الآن يحذفها نهائيًا. هل تخرج؟', () => doLogout(true));
+        return;
+      }
+    }
+    doLogout(explicit);
   },
   tab: d => { ui.tab = d.v; ui.nav = false; saveTab(); render(); window.scrollTo(0, 0); },
   navToggle: () => { ui.nav = !ui.nav; document.querySelector('.shell')?.classList.toggle('open', ui.nav); },
@@ -208,7 +217,8 @@ const A = {
       a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
       a.download = `halaqat-backup-${today()}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch (e) { /* بعض البيئات تمنع التنزيل */ }
-    /* بديل يعمل في كل مكان: النص كاملًا للنسخ واللصق */
+    /* بديل يعمل في كل مكان: النص كاملًا للنسخ واللصق — للنسخ الصغيرة فقط: عدة ميجابايت في مربع نص كانت تجمّد الهاتف */
+    if (json.length > 500 * 1024) { openInfo('النسخة الاحتياطية', `<p>بدأ تنزيل الملف <b dir="ltr">halaqat-backup-${today()}.json</b> (${Math.round(json.length / 1024 / 1024 * 10) / 10} م.ب). احفظه بأمان: فيه كلمات المرور والمرتبات.</p><p class="muted">النسخة أكبر من أن تُعرض نصًا للنسخ. إن لم يبدأ التنزيل فاستخدم «النسخ الاحتياطية» ← «تنزيل نسخة كاملة الآن» من الخادم.</p>`); return; }
     openInfo('النسخة الاحتياطية', `<p class="muted">إن لم يبدأ التنزيل، انسخ النص كاملًا واحفظه أو أرسله لنفسك، ثم استخدم «لصق نسخة» على الجهاز الآخر. النص يحتوي كلمات المرور والمرتبات فاحفظه بأمان.</p><textarea id="bk" rows="7" readonly dir="ltr" style="font-family:ui-monospace,monospace;font-size:.72rem">${esc(json)}</textarea><div class="row"><button class="btn primary" data-act="copyBackup">نسخ الكل</button><span class="muted" style="align-self:center">${Math.round(json.length / 1024)} ك.ب</span></div>`);
   },
   copyBackup: () => {
@@ -827,9 +837,11 @@ function dupDialog(manual) {
   const ov = document.createElement('div'); ov.className = 'overlay'; ov.id = 'dupdlg';
   ov.innerHTML = `<div class="modal wide"><h2>أسماء متشابهة (${gs.length})</h2>
     <p class="muted" style="margin-top:0">اختر في كل مجموعة الاسم الذي يبقى، وتُنقل إليه بيانات الباقين (الحلقات والحضور والتسميع والمرتبات) ثم يُحذفون. ألغِ تحديد «دمج» لتتركها هذه المرة، أو «تجاهل» حتى لا تُقترح ثانية.</p>
-    ${gs.map((g, gi) => `<div class="dupg" data-g="${gi}"><div class="bar" style="margin:0 0 .4rem"><b class="grow">${esc(g.lbl)}</b>
-      <label class="chk" style="margin:0"><input type="checkbox" data-merge checked> دمج</label><label class="chk" style="margin:0"><input type="checkbox" data-ignore> تجاهل</label></div>
-      ${g.items.map((m, i) => `<label class="chk dupi"><input type="radio" name="keep${gi}" value="${esc(m.id)}" ${i === 0 ? 'checked' : ''}> <span><b>${esc(m.name)}</b> <small class="muted">${esc(info(g.k, m) || '')}</small></span></label>`).join('')}</div>`).join('')}
+    ${gs.map((g, gi) => { const exact = g.items.every(m => norm(m.name).replace(/\s/g, '') === norm(g.items[0].name).replace(/\s/g, ''));
+      /* الاسم المطابق تمامًا يُحدَّد للدمج مسبقًا، والتشابه الجزئي (محمد علي / محمد حسن علي) قد يكون شخصين: لا يُدمج إلا باختيار صريح */
+      return `<div class="dupg" data-g="${gi}"><div class="bar" style="margin:0 0 .4rem"><b class="grow">${esc(g.lbl)} ${exact ? '<small class="tag tag-ok">مطابق تمامًا</small>' : '<small class="tag tag-no">تشابه جزئي — تأكد أنه الشخص نفسه</small>'}</b>
+      <label class="chk" style="margin:0"><input type="checkbox" data-merge ${exact ? 'checked' : ''}> دمج</label><label class="chk" style="margin:0"><input type="checkbox" data-ignore> تجاهل</label></div>
+      ${g.items.map((m, i) => `<label class="chk dupi"><input type="radio" name="keep${gi}" value="${esc(m.id)}" ${i === 0 ? 'checked' : ''}> <span><b>${esc(m.name)}</b> <small class="muted">${esc(info(g.k, m) || '')}</small></span></label>`).join('')}</div>`; }).join('')}
     <div class="row"><button type="button" class="btn primary" data-dupok>تنفيذ</button><button type="button" class="btn" data-close>لاحقًا</button></div></div>`;
   document.body.appendChild(ov);
   ov.querySelector('[data-close]').onclick = () => ov.remove();
@@ -839,14 +851,26 @@ function dupDialog(manual) {
     /* قوائم التحصيل تُحفظ على الخادم بدوالها (لا بالمزامنة)، فلا ينقلها الدمج: من في قائمة تحصيل لم تُؤكَّد بعد لا يُدمج حتى تُراجَع،
        وإلا ضاعت دفعته (يتخطى المحاسب سطرًا طالبه محذوف) أو بقيت قائمة المعلم بلا صاحب */
     const inOpenColl = (k, id) => (db.collections || []).some(c => c.status !== 'done' && (k === 'teachers' ? c.teacherId === id : k === 'students' && (c.lines || []).some(l => l.studentId === id)));
-    gs.forEach((g, gi) => {
-      const box = ov.querySelector(`.dupg[data-g="${gi}"]`);
-      if (box.querySelector('[data-ignore]').checked) { db.settings.dupIgnore = [...dupIgnored(), g.key]; ignored++; return; }
-      if (!box.querySelector('[data-merge]').checked) return;
+    const failed = [];
+    for (let gi = 0; gi < gs.length; gi++) {
+      const g = gs[gi], box = ov.querySelector(`.dupg[data-g="${gi}"]`);
+      if (box.querySelector('[data-ignore]').checked) { db.settings.dupIgnore = [...dupIgnored(), g.key]; ignored++; continue; }
+      if (!box.querySelector('[data-merge]').checked) continue;
       const keepId = box.querySelector(`[name=keep${gi}]:checked`).value, keep = g.items.find(m => m.id === keepId);
-      g.items.filter(m => m.id !== keepId).forEach(d => { if (inOpenColl(g.k, d.id)) { held.push(d.name); return; } if (g.k !== 'payroll' && d.hasLogin) unlink.push(d.id); dupMerge(g.k, keep, d); merged++; });
-    });
+      for (const d of g.items.filter(m => m.id !== keepId)) {
+        if (inOpenColl(g.k, d.id)) { held.push(d.name); continue; }
+        /* ما لا يصل للجهاز بالمزامنة (الاختبارات والبرامج والدورات والتحويلات وملاحظات المشرف وقوائم التحصيل وربط المرتبات)
+           يُنقل على الخادم أولًا؛ وإلا حُذف مع العضو المحذوف. إن تعذّر النقل لا يُدمج هذا العضو */
+        if (CLOUD && g.k !== 'payroll') {
+          try { await window.Cloud.rpc('merge_members_extra', { keep_id: keep.id, drop_id: d.id }); }
+          catch (err) { failed.push(d.name); continue; }
+        }
+        if (g.k !== 'payroll' && d.hasLogin) unlink.push(d.id);
+        dupMerge(g.k, keep, d); merged++;
+      }
+    }
     if (held.length) setTimeout(() => toast(`لم يُدمج ${held.length} (${held.slice(0, 3).join('، ')}${held.length > 3 ? '…' : ''}): في قائمة تحصيل لم تُراجَع بعد — راجعها أولًا ثم ادمج`), 1500);
+    if (failed.length) setTimeout(() => toast(`لم يُدمج ${failed.length} (${failed.slice(0, 3).join('، ')}${failed.length > 3 ? '…' : ''}): تعذّر نقل بياناته على الخادم — تأكد من الاتصال ثم أعد المحاولة`), 3000);
     for (const id of unlink) { try { await window.Cloud.fn({ action: 'remove', member_id: id }); } catch (err) { /* يبقى الحساب يتيمًا بلا ضرر */ } }
     save(); ov.remove(); render();
     toast(`تم: دمج ${merged}${ignored ? ` وتجاهل ${ignored} مجموعة` : ''}`);
@@ -882,6 +906,11 @@ function delMembersDialog(kind, ids) {
   const list = ids.map(id => byId(db[kind] || [], id)).filter(Boolean);
   const skip = kind === 'admins' ? list.filter(a => a.id === session.id) : [];
   let del = list.filter(m => !skip.includes(m));
+  /* الطالب الذي له مدفوعات مسجّلة لا يُحذف (كان حذفه يمسح مدفوعاته من الإيرادات)؛ يُجعل «منقطع» بدلًا من ذلك */
+  const paidIds = kind === 'students' ? new Set((db.fees || []).map(f => f.studentId)) : new Set();
+  const keepPaid = del.filter(m => paidIds.has(m.id));
+  del = del.filter(m => !paidIds.has(m.id));
+  if (!del.length && keepPaid.length) { toast(keepPaid.length === 1 ? `لا يمكن حذف «${keepPaid[0].name}» لأن له مدفوعات مسجّلة؛ اجعله «منقطع» بدلًا من الحذف` : 'لا يمكن حذف هؤلاء الطلاب لأن لهم مدفوعات مسجّلة؛ اجعلهم «منقطع» بدلًا من الحذف'); return; }
   if (kind === 'admins' && db.admins.length - del.length < 1) { toast('لا بد أن يبقى مدير واحد على الأقل'); return; }
   if (!del.length) { toast('لا يمكنك حذف حسابك الحالي'); return; }
   const one = KIND_ONE[kind] || 'عضو';
@@ -889,7 +918,8 @@ function delMembersDialog(kind, ids) {
   ov.innerHTML = `<div class="modal"><h2>حذف ${del.length === 1 ? '«' + esc(del[0].name) + '»' : del.length + ' ' + one}</h2>
     ${del.length > 1 ? `<div class="note" style="max-height:140px;overflow:auto">${del.map(m => esc(m.name)).join('، ')}</div>` : ''}
     ${skip.length ? '<p class="muted">حسابك الحالي لن يُحذف.</p>' : ''}
-    <p class="muted" style="margin-top:0">${kind === 'students' ? 'تُحذف معه سجلات الحضور والتسميع. ' : kind === 'teachers' ? 'تبقى حلقاته بلا معلم. ' : kind === 'supervisors' ? 'تبقى حلقاته بلا مشرف. ' : ''}${CLOUD ? 'ويُحذف حساب الدخول.' : ''}</p>
+    ${keepPaid.length ? `<div class="note">لن يُحذف ${keepPaid.length === 1 ? '«' + esc(keepPaid[0].name) + '»' : keepPaid.length + ' طالبًا'} لأن له مدفوعات مسجّلة؛ اجعله «منقطع» بدلًا من الحذف.${keepPaid.length > 1 ? '<br><small>' + keepPaid.map(m => esc(m.name)).join('، ') + '</small>' : ''}</div>` : ''}
+    <p class="muted" style="margin-top:0">${kind === 'students' ? 'تُحذف معه نهائيًا سجلات الحضور والتسميع والاختبارات والبرامج والتحويلات وملاحظات المشرف. ' : kind === 'teachers' ? 'تبقى حلقاته بلا معلم. ' : kind === 'supervisors' ? 'تبقى حلقاته بلا مشرف. ' : ''}${CLOUD ? 'ويُحذف حساب الدخول.' : ''}</p>
     <label>كلمة مرورك للتأكيد<input name="pw" type="password" autocomplete="current-password"></label>
     <div class="row"><button type="button" class="btn danger" data-go>حذف</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
   document.body.appendChild(ov);
@@ -920,6 +950,12 @@ function delMembersDialog(kind, ids) {
   const btn = ov.querySelector('[data-go]');
   btn.onclick = () => { if (!btn.classList.contains('loading')) withBusy(btn, run()); };
   ov.querySelector('[name=pw]').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); btn.click(); } });
+}
+
+function doLogout(wipe) {
+  ui.shown = {}; ui.pick = null; session = null; ss.del(SKEY); ss.del('halaqat_tab'); try { localStorage.removeItem('halaqat_tab_l'); } catch (e) { /* ignore */ } ui.tab = null; ui.sel = new Set();
+  if (CLOUD) { const s = db.settings; window.Cloud.signOut({ wipe }); db = migrate({ ...window.Cloud.emptyDb(), settings: s }); }
+  render();
 }
 
 /* ============ عين إظهار كلمة المرور ============ */
@@ -1078,11 +1114,13 @@ function printTable(tbl) {
 /* ============ التحديث التلقائي عند توفّر نسخة جديدة ============
    يقارن بصمة ملفات التطبيق على الخادم؛ إن تغيّرت (نُشر تحديث) يُعاد التحميل تلقائيًا
    بعد إرسال أي تغييرات معلّقة، ولا يقاطع نافذة مفتوحة أو حقلًا قيد الكتابة. */
-const VFILES = ['./index.html', './style.css', './app.js', './app-forms.js', './fees.js', './perms.js', './accountant.js', './app-actions.js', './payroll.js', './cloud.js'];
+/* version.txt يكتبه النشر (deploy.yml) بمعرّف الـ commit: يتغيّر مع كل نشر أيًّا كان الملف المعدَّل
+   (كانت ملفات خارج هذه القائمة لا يُكتشف تعديلها)، وغيابه (نشر بطريقة أخرى) لا يعطّل الفحص */
+const VFILES = ['./version.txt', './index.html', './style.css', './app.js', './app-forms.js', './fees.js', './perms.js', './accountant.js', './app-actions.js', './payroll.js', './cloud.js'];
 let verBase = null, verBusy = false, updWait = null;
 async function verSig() {
   const parts = await Promise.all(VFILES.filter(f => !/^(\.\/)?([a-z]+:)?\/\//i.test(f)).map(f => fetch(f + '?v=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
-    .then(r => (r.ok ? r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || '' : null)).catch(() => null)));
+    .then(r => (r.ok ? r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || '' : /version\.txt$/.test(f) ? '' : null)).catch(() => null)));
   return parts.some(p => p === null) ? null : parts.join('|');
 }
 /* كل فحص يرسل طلبًا لكل ملف من ملفات التطبيق (نحو 70)، وكل طلب يُحسب من «CDN Requests» في باقة Vercel.
@@ -1140,7 +1178,7 @@ function wipeAll() {
       if (!a) { toast('اسم المدير أو كلمة المرور غير صحيحة'); return; }
       /* كما يقول التنبيه وكما في المسح على الخادم: تبقى حسابات الإداريين والمظهر.
          كان db = seed() يستبدل كل شيء ببيانات التجربة، ومنها مدير تجريبي بكلمة 1234 مكان المديرين الحقيقيين */
-      Object.assign(db, { supervisors: [], teachers: [], students: [], places: [], halaqat: [], attendance: [], records: [], news: [], pending: [], fields: { students: [], teachers: [] } });
+      Object.assign(db, { supervisors: [], teachers: [], students: [], places: [], halaqat: [], attendance: [], records: [], news: [], pending: [], fees: [], fields: { students: [], teachers: [] } });
       if (db.payroll) db.payroll = { settings: db.payroll.settings || {}, employees: [], rows: [], absences: [], closed: [] };
       session = null; ss.del(SKEY); save(); ov.remove(); render(); toast('تم مسح كل البيانات');
       return;
@@ -1156,7 +1194,7 @@ function wipeAll() {
       await Promise.all(withLogin.slice(i, i + 5).map(m => window.Cloud.fn({ action: 'remove', member_id: m.id }).catch(() => null)));
       toast(`حذف حسابات الدخول: ${Math.min(i + 5, withLogin.length)} من ${withLogin.length}`);
     }
-    Object.assign(db, { supervisors: [], teachers: [], students: [], places: [], halaqat: [], attendance: [], records: [], news: [], pending: [], fields: { students: [], teachers: [] } });
+    Object.assign(db, { supervisors: [], teachers: [], students: [], places: [], halaqat: [], attendance: [], records: [], news: [], pending: [], fees: [], fields: { students: [], teachers: [] } });
     if (db.payroll) db.payroll = { settings: db.payroll.settings || {}, employees: [], rows: [], absences: [], closed: [] };
     save();
     try { await window.Cloud.push(db); } catch (e) { toast('تعذّر إكمال المسح: ' + (e.message || e)); return; }
@@ -1230,7 +1268,8 @@ const splash = document.getElementById('splash');
 const afterSplash = ms => setTimeout(() => { installReady = true; maybeInstallPop(); if (session?.role === 'admin') dupOnce(); }, ms);
 if (splash) {
   if (session) { splash.remove(); afterSplash(2000); }
-  else setTimeout(() => { splash.classList.add('hide'); setTimeout(() => splash.remove(), 700); afterSplash(2000); }, 3000);
+  /* شاشة البداية قبل صفحة الدخول ثانية واحدة (كانت 3 ثوانٍ ثابتة + 0.7 للاختفاء في كل فتح) */
+  else setTimeout(() => { splash.classList.add('hide'); setTimeout(() => splash.remove(), 700); afterSplash(2000); }, 1000);
 } else afterSplash(2000);
 /* اقتراح الدمج يظهر للمدير مرة واحدة في كل جلسة إن وُجدت أسماء مكررة */
 function dupOnce() { if (ui.dupShown || document.querySelector('.overlay')) return; ui.dupShown = true; dupDialog(false); }

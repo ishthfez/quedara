@@ -34,7 +34,9 @@
     }).filter(x => x.s);
     if (!sc.length) return { cands: [] };
     const top = Math.max(...sc.map(x => x.s)), best = sc.filter(x => x.s === top);
-    return best.length === 1 ? { p: best[0].p } : { cands: best.map(x => x.p) };
+    /* يُختار تلقائيًا من تطابق اسمه الأول على الأقل (درجة 3 فأكثر). الأضعف (كلمات بالترتيب دون الاسم الأول، مثل
+       «أحمد رضا» مع «محمد أحمد رضا»، أو كلمة واحدة) يظهر «محتملًا» ليختاره المدير بنفسه: كان يُختار تلقائيًا فيُسند لمعلم آخر */
+    return best.length === 1 && top >= 3 ? { p: best[0].p } : { cands: best.map(x => x.p) };
   }
   function matchPlace(q) {
     const Q = ptoks(q); if (!Q.length) return null;

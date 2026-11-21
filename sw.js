@@ -5,13 +5,14 @@
    وتعيد التحميل فتُجلب الملفات الجديدة مرة واحدة. والتحديث اليدوي (Ctrl+Shift+R) يتجاوز عامل الخدمة كما كان. */
 /* غيّر الرقم مع كل رفع يغيّر ملفات التطبيق: المتصفح يجلب sw.js من الخادم عند كل فتح، فيرى الرقم الجديد
    ويمسح النسخة القديمة كلها (كل ملف، لا ملفات CORE وحدها)، فتصل التعديلات إلى الجوال بعد فتح أو تحديث واحد */
-const CACHE = 'halaqat-v10';
+const CACHE = 'halaqat-v11';
 const CORE = ['./', './style.css', './app.js', './app-forms.js', './app-actions.js', './payroll.js', './fees.js', './app-abs.js', './app-import.js', './fee-setup.js', './disc-setup.js', './perms.js', './accountant.js', './collect.js', './tables.js', './backup.js', './session.js', './dups.js', './selects.js', './links.js', './distribute.js', './split.js', './cleanup.js', './unassigned.js', './cascade.js', './places.js', './notes.js', './roles.js', './mine.js', './staff.js', './nav.js', './people.js', './notify.js', './receipt.js', './importx.js', './feesimport.js', './actas.js', './feeedit.js', './demo.js', './fixpay.js', './dupsall.js', './pager.js', './toolbar.js', './uniqname.js', './cloud.js', './logo.png', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   /* كل ملف وحده: ملف واحد ناقص لا يُفشل التثبيت كله (كان addAll يفشل كله) */
-  /* cache: 'reload' = من الخادم لا من ذاكرة المتصفح العادية، فلا تُحفظ نسخة قديمة مع الإصدار الجديد */
-  e.waitUntil(caches.open(CACHE).then(c => Promise.all(CORE.map(u => fetch(new Request(u, { cache: 'reload' })).then(r => (r.ok ? c.put(u, r) : null)).catch(() => null)))).then(() => self.skipWaiting()));
+  /* cache: 'no-cache' = يُسأل الخادم: الملف الذي لم يتغيّر يُؤخذ من ذاكرة المتصفح (304) بلا تنزيل، والمتغيّر يُنزَّل.
+     كان 'reload' فيُنزَّل كل شيء مرتين في أول فتح (الصفحة نفسها نزّلته للتو)، نحو 1.1 م.ب إضافية على بيانات الجوال */
+  e.waitUntil(caches.open(CACHE).then(c => Promise.all(CORE.map(u => fetch(new Request(u, { cache: 'no-cache' })).then(r => (r.ok ? c.put(u, r) : null)).catch(() => null)))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {

@@ -35,7 +35,12 @@ try {
         if (!a.date || a.date.indexOf(prefix) !== 0) return;
         var hid = stuH[a.studentId];
         if (hid) activeH[hid] = true;
-        if (a.status === 'absent' || a.status === 'excused') absMap[a.studentId] = (absMap[a.studentId] || 0) + 1;
+      });
+      /* الغياب: المسجَّل غائبًا أو معتذرًا، ومعه الغياب الضمني (يوم سجّلت فيه الحلقة ولم يُسجَّل للطالب شيء — attDaysOf في app.js) */
+      pool.forEach(function(s) {
+        var n = 0;
+        attDaysOf(s, prefix + '-01', prefix + '-31').days.forEach(function(st) { if (st === 'absent' || st === 'excused') n++; });
+        if (n) absMap[s.id] = n;
       });
       _absCache = { key: key, att: att, absMap: absMap, activeH: activeH };
       /* صالح للرسم الحالي وحده (كفهرس المدفوع getPaid): تغيير حالة حضور موجود لا يغيّر العدد */
@@ -57,7 +62,10 @@ try {
   function absLog(sid) {
     try {
       var s = byId(db.students, sid); if (!s) return;
-      var all = db.attendance.filter(function(a) { return a.studentId === sid; }).sort(function(a, b) { return b.date.localeCompare(a.date); });
+      /* السجل يشمل الغياب الضمني: أيام سجّلت فيها حلقته ولم يُسجَّل له شيء (يُعلَّم «لم يُسجَّل») */
+      var D = attDaysOf(s), all = [];
+      D.days.forEach(function(st, d) { all.push({ date: d, status: st, implicit: D.implicit.has(d) }); });
+      all.sort(function(a, b) { return b.date.localeCompare(a.date); });
       var months = {};
       all.forEach(function(a) { var ym = a.date ? a.date.slice(0, 7) : ''; if (!ym) return; if (!months[ym]) months[ym] = []; months[ym].push(a); });
       var stL = { present: '\u062d\u0627\u0636\u0631', late: '\u0645\u062a\u0623\u062e\u0631', excused: '\u0645\u0639\u062a\u0630\u0631', absent: '\u063a\u0627\u0626\u0628' };
@@ -68,7 +76,7 @@ try {
         var abs = list.filter(function(a) { return a.status === 'absent' || a.status === 'excused'; }).length;
         var pres = list.filter(function(a) { return a.status === 'present' || a.status === 'late'; }).length;
         html += '<h3 style="font-size:1rem;margin:1rem 0 .4rem">' + MONTH_NAMES[mm - 1] + ' ' + yy + ' <small class="muted">(\u062d\u0636\u0648\u0631 ' + pres + ' \u00b7 \u063a\u064a\u0627\u0628 ' + abs + ')</small></h3>';
-        html += '<div class="tbl"><table><tr><th>\u0627\u0644\u062a\u0627\u0631\u064a\u062e</th><th>\u0627\u0644\u062d\u0627\u0644\u0629</th></tr>' + list.map(function(a) { return '<tr><td dir="ltr" style="text-align:right">' + esc(a.date) + '</td><td><span class="tag ' + (stC[a.status] || '') + '">' + (stL[a.status] || a.status) + '</span></td></tr>'; }).join('') + '</table></div>';
+        html += '<div class="tbl"><table><tr><th>\u0627\u0644\u062a\u0627\u0631\u064a\u062e</th><th>\u0627\u0644\u062d\u0627\u0644\u0629</th></tr>' + list.map(function(a) { return '<tr><td dir="ltr" style="text-align:right">' + esc(a.date) + '</td><td><span class="tag ' + (stC[a.status] || '') + '">' + (stL[a.status] || a.status) + '</span>' + (a.implicit ? ' <small class="muted">(لم يُسجَّل في يوم سجّلت فيه حلقته)</small>' : '') + '</td></tr>'; }).join('') + '</table></div>';
       });
       if (!html) html = empty('\u0644\u0627 \u064a\u0648\u062c\u062f \u0633\u062c\u0644 \u062d\u0636\u0648\u0631 \u0628\u0639\u062f.');
       openInfo('\u0633\u062c\u0644 \u0627\u0644\u062d\u0636\u0648\u0631 \u0648\u0627\u0644\u063a\u064a\u0627\u0628: ' + s.name, html);
@@ -91,7 +99,7 @@ try {
         var R = Array.isArray(db.records) ? db.records : [];
         if (!_hIdx || _hRef !== R || _hLen !== R.length) {
           var I = new Map();
-          R.forEach(function(r) { if (r.type !== 'حفظ') return; var c = I.get(r.studentId); if (!c || String(r.date) >= String(c.date)) I.set(r.studentId, r); });
+          R.forEach(function(r) { if (r.type !== 'حفظ' || isPlan(r)) return; var c = I.get(r.studentId); if (!c || String(r.date) >= String(c.date)) I.set(r.studentId, r); });
           _hIdx = I; _hRef = R; _hLen = R.length; setTimeout(function() { _hIdx = null; }, 0);
         }
         var r = _hIdx.get(sid);
@@ -107,7 +115,7 @@ try {
   /* المدفوع للطالب في شهر: من فهرس يُبنى مرة واحدة لكل رسم (كان يمر على كل الدفعات لكل طالب، فيبطئ قسم الطلاب كثيرًا).
      يُبنى من جديد إن تغيّرت مصفوفة الدفعات أو عددها، ويُلغى بعد انتهاء الرسم الحالي فيلتقط أي تعديل لاحق على مبلغ. */
   var _pIdx = null, _pRef = null, _pLen = -1;
-  function getPaid(sid, y, m) { try { var fees = Array.isArray(db.fees) ? db.fees : []; if (!_pIdx || _pRef !== fees || _pLen !== fees.length) { var I = new Map(); fees.forEach(function(f) { var k = f.studentId + '|' + (+f.y) + '|' + (+f.m); I.set(k, (I.get(k) || 0) + (+f.amount || 0)); }); _pIdx = I; _pRef = fees; _pLen = fees.length; setTimeout(function() { _pIdx = null; }, 0); } return _pIdx.get(sid + '|' + (+y) + '|' + (+m)) || 0; } catch(e) { return 0; } }
+  function getPaid(sid, y, m) { try { var fees = Array.isArray(db.fees) ? db.fees : []; if (!_pIdx || _pRef !== fees || _pLen !== fees.length) { var I = new Map(); fees.forEach(function(f) { var k = f.studentId + '|' + (+f.y) + '|' + (+f.m); I.set(k, (I.get(k) || 0) + (+f.amount || 0)); }); _pIdx = I; _pRef = fees; _pLen = fees.length; setTimeout(function() { _pIdx = null; }, 0); } return Math.round((_pIdx.get(sid + '|' + (+y) + '|' + (+m)) || 0) * 100) / 100; } catch(e) { return 0; } }
 
   function buildSummary(list) {
     try {
@@ -219,10 +227,27 @@ try {
       document.body.appendChild(ov);
       ov.querySelector('[data-close]').onclick = function() { ov.remove(); };
       var ai = ov.querySelector('[name=amount]'), rw = ov.querySelector('[data-reason-wrap]');
-      ai.addEventListener('input', function() { var need = fee && +ai.value > 0 && +ai.value < fee; rw.hidden = !need; });
+      /* المستحق والمدفوع للشهر المختار في النافذة: كان المستحق للشهر المعروض دائمًا ولو اختير غيره،
+         ولا يظهر ما دُفع عن الشهر من قبل (فتُسجَّل دفعة ثانية عن شهر مسدَّد دون أن ينتبه أحد) */
+      var dueEl = ov.querySelector('.modal > p.muted'), mSel = ov.querySelector('[name=month]');
+      var paidEl = document.createElement('p'); paidEl.className = 'note'; paidEl.style.cssText = 'margin:0 0 .6rem;font-size:.88rem'; paidEl.hidden = true;
+      (dueEl || ov.querySelector('.modal h2')).insertAdjacentElement('afterend', paidEl);
+      function paidSel() { var p = mSel.value.split('-'); return getPaid(sid, +p[0], +p[1]); }
+      function updMonth() {
+        var p = mSel.value.split('-');
+        if (feeOf) fee = feeOf(s, +p[0], +p[1]);
+        if (dueEl) dueEl.textContent = fee ? 'المستحق: ' + money(fee) + ' جنيه' : '';
+        var paid = paidSel();
+        paidEl.hidden = !(paid > 0);
+        paidEl.textContent = paid > 0 ? 'دُفع عن هذا الشهر من قبل ' + money(paid) + ' جنيه (مسدَّد). ما تكتبه الآن دفعة إضافية تُضاف إليه.' : '';
+        rw.hidden = !(fee && +ai.value > 0 && +ai.value < fee && !(paid > 0));
+      }
+      if (getPaid(sid, fy, fm) > 0) ai.value = '';
+      mSel.addEventListener('change', updMonth); updMonth();
+      ai.addEventListener('input', updMonth);
       ov.querySelector('[data-dosave]').onclick = function() {
         var amt = +ai.value; if (!(amt > 0)) { toast('\u0627\u0643\u062a\u0628 \u0645\u0628\u0644\u063a\u0627\u064b'); return; }
-        if (fee && amt < fee && !ov.querySelector('[name=reason]').value) { toast('\u0627\u062e\u062a\u0631 \u0627\u0644\u0633\u0628\u0628'); return; }
+        if (fee && amt < fee && !(paidSel() > 0) && !ov.querySelector('[name=reason]').value) { toast('\u0627\u062e\u062a\u0631 \u0627\u0644\u0633\u0628\u0628'); return; }
         var parts = ov.querySelector('[name=month]').value.split('-'), sy = +parts[0], sm = +parts[1];
         var reason = ov.querySelector('[name=reason]').value;
         var note = [(ov.querySelector('[name=note]').value || '').trim(), reason].filter(Boolean).join(' \u2014 ');

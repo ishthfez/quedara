@@ -285,7 +285,7 @@
     /* أنواع التصنيف بالترتيب، و«مدير» آخرها */
     delete CLS_ROLES.admin;
     Object.assign(CLS_ROLES, { accountant: 'محاسب', placeadmin: 'إداري', admin: 'Admin' });
-    Object.assign(PASS_PREFIX, { placeadmin: 'padm', placeadmins: 'padm' });
+    Object.assign(PASS_PREFIX, { placeadmin: 'pa', placeadmins: 'pa' });
     KIND_TITLE.placeadmins = 'الإداريون';
 
     /* التصنيف الفعّال: إن حُذف العضو المرتبط يعود الموظف «غير مصنف» */

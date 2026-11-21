@@ -157,6 +157,16 @@
     };
     /* الخروج من الحساب يُنهي العمل بصفة غيره */
     if (A?.logout) { const lo = A.logout; A.logout = d => { act = null; bar(); return lo(d); }; }
+    /* ما يصل من الخادم بالمزامنة سجّله صاحبه الحقيقي من جهازه: يُعلَّم «مُراجَعًا» فلا يُنسب للمدير.
+       (كان fixBy يعيد نسبة أي دفعة أو غياب جديد باسم الشخص، ولو سجّله الشخص نفسه في الوقت ذاته، فيُفسد سجل من سجّل) */
+    if (typeof cloudRefresh === 'function') {
+      const baseRefresh = cloudRefresh;
+      cloudRefresh = async (...a) => {
+        const r = await baseRefresh(...a);
+        if (act) { (db.fees || []).forEach(f => act.feeIds.add(f.id)); (db.payroll?.absences || []).forEach(x => act.absIds.add(x.id)); }
+        return r;
+      };
+    }
   });
 
   /* ===== الشريط الثابت أعلى الشاشة ===== */

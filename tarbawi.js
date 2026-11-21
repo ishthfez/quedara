@@ -20,7 +20,9 @@
     catch (e) { toast(errMsg(e)); throw e; }
   };
   const num = (v) => (v === null || v === undefined || v === '' ? '' : String(+v));
-  const today = () => new Date().toISOString().slice(0, 10);
+  /* التاريخ بتوقيت الجهاز (كان بتوقيت UTC: بعد منتصف الليل بتوقيت مصر يُسجَّل «أمس») */
+  const localDay = (v) => { const d = new Date(v); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+  const today = () => localDay(Date.now());
   const halName = (hid) => { const h = hid && (db.halaqat || []).find((x) => x.id === hid); if (!h) return '—'; try { return halaqaLabel(h); } catch (e) { return h.name || '—'; } };
   const bar = (items, cur, attr) => `<div class="card subnav"><div class="bar" style="margin:0">${items.map(([k, l]) => `<button type="button" class="btn ${cur === k ? 'on' : ''}" ${attr}="${k}">${l}</button>`).join('')}</div></div>`;
   function modal(title, html, wide) {
@@ -103,8 +105,12 @@
     return `<div class="card"><div class="row" style="gap:.4rem;flex-wrap:wrap;align-items:center">
       <label>اليوم <input type="date" data-tf="date" value="${T.date}"></label><button class="btn" data-ta="saveatt">حفظ الحضور</button><span class="muted">${esc(unitName())}</span></div></div>
       <div class="card tbl"><table><thead><tr><th>الطالب</th><th>حاضر (${T.date})</th>${dates.map((d) => `<th>${d.slice(5)}</th>`).join('')}<th>النسبة</th></tr></thead><tbody>
-      ${E.map((e) => { const pres = dates.filter((d) => on[e.id + ':' + d]).length; return `<tr data-eid="${e.id}"><td>${esc(e.name)}</td><td><input type="checkbox" data-a="p" ${cur(e.id) === false ? '' : 'checked'}></td>
-        ${dates.map((d) => `<td>${on[e.id + ':' + d] === undefined ? '' : on[e.id + ':' + d] ? '✓' : '✗'}</td>`).join('')}<td>${dates.length ? Math.round(pres / dates.length * 100) + '%' : ''}</td></tr>`; }).join('') || `<tr><td colspan="3">${empty('لا يوجد طلاب مقبولون.')}</td></tr>`}
+      ${E.map((e) => {
+        /* نسبته من لقاءات الحلقة منذ انضمامه (ومعها أي يوم سُجّل له قبله)، كما في tar_results على الخادم */
+        const d0 = e.created_at ? localDay(e.created_at) : '', mine = dates.filter((d) => d >= d0 || on[e.id + ':' + d] !== undefined);
+        const pres = mine.filter((d) => on[e.id + ':' + d]).length;
+        return `<tr data-eid="${e.id}"><td>${esc(e.name)}</td><td><input type="checkbox" data-a="p" ${cur(e.id) === false ? '' : 'checked'}></td>
+        ${dates.map((d) => `<td>${on[e.id + ':' + d] === undefined ? (d < d0 ? '<small class="muted">—</small>' : '') : on[e.id + ':' + d] ? '✓' : '✗'}</td>`).join('')}<td>${mine.length ? Math.round(pres / mine.length * 100) + '%' : ''}</td></tr>`; }).join('') || `<tr><td colspan="3">${empty('لا يوجد طلاب مقبولون.')}</td></tr>`}
       </tbody></table></div>`;
   }
 

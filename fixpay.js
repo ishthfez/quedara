@@ -52,7 +52,9 @@
       const fs = (db.fees || []).filter(f => f.studentId === s.id);
       const twin = (withHal.get(norm(s.name)) || []);
       const target = twin.length === 1 ? twin[0] : null;
-      const lost = fs.filter(f => !target && !/كشف الإيراد/.test(`${f.note || ''} ${f.by || ''}`));
+      /* له دفعات ولا طالب واحد بالاسم نفسه تُنقل إليه: يبقى كما هو (كانت دفعات «كشف الإيراد» تُحذف نهائيًا على أن إعادة
+         الاستيراد تُرجعها، وإعادة الاستيراد تطابق بمعرّف الطالب أو كوده القديم، وهما للطالب المحذوف نفسه فلا ترجع) */
+      const lost = fs.filter(f => !target);
       if (att || lost.length) { keep.push(s); return; }
       fs.forEach(f => { if (target) { f.studentId = target.id; moved++; } else dropped++; });
       del.add(s.id);

@@ -12,7 +12,8 @@
     try { const b = e && e.body && (typeof e.body === 'string' ? JSON.parse(e.body) : e.body); if (b && (b.message || b.error)) m = b.message || b.error; } catch (x) { /* ignore */ }
     return m.replace(/^.*?:\s*/, '') || 'تعذّر التنفيذ';
   };
-  const newPass = () => 'temp' + String(Math.floor(100000 + Math.random() * 900000));
+  /* حساب مؤقت لطالب دورة: حرفان (tm) + 8 أرقام عشوائية، بصيغة كلمات المرور الجديدة */
+  const newPass = () => 'tm' + (typeof genDigits8 === 'function' ? genDigits8() : String(Math.floor(Math.random() * 1e8)).padStart(8, '0'));
 
   function decorate() {
     if (!onPrograms()) return;

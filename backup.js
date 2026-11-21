@@ -115,7 +115,8 @@
       <p style="margin:0 0 .6rem">تاريخ النسخة: <b>${esc(fmtDate(data.at))}</b></p>
       <div class="tbl" style="max-height:260px;overflow-y:auto"><table><tr><th>الجدول</th><th>السجلات في النسخة</th></tr>${rows}</table></div>
       <div class="lbl-s" style="margin-top:.8rem">طريقة الاسترجاع</div>
-      <label class="chk"><input type="radio" name="rsmode" value="merge" checked><span><b>دمج</b> (الأكثر أمانًا): يُرجع المحذوف ويعيد المعدَّل إلى حاله في النسخة، ويُبقي ما أُضيف بعدها.</span></label>
+      <label class="chk"><input type="radio" name="rsmode" value="add" checked><span><b>إضافة الناقص فقط</b> (الأكثر أمانًا): يُرجع ما ليس موجودًا الآن (طالب أو دفعة أو حضور حُذف خطأً)، <b>ولا يلمس أي سجل موجود</b>.</span></label>
+      <label class="chk"><input type="radio" name="rsmode" value="merge"><span><b>دمج</b>: يُرجع المحذوف <b>ويعيد كل سجل موجود إلى حاله في النسخة</b> (يُلغي التعديلات التي تمت بعدها)، ويُبقي ما أُضيف بعدها.</span></label>
       <label class="chk"><input type="radio" name="rsmode" value="replace"><span><b>استبدال كامل</b>: تعود البيانات كما كانت يوم النسخة تمامًا، <b style="color:var(--red)">ويُحذف كل ما أُضيف بعدها</b>.</span></label>
       <p class="muted" style="font-size:.85rem">صور الطلاب الحالية وحسابات الدخول وكلمات المرور لا تتأثر. خذ نسخة احتياطية من البيانات الحالية أولًا إن كنت قد تحتاجها.</p>
       <label>كلمة مرور المدير للتأكيد<input type="password" name="rspw" autocomplete="current-password"></label>
@@ -132,10 +133,10 @@
         const r = await window.Cloud.rpc('backup_restore', { data, mode });
         const n = Object.values(r.restored || {}).reduce((a, b) => a + (+b || 0), 0), d = Object.values(r.deleted || {}).reduce((a, b) => a + (+b || 0), 0);
         ov.remove();
-        toast(`تم الاسترجاع: ${n} سجلًا${d ? ` — وحُذف ${d} لم يكن في النسخة` : ''}`);
+        toast(mode === 'add' ? (n ? `أُضيف ${n} سجلًا لم يكن موجودًا` : 'لا شيء ناقص: كل ما في النسخة موجود الآن') : `تم الاسترجاع: ${n} سجلًا${d ? ` — وحُذف ${d} لم يكن في النسخة` : ''}`);
         await cloudRefresh(true); render();
       } catch (e) {
-        toast(/backup_restore|function/i.test(e.message || '') && /not find|does not exist|schema cache/i.test(e.message || '') ? 'نفّذ أمر الخادم supabase/restore.sql أولًا' : 'تعذّر الاسترجاع (لم يتغير شيء): ' + (e.message || e));
+        toast(/backup_restore|function/i.test(e.message || '') && /not find|does not exist|schema cache/i.test(e.message || '') ? 'نفّذ أمر الخادم supabase/restore.sql أولًا' : /طريقة استرجاع غير معروفة/.test(e.message || '') ? 'نفّذ أمر الخادم supabase/restore_fix_2026_11.sql أولًا' : 'تعذّر الاسترجاع (لم يتغير شيء): ' + (e.message || e));
       }
     })());
   }

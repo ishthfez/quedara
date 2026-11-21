@@ -140,7 +140,9 @@
     const open = c.status === 'sent' && isCollector();
     const rows = c.lines.map((l, i) => {
       const due = dues[l.studentId], diff = due == null ? '' : money((+l.amount || 0) - due);
-      return `<tr><td>${i + 1}</td><td>${esc(sName(l.studentId))}</td><td>${due == null ? '—' : money(due)}</td><td>${money(l.amount)}</td><td>${diff && diff !== '0' ? `<b style="color:${(+l.amount || 0) < due ? 'var(--red)' : 'var(--leaf)'}">${diff}</b>` : diff ? '0' : '—'}</td><td>${esc(l.note || '')}</td>
+      /* ما سُجّل للطالب عن الشهر نفسه من قبل (عند المحاسب أو في قائمة أخرى): تأكيده يكرر الدفع */
+      const before = l.state === 'pending' ? Math.round((db.fees || []).filter(f => f.studentId === l.studentId && +f.y === +c.y && +f.m === +c.m).reduce((a, f) => a + (+f.amount || 0), 0) * 100) / 100 : 0;
+      return `<tr><td>${i + 1}</td><td>${esc(sName(l.studentId))}${before > 0 ? `<br><small class="tag tag-no" title="تأكيد هذا السطر يسجّل دفعة ثانية عن الشهر نفسه">مسدَّد من قبل: ${money(before)}</small>` : ''}</td><td>${due == null ? '—' : money(due)}</td><td>${money(l.amount)}</td><td>${diff && diff !== '0' ? `<b style="color:${(+l.amount || 0) < due ? 'var(--red)' : 'var(--leaf)'}">${diff}</b>` : diff ? '0' : '—'}</td><td>${esc(l.note || '')}</td>
         <td>${open && l.state === 'pending' ? `<select data-rdec="${l.studentId}" style="width:auto"><option value="ok">تأكيد</option><option value="issue">إرجاع</option></select>` : tag(LINE[l.state] || LINE.pending)}</td>
         <td>${open && l.state === 'pending' ? `<input data-rnote="${l.studentId}" placeholder="ملاحظة للمعلم (عند الإرجاع)" style="min-width:12rem">` : esc(l.accNote || '')}</td></tr>`;
     }).join('');

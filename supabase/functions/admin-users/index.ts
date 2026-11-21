@@ -7,17 +7,32 @@
 // =====================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+/* المتصفحات التي تُقبل طلباتها: موقع التطبيق ونسخه التجريبية على Vercel، والتطوير على الجهاز.
+   كان «*» (أي موقع). موقع آخر للتطبيق يُضاف في متغير البيئة ALLOWED_ORIGINS (مفصولة بفواصل) دون تعديل الكود.
+   (هذه طبقة إضافية: الحماية الأساسية هي التحقق من حساب الطالب أدناه) */
+const EXTRA = (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+const okOrigin = (o: string) => EXTRA.includes(o)
+  || /^https:\/\/(qumang|quedara)[a-z0-9-]*\.vercel\.app$/i.test(o)
+  || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(o);
+const corsFor = (req: Request) => {
+  const o = req.headers.get('Origin') ?? '';
+  return {
+    'Access-Control-Allow-Origin': okOrigin(o) ? o : 'https://qumang.vercel.app',
+    'Vary': 'Origin',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
 };
+let cors: Record<string, string> = corsFor(new Request('https://qumang.vercel.app'));
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
 const EMAIL_DOMAIN = 'qulearn.app';
+/* أقل طول لكلمة المرور: 8 (كان 6، ولغير المدير أيضًا: منظم الدورة كان يضع أي كلمة من 6 أحرف) */
+const MIN_PASS = 8;
 
 Deno.serve(async (req) => {
+  cors = corsFor(req);
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'POST فقط' }, 405);
 
@@ -59,7 +74,7 @@ Deno.serve(async (req) => {
     const results: unknown[] = [];
     for (const it of items) {
       try {
-        if (!it.password || String(it.password).length < 6) throw new Error('كلمة المرور 6 أحرف أو أرقام على الأقل');
+        if (!it.password || String(it.password).length < MIN_PASS) throw new Error(`كلمة المرور ${MIN_PASS} أحرف أو أرقام على الأقل`);
         const { data: m, error } = await admin.from('members').select('id, name, role, user_id, login_email').eq('id', it.member_id).single();
         if (error || !m) throw new Error('العضو غير موجود');
         let userId = m.user_id as string | null, email = m.login_email as string | null;

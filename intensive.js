@@ -23,7 +23,8 @@
   };
   const num = (v) => (v === null || v === undefined || v === '' ? '' : String(+v));
   const halName = (hid) => { const h = hid && (db.halaqat || []).find((x) => x.id === hid); if (!h) return '—'; try { return halaqaLabel(h); } catch (e) { return h.name || '—'; } };
-  const today = () => new Date().toISOString().slice(0, 10);
+  /* التاريخ بتوقيت الجهاز (كان بتوقيت UTC: بعد منتصف الليل بتوقيت مصر يُسجَّل حضور المعلم والاختبار الأسبوعي على «أمس») */
+  const today = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
   const TRACK = { khatm: 'ختم: مراجعة', review: 'مراجعة فقط', new: 'حفظ جديد ومراجعة' };
   const STATUS = { nominated: 'مرشح', selected: 'منتقى للتصفية', passed: 'اجتاز التصفية', failed: 'لم يجتز', accepted: 'في الدورة', withdrawn: 'منسحب' };
   const bar = (items, cur, attr) => `<div class="card subnav"><div class="bar" style="margin:0">${items.map(([k, l]) => `<button type="button" class="btn ${cur === k ? 'on' : ''}" ${attr}="${k}">${l}</button>`).join('')}</div></div>`;

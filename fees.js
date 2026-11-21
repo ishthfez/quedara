@@ -74,10 +74,25 @@
   const discTxt = (d, v, t) => ((t || d.type) === 'amt' ? money(v) + ' جنيه' : v + '%');
   const discLabel = d => (d.each ? `${d.name} (يُحدَّد لكل طالب)` : `${d.name} (${discTxt(d, d.value)})`);
   /* المستحق = (المبلغ الخاص للطالب، أو مبلغ فئته، أو الفئة الافتراضية لسنّه، أو «الاشتراك العام») − الخصم أو الإعفاء */
+  /* حال الطالب في شهر بعينه: من سجل تغيّراته (info.feeHist يكتبه الخادم: supabase/dues_hist_2026_11.sql) أقرب سجل ينتهي
+     في ذلك الشهر أو بعده، وإلا حاله الآن. فنقله لمكان أغلى أو إعفاؤه لا يغيّر مستحق ما قبله */
+  const FEE_KEYS = ['fee', 'feeCat', 'feeSys', 'feeDisc', 'feeDiscVal', 'feeDiscType'];
+  const ymOrd = t => /^\d{4}-\d{2}$/.test(t || '') ? +t.slice(0, 4) * 100 + +t.slice(5, 7) : null;
+  function stateAt(s, y, m) {
+    const H = Array.isArray(s?.info?.feeHist) ? s.info.feeHist : null;
+    if (!H || !H.length) return null;
+    const o = +y * 100 + +m, e = H.filter(x => ymOrd(x.to) != null && ymOrd(x.to) >= o).sort((a, b) => ymOrd(a.to) - ymOrd(b.to))[0];
+    if (!e) return null;
+    const info = { ...s.info }; FEE_KEYS.forEach(k => { if (e[k] == null) delete info[k]; else info[k] = e[k]; });
+    return { info, pid: e.pid || '', cat: e.cat || s.cat };
+  }
   function dueOf(s, y, m) {
-    const I = s?.info || {}, C = y == null ? cfg(st.y, st.m) : cfg(+y, m ?? defM(+y));
+    const yy = y == null ? st.y : +y, mm = y == null ? st.m : (m ?? defM(+y));
+    const C = cfg(yy, mm), H = stateAt(s, yy, mm);
+    const I = H ? H.info : (s?.info || {});
+    if (H) s = { ...s, cat: H.cat, info: I };
     let base = null, src = '';
-    const pid = halOf(s)?.placeId, P = (pid && C.places[pid]) || {}, PD = (pid && C.placeDiscs?.[pid]) || {};
+    const pid = H ? H.pid : halOf(s)?.placeId, P = (pid && C.places[pid]) || {}, PD = (pid && C.placeDiscs?.[pid]) || {};
     if (isNum(I.fee) && +I.fee > 0) { base = +I.fee; src = 'مبلغ خاص'; }
     else {
       const c = C.cats.find(x => x.id === I.feeCat) || C.cats.find(x => x.def === (s.cat === 'adult' ? 'adult' : 'child'));
@@ -116,7 +131,35 @@
     pIdx = new Map(); pAny = new Set(); pRef = F; pLen = F.length;
     F.forEach(f => { const k = f.studentId + '|' + (+f.y) + '|' + (+f.m); pIdx.set(k, (pIdx.get(k) || 0) + (+f.amount || 0)); pAny.add(f.studentId); });
   };
-  const paidFor = (sid, y, m) => { pIndex(); return pIdx.get(sid + '|' + (+y) + '|' + (+m)) || 0; };
+  /* المجموع مقرَّب للقرش: 3 × 10.1 = 30.299999… كانت تظهر «جزئي» لمستحق 30.3 */
+  const paidFor = (sid, y, m) => { pIndex(); return Math.round((pIdx.get(sid + '|' + (+y) + '|' + (+m)) || 0) * 100) / 100; };
+  /* تعريف واحد لـ«مسدَّد» في كل الصفحات (كما في الرئيسية app-abs.js): من دفع أي مبلغ عن الشهر فهو مسدَّد،
+     لأن المبلغ الأقل لا يُقبل عند التحصيل إلا بسببه («متأخر» أو «حالة خاصة»).
+     المتوقع = مستحقات المنتظمين، والمحصَّل = ما دفعوه، والباقي = مستحقات من لم يدفع شيئًا.
+     ما دفعه منقطع أو معفى أو بلا اشتراك محدد يُعرض وحده ولا يدخل في المحصَّل ولا في النسبة. */
+  const tally = (list, y, m) => {
+    let expected = 0, got = 0, extra = 0, remaining = 0, paidN = 0, noneN = 0, freeN = 0, offN = 0;
+    const unpaid = [];
+    list.forEach(s => {
+      const fee = feeOf(s, y, m), paid = paidFor(s.id, y, m);
+      if (stOff(s)) { offN++; extra += paid; return; }
+      if (fee === 0) { freeN++; extra += paid; return; }
+      if (!fee) { extra += paid; return; }
+      expected += fee;
+      if (paid > 0) { paidN++; got += paid; return; }
+      noneN++; remaining += fee; unpaid.push(s.id);
+    });
+    const r2 = n => Math.round(n * 100) / 100;
+    return { expected: r2(expected), got: r2(got), extra: r2(extra), remaining: r2(remaining), paidN, noneN, freeN, offN, unpaid,
+             pct: expected > 0 ? Math.round(got / expected * 100) : 0 };
+  };
+  /* حالة الطالب عن الشهر بالتعريف نفسه؛ ومن دفع أقل من المستحق يظهر «مسدَّد» ومعه ما دفعه */
+  const payState = (fee, paid, off, noFee) => off ? `<span class="tag tag-no">منقطع</span>${paid ? ' <small class="muted">دفع ' + money(paid) + '</small>' : ''}`
+    : fee === 0 ? '<span class="tag tag-ok">معفى</span>'
+    : fee ? (paid > 0 ? `<span class="tag tag-ok">مسدَّد ✓</span>${paid < fee ? ` <small class="muted">${money(paid)} من ${money(fee)}</small>` : ''}` : '<span class="tag tag-no">لم يُسدَّد</span>')
+    : (paid > 0 ? '<span class="tag tag-ok">مدفوع</span>' : noFee);
+  const needsRemind = (fee, paid, off) => !off && fee > 0 && !(paid > 0);
+  const extraNote = T => T.extra ? `<p class="muted" style="font-size:.8rem;margin:.4rem 0 0">وصل أيضًا ${money(T.extra)} من منقطعين أو معفيين أو بلا اشتراك محدد (خارج الإيرادات الفعلية والنسبة).</p>` : '';
   /* «بداية الاسم»: يطابق أول الاسم أو أول أي كلمة فيه */
   const starts = (text, q) => norm(text).startsWith(q) || String(text || '').split(/\s+/).some(w => norm(w).startsWith(q));
   const monthOpts = (y, m) => {
@@ -141,13 +184,10 @@
   }
   function results() {
     const list = filtered();
-    let expected = 0, got = 0, paidN = 0, partN = 0, noneN = 0, freeN = 0, offN = 0, remaining = 0;
     const grouped = !!(st.qh.trim() || st.qp.trim());
     const row = (s, i) => {
       const D = dueOf(s), fee = D?.due ?? null, paid = paidFor(s.id, st.y, st.m), h = halOf(s), off = stOff(s);
-      const state = off ? `<span class="tag tag-no">منقطع</span>${paid ? ' <small class="muted">دفع ' + money(paid) + '</small>' : ''}` : fee === 0 ? '<span class="tag tag-ok">معفى</span>'
-        : fee ? (paid >= fee ? '<span class="tag tag-ok">مسدَّد ✓</span>' : paid > 0 ? `<span class="tag">جزئي: باقٍ ${money(fee - paid)}</span>` : '<span class="tag tag-no">لم يُسدَّد</span>')
-        : (paid > 0 ? '<span class="tag tag-ok">مدفوع</span>' : '<span class="muted">بلا اشتراك محدد</span>');
+      const state = payState(fee, paid, off, '<span class="muted">بلا اشتراك محدد</span>');
       const C0 = cfg(), I0 = s.info || {};
       const anyGen = anyGeneral(C0), fromGen = !D || /^(نظام|الاشتراك العام)/.test(D.src);
       /* نظام الحضور (6 أو 3 أيام) بجانب الطالب، حين يكون له مبلغان مختلفان ويُحسب اشتراكه منه */
@@ -158,39 +198,32 @@
       const dueCell = D ? (D.off ? `<span title="${money(D.base)} − ${money(D.off)}">${money(D.due)}</span> <small class="muted"><s>${money(D.base)}</s></small>` : money(D.due)) : '—';
       const any = (pIndex(), pAny.has(s.id));
       /* «تذكير» بالسداد لمن لم يسدّد (notify.js) */
-      const remind = can('fees.collect') && !off && fee !== 0 && (fee ? paid < fee : !paid) ? `<button type="button" class="btn sm" data-remind="${esc(s.id)}" title="تذكير بالسداد">تذكير</button>` : '';
+      const remind = can('fees.collect') && needsRemind(fee, paid, off) ? `<button type="button" class="btn sm" data-remind="${esc(s.id)}" title="تذكير بالسداد">تذكير</button>` : '';
       return `<tr><td>${i + 1}</td><td>${esc(s.name)}</td>${grouped ? '' : `<td>${h ? esc(halaqaLabel(h)) : '<span class="muted">—</span>'}</td><td>${h ? esc(placeName(h) || '—') : '<span class="muted">—</span>'}</td>`}
         <td>${catCell}</td><td>${dueCell}</td><td>${paid ? money(paid) : '—'}</td><td>${state}</td>
         <td class="noprint">${can('fees.collect') ? `<button type="button" class="btn sm primary" data-fee-pay="${esc(s.id)}" ${cloudMissing() || fee === 0 ? 'disabled' : ''}>تحصيل</button>` : ''}${any ? `<button type="button" class="btn sm" data-fee-log="${esc(s.id)}">السجل</button>` : ''}${can('fees.amount') ? `<button type="button" class="btn sm" data-fee-assign="${esc(s.id)}">الفئة</button>` : ''}${remind}${accActs(s)}</td></tr>`;
     };
     const table = (arr, withMore) => `<div class="tbl"><table><tr><th>#</th><th>الطالب</th>${grouped ? '' : '<th>الحلقة</th><th>المكان</th>'}<th>الفئة / الخصم</th><th>المستحق</th><th>المدفوع</th><th>الحالة</th><th class="noprint"></th></tr>${arr.slice(0, MAX_ROWS).map(row).join('')}</table></div>
         ${withMore && arr.length > MAX_ROWS ? `<p class="muted">يظهر أول ${MAX_ROWS} من ${arr.length} طالبًا؛ اكتب في مربعات البحث للتضييق.</p>` : ''}`;
-    const unpaid = [];
-    list.forEach(s => {
-      const fee = feeOf(s), paid = paidFor(s.id, st.y, st.m); got += paid;
-      if (!stOff(s) && fee !== 0 && (fee ? paid < fee : !paid)) unpaid.push(s.id);
-      if (stOff(s)) offN++;
-      else if (fee === 0) freeN++;
-      else if (fee) { expected += fee; if (paid >= fee) paidN++; else { remaining += fee - paid; if (paid > 0) partN++; else noneN++; } } else if (paid > 0) paidN++;
-    });
-    /* من لم يسدّد (كليًا أو جزئيًا) في كل نتائج البحث، لا في الصفوف الظاهرة فقط: لزر «تذكير غير المسددين» */
-    window.QLFees = { unpaid, y: st.y, m: st.m };
+    /* من لم يسدّد في كل نتائج البحث، لا في الصفوف الظاهرة فقط: لزر «تذكير غير المسددين» */
+    const T = tally(list, st.y, st.m);
+    window.QLFees = { unpaid: T.unpaid, y: st.y, m: st.m };
     /* بطاقتان: «الطلاب» (مسددون/غير مسددين/معفون) و«الإيرادات» (متوقعة/فعلية/باقي المستحق) مع شريط نسبة التحصيل.
        كل صف: البيان والقيمة في السطر نفسه. */
-    const pct = expected > 0 ? Math.round(got / expected * 100) : 0;
     const feeRow = (cls, v, l) => `<div class="feerow ${cls}"><span>${esc(l)}</span><b>${v}</b></div>`;
     const feeCards = `<div class="feecards">
       <div class="card feecard"><h3>الطلاب</h3>
-        ${feeRow('fr-ok', paidN, 'عدد المسددين')}
-        ${feeRow('fr-no', partN + noneN, 'عدد غير المسددين')}
-        ${feeRow('fr-info', freeN, 'عدد المعفيين')}
+        ${feeRow('fr-ok', T.paidN, 'عدد المسددين')}
+        ${feeRow('fr-no', T.noneN, 'عدد غير المسددين')}
+        ${feeRow('fr-info', T.freeN, 'عدد المعفيين')}
       </div>
       <div class="card feecard"><h3>الإيرادات</h3>
-        ${feeRow('fr-plain', money(expected), 'الإيرادات المتوقعة')}
-        ${feeRow('fr-ok', money(got), 'الإيرادات الفعلية')}
-        ${feeRow('fr-no', money(remaining), 'باقي المستحق')}
-        <div class="feebar"><span style="width:${Math.min(pct, 100)}%"></span></div>
-        <div class="feebar-label"><span>${pct}%</span><span>نسبة التحصيل</span></div>
+        ${feeRow('fr-plain', money(T.expected), 'الإيرادات المتوقعة')}
+        ${feeRow('fr-ok', money(T.got), 'الإيرادات الفعلية')}
+        ${feeRow('fr-no', money(T.remaining), 'باقي المستحق')}
+        <div class="feebar"><span style="width:${Math.min(T.pct, 100)}%"></span></div>
+        <div class="feebar-label"><span>${T.pct}%</span><span>نسبة التحصيل</span></div>
+        ${extraNote(T)}
       </div>
     </div>`;
     return `${feeCards}
@@ -258,9 +291,10 @@
 
   function pay(sid) {
     const s = byId(db.students, sid); if (!s) return;
-    const fee = feeOf(s), rest = fee ? Math.max(0, fee - paidFor(sid, st.y, st.m)) : '';
+    const fee = feeOf(s), paid0 = paidFor(sid, st.y, st.m), rest = fee ? Math.max(0, fee - paid0) : '';
+    /* شهر دُفع عنه من قبل: يُقال ذلك صراحة في النافذة ولا يُقترح مبلغ (كان يُقترح المستحق كاملًا فتُسجَّل دفعة مكررة) */
     openForm('تحصيل اشتراك: ' + s.name, [
-      { name: 'amount', label: 'المبلغ (جنيه)', type: 'number', min: 0, value: rest || fee || '', required: true },
+      { name: 'amount', label: paid0 > 0 ? `المبلغ (جنيه) — دُفع عن ${MONTHS[st.m - 1]} من قبل ${money(paid0)} جنيه، وما تكتبه يُضاف إليه` : 'المبلغ (جنيه)', type: 'number', min: 0, value: paid0 > 0 ? '' : (rest || fee || ''), required: true },
       { name: 'month', label: 'عن شهر', type: 'select', value: `${st.y}-${st.m}`, options: monthOpts(st.y, st.m).map(o => ({ v: o.v, l: o.l })) },
       { name: 'date', label: 'تاريخ التحصيل', type: 'date', value: today() },
       { name: 'note', label: 'ملاحظة (اختياري)' }
@@ -560,23 +594,15 @@
   window.QLFeesEmbed = {
     summary(list) {
       if (!can('fees.collect') && !can('fees.amount')) { window.QLFees = { ...(window.QLFees || {}), y: st.y, m: st.m }; return ''; }
-      let expected = 0, got = 0, paidN = 0, partN = 0, noneN = 0, freeN = 0, offN = 0, remaining = 0;
-      const unpaid = [];
-      list.forEach(s => {
-        const fee = feeOf(s), paid = paidFor(s.id, st.y, st.m); got += paid;
-        if (!stOff(s) && fee !== 0 && (fee ? paid < fee : !paid)) unpaid.push(s.id);
-        if (stOff(s)) offN++;
-        else if (fee === 0) freeN++;
-        else if (fee) { expected += fee; if (paid >= fee) paidN++; else { remaining += fee - paid; if (paid > 0) partN++; else noneN++; } } else if (paid > 0) paidN++;
-      });
+      const T = tally(list, st.y, st.m), unpaid = T.unpaid;
+      const { expected, got, paidN, noneN, freeN, remaining, pct } = T;
       window.QLFees = { unpaid, y: st.y, m: st.m };
       window._QLFeesVisibleList = list;
-      const pct = expected > 0 ? Math.round(got / expected * 100) : 0;
       const feeRow = (cls, v, l) => `<div class="feerow ${cls}"><span>${esc(l)}</span><b>${v}</b></div>`;
       return `<div class="feecards">
         <div class="card feecard"><h3>الاشتراكات \u2014 ${MONTHS[st.m - 1]} ${st.y}</h3>
           ${feeRow('fr-ok', paidN, 'عدد المسددين')}
-          ${feeRow('fr-no', partN + noneN, 'عدد غير المسددين')}
+          ${feeRow('fr-no', noneN, 'عدد غير المسددين')}
           ${feeRow('fr-info', freeN, 'عدد المعفيين')}
         </div>
         <div class="card feecard"><h3>الإيرادات</h3>
@@ -585,6 +611,7 @@
           ${feeRow('fr-no', money(remaining), 'باقي المستحق')}
           <div class="feebar"><span style="width:${Math.min(pct, 100)}%"></span></div>
           <div class="feebar-label"><span>${pct}%</span><span>نسبة التحصيل</span></div>
+          ${extraNote(T)}
         </div>
       </div>
       ${unpaid.length && can('fees.collect') ? `<div class="bar noprint" style="margin:.2rem 0 .5rem"><span class="muted grow" style="font-size:.85rem">${unpaid.length} طالب لم يسدّد اشتراك ${MONTHS[st.m - 1]}.</span><button type="button" class="btn sm" data-remind-all="fees">تذكير غير المسددين (${unpaid.length})</button></div>` : ''}`;
@@ -600,16 +627,14 @@
       if (!can('fees.collect') && !can('fees.amount')) return '';
       const D = dueOf(s), fee = D?.due ?? null, paid = paidFor(s.id, st.y, st.m), off = stOff(s);
       const dueCell = D ? (D.off ? `<span title="${money(D.base)} \u2212 ${money(D.off)}">${money(D.due)}</span> <small class="muted"><s>${money(D.base)}</s></small>` : money(D.due)) : '\u2014';
-      const state = off ? `<span class="tag tag-no">منقطع</span>` : fee === 0 ? '<span class="tag tag-ok">معفى</span>'
-        : fee ? (paid >= fee ? '<span class="tag tag-ok">مسدَّد ✓</span>' : paid > 0 ? `<span class="tag">جزئي: باقٍ ${money(fee - paid)}</span>` : '<span class="tag tag-no">لم يُسدَّد</span>')
-        : (paid > 0 ? '<span class="tag tag-ok">مدفوع</span>' : '<span class="muted">\u2014</span>');
+      const state = payState(fee, paid, off, '<span class="muted">\u2014</span>');
       return `<td>${dueCell}</td><td>${paid ? money(paid) : '\u2014'}</td><td>${state}</td>`;
     },
     actions(s) {
       if (!can('fees.collect') && !can('fees.amount')) return '';
       const D = dueOf(s), fee = D?.due ?? null, paid = paidFor(s.id, st.y, st.m), off = stOff(s);
       const any = (pIndex(), pAny.has(s.id));
-      const remind = can('fees.collect') && !off && fee !== 0 && (fee ? paid < fee : !paid) ? `<button type="button" class="btn sm" data-remind="${esc(s.id)}" title="تذكير بالسداد">تذكير</button>` : '';
+      const remind = can('fees.collect') && needsRemind(fee, paid, off) ? `<button type="button" class="btn sm" data-remind="${esc(s.id)}" title="تذكير بالسداد">تذكير</button>` : '';
       return `${can('fees.collect') ? `<button type="button" class="btn sm primary" data-fee-pay="${esc(s.id)}" ${cloudMissing() || fee === 0 ? 'disabled' : ''}>تحصيل</button>` : ''}${any ? `<button type="button" class="btn sm" data-fee-log="${esc(s.id)}">سجل الدفع</button>` : ''}${can('fees.amount') ? `<button type="button" class="btn sm" data-fee-assign="${esc(s.id)}">الفئة</button>` : ''}${remind}`;
     }
   };

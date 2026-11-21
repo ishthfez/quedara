@@ -61,6 +61,12 @@ const genPass = () => {
   try { crypto.getRandomValues(a); } catch (e) { a[0] = Math.floor(Math.random() * 4294967296); }
   return String(100000 + a[0] % 900000);
 };
+/* 8 أرقام عشوائية (لكلمات مرور حسابات الدخول): 100 مليون احتمال لكل فئة بدل 900 ألف */
+const genDigits8 = () => {
+  const a = new Uint32Array(1);
+  try { crypto.getRandomValues(a); } catch (e) { a[0] = Math.floor(Math.random() * 4294967296); }
+  return String(a[0] % 100000000).padStart(8, '0');
+};
 const pinField = v => (CLOUD ? [] : [{ name: 'pin', label: 'كلمة المرور', value: v, required: true }]);
 const pv = (t, g, k) => k === 'phone' ? (t.phone || '') : ((t[g] || {})[k] || '');
 
@@ -286,7 +292,9 @@ function ageOf(st) {
   if (n.getMonth() < b.getMonth() || (n.getMonth() === b.getMonth() && n.getDate() < b.getDate())) a--;
   return a >= 0 ? a : '';
 }
-const avatar = (st, size = 34) => st?.photo ? `<img class="av" src="${st.photo}" alt="" style="width:${size}px;height:${size}px">` : `<span class="av av0" style="width:${size}px;height:${size}px">${esc((st?.name || '؟').trim().charAt(0))}</span>`;
+/* الصورة لا تُعرض إلا إن كانت صورة مضمّنة سليمة (data:image/...;base64)، فلا يمكن حقن كود عبر حقل الصورة */
+const safePhoto = p => typeof p === 'string' && /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(p) ? p : '';
+const avatar = (st, size = 34) => safePhoto(st?.photo) ? `<img class="av" src="${esc(safePhoto(st.photo))}" alt="" style="width:${size}px;height:${size}px">` : `<span class="av av0" style="width:${size}px;height:${size}px">${esc((st?.name || '؟').trim().charAt(0))}</span>`;
 function timeText(h) {
   const w = h?.time;
   if (!w) return h?.schedule || '';
@@ -308,17 +316,61 @@ const sameName = () => {
 };
 const recsOf = sid => db.records.filter(r => r.studentId === sid).slice().reverse().sort((a, b) => b.date.localeCompare(a.date));
 const recLine = r => `${r.type} — سورة ${SURAHS[r.surah - 1][0]} (${r.from}–${r.to})`;
+/* منهج الكرّاسة قبل تسميعه (بلا درجة بعد): ليس تسميعًا، فلا يدخل في العدادات ولا في «آخر حفظ» */
+const isPlan = r => !!(r && r.plan && !r.grade);
 function lastHifz(sid) {
-  const r = recsOf(sid).find(x => x.type === 'حفظ');
+  const r = recsOf(sid).find(x => x.type === 'حفظ' && !isPlan(x));
   return r ? `سورة ${SURAHS[r.surah - 1][0]} – آية ${r.to}` : '—';
 }
-function attRate(sid) {
-  const a = db.attendance.filter(x => x.studentId === sid);
-  if (!a.length) return '—';
-  const ok = a.filter(x => x.status === 'present' || x.status === 'late').length;
-  return Math.round(ok * 100 / a.length) + '%';
+/* ===== الغياب الضمني (قاعدة المؤسسة) =====
+   يوم سجّل فيه المعلم حضور حلقته (أي طالب منها): من لم يُسجَّل له شيء من منتظميها يُحسب غائبًا.
+   يوم لم يُسجَّل فيه للحلقة شيء: لا يُحسب فيه أحد غائبًا.
+   الحلقة هي حلقة الطالب الحالية، والفهرس يُبنى مرة لكل رسم (كفهرس المدفوع) */
+let _attIx = null;
+function attIndex() {
+  if (_attIx) return _attIx;
+  const pool = window.QLStuPool || db.students || [];
+  const stuH = new Map(pool.map(s => [s.id, s.halaqaId]));
+  const halDays = new Map(), byStu = new Map();
+  (db.attendance || []).forEach(a => {
+    if (!a || !a.date) return;
+    const h = stuH.get(a.studentId);
+    if (h) { let d = halDays.get(h); if (!d) halDays.set(h, d = new Set()); d.add(a.date); }
+    let m = byStu.get(a.studentId); if (!m) byStu.set(a.studentId, m = new Map()); m.set(a.date, a.status);
+  });
+  _attIx = { halDays, byStu };
+  setTimeout(() => { _attIx = null; }, 0);
+  return _attIx;
 }
-const hifzAyat = sid => db.records.filter(r => r.studentId === sid && r.type === 'حفظ').reduce((s, r) => s + (r.to - r.from + 1), 0);
+const attIn = (d, from, to) => (!from || d >= from) && (!to || d <= to);
+/* أيام الطالب المحسوبة بين تاريخين (شاملين، اختياريين) وحالة كل يوم: المسجَّل كما هو، وأيام تسجيل حلقته بلا تسجيل له «absent»
+   (للمنتظم فقط)؛ ويُعلَّم الضمني في implicit */
+function attDaysOf(s, from, to) {
+  const { halDays, byStu } = attIndex(), out = new Map(), implicit = new Set();
+  if (!s) return { days: out, implicit };
+  (byStu.get(s.id) || new Map()).forEach((st, d) => { if (attIn(d, from, to)) out.set(d, st); });
+  if (!stOff(s) && s.halaqaId) (halDays.get(s.halaqaId) || []).forEach(d => { if (!out.has(d) && attIn(d, from, to)) { out.set(d, 'absent'); implicit.add(d); } });
+  return { days: out, implicit };
+}
+/* حضور يوم لقائمة طلاب: المسجَّلون، ومعهم منتظمو الحلقات التي سجّلت ذلك اليوم بلا تسجيل لهم (غائبون) */
+function attOnDay(list, d) {
+  const { halDays, byStu } = attIndex();
+  let ok = 0, tot = 0;
+  (list || []).forEach(s => {
+    const st = byStu.get(s.id)?.get(d);
+    if (st) { tot++; if (st === 'present' || st === 'late') ok++; }
+    else if (!stOff(s) && s.halaqaId && halDays.get(s.halaqaId)?.has(d)) tot++;
+  });
+  return { ok, tot, absent: tot - ok, pct: tot ? Math.round(ok * 100 / tot) : null };
+}
+const halRecorded = (hid, d) => !!attIndex().halDays.get(hid)?.has(d);
+function attRate(sid) {
+  const { days } = attDaysOf(byId(db.students, sid) || { id: sid });
+  if (!days.size) return '—';
+  const ok = [...days.values()].filter(x => x === 'present' || x === 'late').length;
+  return Math.round(ok * 100 / days.size) + '%';
+}
+const hifzAyat = sid => db.records.filter(r => r.studentId === sid && r.type === 'حفظ' && !isPlan(r)).reduce((s, r) => s + (r.to - r.from + 1), 0);
 const newsFor = aud => db.news.filter(n => n.audience === 'all' || n.audience === aud).slice().reverse();
 const AUD = { all: 'الجميع', teacher: 'المعلمون', supervisor: 'المشرفون', student: 'الطلاب', accountant: 'المحاسبون', admin: 'المدير' };
 /* حالة الطالب: منقطع أو منتظم (الافتراضي) */
@@ -442,7 +494,10 @@ function loginView() {
 /* ===== بحث الاسم في صفحة الدخول (كل الحسابات في قائمة واحدة) ===== */
 /* قواعد البحث والمقارنة: التشكيل يُتجاهل، والهمزات (أ إ آ) = ا، والتاء المربوطة = الهاء، والألف المقصورة = الياء،
    و«عبد الله» = «عبدالله» (المسافة بعد «عبد» لا تُحسب) */
-const normRaw = t => String(t || '').replace(/[ً-ْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().replace(/(^| )عبد /g, '$1عبد').toLowerCase();
+/* يُحذف أيضًا: علامات الاتجاه الخفية والمسافات الصفرية (تأتي مع الأسماء المنسوخة من واتساب)، والألف الخنجرية وعلامات المصحف؛
+   وتُوحَّد ٱ والياء والكاف الفارسيتان. بدونها لا يتطابق الاسم المنسوخ مع المسجَّل فيتكرر الطالب عند الاستيراد */
+const normRaw = t => String(t || '').replace(/[​-‏‪-‮⁦-⁩﻿؜]/g, '').replace(/[ٰۖ-ۭ]/g, '')
+  .replace(/[ٱ]/g, 'ا').replace(/[ی]/g, 'ي').replace(/[ک]/g, 'ك').replace(/[ً-ْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().replace(/(^| )عبد /g, '$1عبد').toLowerCase();
 /* النتائج تُحفظ: نفس الأسماء تُوحَّد آلاف المرات في الصفحة الواحدة (البحث والمقارنة والقوائم) */
 const normMemo = new Map();
 const norm = t => { const k = typeof t === 'string' ? t : String(t || ''); let v = normMemo.get(k); if (v === undefined) { if (normMemo.size > 60000) normMemo.clear(); v = normRaw(k); normMemo.set(k, v); } return v; };
@@ -562,10 +617,10 @@ function historyTable(sid) {
 /* ============ قسم الإداريات ============ */
 const adminViews = {
   dash() {
-    const t = today(), att = db.attendance.filter(a => a.date === t);
-    const ok = att.filter(a => a.status === 'present' || a.status === 'late').length;
-    const week = new Date(Date.now() - 7 * 864e5), wk = `${week.getFullYear()}-${pad(week.getMonth() + 1)}-${pad(week.getDate())}`;
-    const stats = [[db.teachers.length, 'معلم'], [db.supervisors.length, 'مشرف'], [db.places.length, 'مكان'], [db.halaqat.length, 'حلقة'], [db.students.length, 'طالب'], [att.length ? Math.round(ok * 100 / att.length) + '%' : '—', 'حضور اليوم'], [db.records.filter(r => r.date >= wk).length, 'تسجيلات الأسبوع']];
+    const t = today(), AD = attOnDay(db.students, t);
+    /* الأسبوع سبعة أيام بما فيها اليوم (كان −7 فيغطي ثمانية) */
+    const week = new Date(Date.now() - 6 * 864e5), wk = `${week.getFullYear()}-${pad(week.getMonth() + 1)}-${pad(week.getDate())}`;
+    const stats = [[db.teachers.length, 'معلم'], [db.supervisors.length, 'مشرف'], [db.places.length, 'مكان'], [db.halaqat.length, 'حلقة'], [db.students.length, 'طالب'], [AD.pct == null ? '—' : AD.pct + '%', 'حضور اليوم'], [db.records.filter(r => r.date >= wk && !isPlan(r)).length, 'تسجيلات الأسبوع']];
     return `<div class="grid">${stats.map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('')}</div>${newsView('admin')}`;
   },
   members() {

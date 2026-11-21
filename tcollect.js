@@ -181,12 +181,16 @@
       if (CLOUD && s.halaqaId) { try { const r = await window.Cloud.rpc('student_dues_ym', { hid: s.halaqaId, yy: y, mm: m }); const x = (r || []).find(z => z.student_id === s.id); if (x && x.due != null) return +x.due; } catch (e) { /* يكمل بحساب الجهاز */ } }
       return window.QLFeeDue ? window.QLFeeDue(s, y, m) : null;
     };
-    const d = draft(), ex = (d?.lines || []).find(l => l.studentId === s.id && l.y === cy && l.m === cm);
+    /* سطر الطالب في الكشف الحالي عن الشهر المختار: المبلغ المكتوب يحل محله (لا يُضاف إليه) */
+    const d = draft(), exFor = (y, m) => (d?.lines || []).find(l => l.studentId === s.id && l.y === y && l.m === m);
+    let ex = exFor(cy, cm);
+    const exTxt = () => ex ? `في الكشف عن هذا الشهر ${money(ex.amount)} جنيه؛ المبلغ الذي تكتبه يحل محله. إن دفع مبلغًا آخر فاكتب المجموع.` : '';
     let mOpts = '';
     for (let k = -12; k <= 2; k++) { const dd = new Date(cy, cm - 1 + k, 1), y = dd.getFullYear(), m = dd.getMonth() + 1; mOpts += `<option value="${y}-${m}" ${y === cy && m === cm ? 'selected' : ''}>${MONTHS[m - 1]} ${y}</option>`; }
     const p = document.createElement('div'); p.className = 'overlay';
     p.innerHTML = `<div class="modal"><h2>تحصيل اشتراك: ${esc(s.name)}</h2><p class="muted" data-due style="margin:0 0 .6rem"${fee ? '' : ' hidden'}>${fee ? `المستحق: ${money(fee)} جنيه` : ''}</p>
       <label>المبلغ<input type="number" min="0" step="any" name="amount" value="${ex ? ex.amount : (fee || '')}" required></label>
+      <p class="note" data-exnote style="margin:.2rem 0 .4rem;font-size:.86rem"${ex ? '' : ' hidden'}>${esc(exTxt())}</p>
       <label>عن شهر<select name="month">${mOpts}</select></label>
       <label>التاريخ<input type="date" name="date" value="${today()}"></label>
       <label>ملاحظة<input name="note" value="${esc(ex?.note || '')}"></label>
@@ -201,11 +205,14 @@
     let feeSeq = 0;
     const showFee = () => { dueEl.hidden = !fee; dueEl.textContent = fee ? `المستحق: ${money(fee)} جنيه` : ''; need(); };
     mSel.addEventListener('change', async () => {
-      const [y, m] = mSel.value.split('-').map(Number), seq = ++feeSeq, prevFee = fee;
+      const [y, m] = mSel.value.split('-').map(Number), seq = ++feeSeq, prevFee = fee, prevEx = ex;
+      ex = exFor(y, m);
+      const exEl = p.querySelector('[data-exnote]'); exEl.hidden = !ex; exEl.textContent = exTxt();
       const f = await feeFor(y, m); if (seq !== feeSeq) return;
       fee = f;
-      /* المبلغ المقترح يتبع المستحق ما لم يكتب المستخدم غيره */
-      if (!ex && (!ai.value || +ai.value === +prevFee) && fee) ai.value = fee;
+      /* المبلغ المقترح: ما في الكشف لهذا الشهر إن وُجد، وإلا يتبع المستحق ما لم يكتب المستخدم غيره */
+      if (ex) ai.value = ex.amount;
+      else if ((!ai.value || +ai.value === +prevFee || (prevEx && +ai.value === +prevEx.amount)) && fee) ai.value = fee;
       showFee();
     });
     p.querySelector('[data-close]').onclick = () => p.remove();
@@ -314,7 +321,7 @@
     const done = ls.every(l => l.state === 'ok' || l.state === 'issue'), ok = ls.filter(l => l.state === 'ok'), pend = ls.filter(l => l.state !== 'ok' && l.state !== 'issue').length;
     return `<div class="card qnotice" data-nid="${esc(n.id)}"><div class="qnhead"><b>كشف تحصيل من ${esc(n.collectorName)}</b><small class="muted">${dt(n.sentAt)} · ${ls.length} من الطلاب · ${money(sumOf(ls))} جنيه</small></div>
       <div class="tbl"><table><tr><th class="qnm">الطالب</th><th>عن شهر</th><th>المبلغ</th><th></th></tr>
-      ${ls.map(l => `<tr class="${l.state === 'ok' ? 'qok' : l.state === 'issue' ? 'qno' : ''}"><td class="qnm">${l.state === 'ok' ? '✓ ' : ''}${esc(l.studentName)}${l.note ? `<br><small class="muted">${esc(l.note)}</small>` : ''}${l.state === 'issue' && l.accNote ? `<br><small>أُعيد: ${esc(l.accNote)}</small>` : ''}</td><td>${MONTHS[l.m - 1]} ${l.y}</td><td>${money(l.amount)}</td>
+      ${ls.map(l => `<tr class="${l.state === 'ok' ? 'qok' : l.state === 'issue' ? 'qno' : ''}"><td class="qnm">${l.state === 'ok' ? '✓ ' : ''}${esc(l.studentName)}${l.state === 'pending' && paidBefore(l) > 0 ? `<br><small class="tag tag-no" title="«تم التحصيل» يسجّل دفعة ثانية عن الشهر نفسه">مسدَّد من قبل: ${money(paidBefore(l))}</small>` : ''}${l.note ? `<br><small class="muted">${esc(l.note)}</small>` : ''}${l.state === 'issue' && l.accNote ? `<br><small>أُعيد: ${esc(l.accNote)}</small>` : ''}</td><td>${MONTHS[l.m - 1]} ${l.y}</td><td>${money(l.amount)}</td>
         <td>${l.state === 'ok' || l.state === 'issue' ? `<button type="button" class="btn sm" data-acmark="${esc(l.id)}" data-v="">تراجع</button>` : `<button type="button" class="btn sm primary" data-acmark="${esc(l.id)}" data-v="1">تم التحصيل</button> <button type="button" class="btn sm" data-acmark="${esc(l.id)}" data-v="0">إعادة</button>`}</td></tr>`).join('')}
       <tr class="sum"><td colspan="2">الإجمالي (${ls.length})</td><td>${money(sumOf(ls))}</td><td></td></tr></table></div>
       <div class="row qnfoot">${pend ? `<button type="button" class="btn" data-acall>تم التحصيل للكل (${pend})</button>` : ''}
@@ -342,6 +349,8 @@
       ${A.busy && !A.at ? '<p class="muted">جارٍ التحميل…</p>' : A.tab === 'inbox' ? (n ? A.inbox.map(noticeCard).join('') : `<p class="muted">لا توجد كشوف تنتظر المراجعة.${oldPend ? ' وفي «السجل» قوائم قديمة تنتظر المراجعة.' : ''}</p>`) : logView()}
       <div class="row"><button type="button" class="btn" data-close>إغلاق</button></div></div>`;
   }
+  /* ما سُجّل للطالب عن شهر السطر من قبل (عند المحاسب أو في كشف آخر): ظهوره يمنع تأكيد دفعة مكررة دون انتباه */
+  const paidBefore = l => Math.round((db.fees || []).filter(f => f.studentId === l.studentId && +f.y === +l.y && +f.m === +l.m).reduce((a, f) => a + (+f.amount || 0), 0) * 100) / 100;
   function accPaint() { if (aov && aov.isConnected) { const m0 = aov.querySelector('.modal'), sc = m0?.scrollTop || 0; aov.innerHTML = accBody(); const m = aov.querySelector('.modal'); if (m) m.scrollTop = sc; } }
   function accOpen() {
     if (aov && aov.isConnected) return;

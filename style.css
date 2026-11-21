@@ -500,3 +500,14 @@ main .tbl{contain:paint}
   .content main,.subnav ~ *,.modal{animation:none}
   .scrim{transition:none}
 }
+
+/* ===== شاشات اللمس (الهاتف والتابلت) — مراجعة 2026-11 =====
+   1) الآيفون يكبّر الصفحة عند لمس أي حقل خطه أقل من 16px ويتركها مكبَّرة: الحقول 16px على اللمس
+   2) أزرار الصفوف (ومنها حاضر/غائب) كانت نحو 28px: الحد الأدنى 40px
+   3) شارة «غير متصل» والتنبيهات كانت تغطي زري الحفظ والإلغاء في النوافذ: ترتفع فوقهما ما دامت نافذة مفتوحة */
+@media (pointer:coarse){
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),select,textarea{font-size:16px!important}
+  .btn.sm{min-height:40px}
+  .logout-mini{min-width:40px;min-height:40px}
+}
+html.ql-modal #netpill,html.ql-modal .toast{bottom:calc(5.5rem + env(safe-area-inset-bottom,0px))}

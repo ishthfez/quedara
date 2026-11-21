@@ -90,7 +90,12 @@
   document.addEventListener('DOMContentLoaded', () => {
     const baseDue = window.QLFeeDue;
     if (typeof baseDue !== 'function') return;
-    window.QLFeeDue = function (s, y) { if (needFees()) return FS.dues.has(s?.id) ? FS.dues.get(s.id) : null; return baseDue.apply(this, arguments); };
+    /* المستحقات المحمّلة لشهر واحد (FS.y/FS.m): لشهر آخر «غير معروف» (null) لا مستحق الشهر المحمَّل
+       (كانت نافذة التحصيل تعرض مستحق الشهر المختار في صفحة الطلاب أيًّا كان الشهر المطلوب) */
+    window.QLFeeDue = function (s, y, m) {
+      if (needFees()) { if (y != null && m != null && (+y !== +FS.y || +m !== +FS.m)) return null; return FS.dues.has(s?.id) ? FS.dues.get(s.id) : null; }
+      return baseDue.apply(this, arguments);
+    };
   });
   /* هل تُعرض الاشتراكات لهذا الحساب في الصفحة (app-abs.js)؛ ما يظهر منها يحدده الجدول */
   window.QLStaffFees = { ok: () => on() && (needFees() ? FS.ok : !!window.QLStuPerm?.can('c_due') || !!window.QLStuPerm?.can('sum')) };

@@ -13,7 +13,8 @@
   const setWidth = w => { try { localStorage.setItem(WKEY, String(w)); } catch (e) { /* ignore */ } };
   const money = n => (Math.round((+n || 0) * 100) / 100).toLocaleString('en-US');
   const no = f => String(f.id || '').replace(/-/g, '').slice(0, 8).toUpperCase();
-  const paidFor = (sid, y, m) => (db.fees || []).filter(x => x.studentId === sid && +x.y === +y && +x.m === +m).reduce((a, x) => a + (+x.amount || 0), 0);
+  /* المجموع مقرَّب للقرش حتى لا تظهر «الباقي 0» لمن سدّد كاملًا */
+  const paidFor = (sid, y, m) => Math.round((db.fees || []).filter(x => x.studentId === sid && +x.y === +y && +x.m === +m).reduce((a, x) => a + (+x.amount || 0), 0) * 100) / 100;
 
   function receiptHtml(f) {
     const s = byId(db.students, f.studentId) || { name: '—' }, h = byId(db.halaqat, s.halaqaId);
@@ -37,7 +38,8 @@
     </style></head><body>
       <img class="logo" src="${logoSrc()}" alt="">
       <div class="c"><h1>${esc(db.settings?.org || 'إدارة الحلقات القرآنية')}</h1><div class="sub">إيصال استلام اشتراك</div>
-      <div class="muted">رقم ${no(f)} · ${esc(f.date || today())} · ${time}</div></div>
+      <div class="muted">رقم ${no(f)} · ${esc(f.date || today())}${!f.date || f.date === today() ? ` · ${time}` : ''}</div>
+      ${f.date && f.date !== today() ? `<div class="muted">نسخة مُعادة طُبعت ${esc(today())} ${time}؛ المستحق والحالة بتاريخ الطباعة</div>` : ''}</div>
       <div class="hr"></div>
       <table>${row('الطالب', s.name)}${row('الحلقة', h ? halaqaLabel(h) : '')}${row('المكان', h ? placeName(h) : '')}${row('عن شهر', `${MONTHS[(+f.m || 1) - 1]} ${f.y}`)}</table>
       <div class="amt">${money(f.amount)} جنيه</div>

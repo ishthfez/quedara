@@ -133,15 +133,19 @@
      (ونص حلقته في الملف يُحفظ في بياناته). ما جاء من ملف الدفعات لا يُضاف (ليس طلابًا: زر «إصلاح»). */
   function quickAll() {
     const L = list().filter(x => !isPay(x)); if (!L.length) { toast('لا يوجد من يُضاف'); return; }
-    const picks = L.map(x => ({ x, h: guess(x).best }));
-    const inH = picks.filter(p => p.h).length, noH = picks.length - inH;
-    ask(`إضافة ${L.length} طالبًا بأسمائهم كما في السجل؟ ${inH ? `${inH} في حلقاتهم من السجل` : ''}${inH && noH ? '، و' : ''}${noH ? `${noH} بلا حلقة (لا يذكر سجلهم حلقة ولا معلمًا ولا مكانًا؛ تجدهم في «الطلاب» بتصفية «بلا حلقة»)` : ''}. احفظ نسخة احتياطية قبلها.`, () => {
+    /* من له طالب بالاسم نفسه في الحلقة المرجَّحة أو مكانها، أو لم تُعرف له حلقة، غالبًا هو الطالب الموجود نفسه:
+       لا يُضاف بالضغطة الواحدة (كان يُضاف فيصير للشخص سجلان يتوزع عليهما الحضور والاشتراكات)، ويبقى في القائمة لمراجعته واحدًا واحدًا */
+    const twin = (x, h) => { const k = norm(x.name), pid = h && h.placeId; return db.students.some(s => norm(s.name) === k && (s.halaqaId === h.id || (pid && byId(db.halaqat, s.halaqaId)?.placeId === pid))); };
+    const all = L.map(x => ({ x, h: guess(x).best }));
+    const picks = all.filter(p => p.h && !twin(p.x, p.h)), held = all.length - picks.length;
+    if (!picks.length) { toast(`لا يوجد من يُضاف تلقائيًا: ${held} يحتاجون مراجعة واحدًا واحدًا (قد يكونون طلابًا موجودين)`); return; }
+    ask(`إضافة ${picks.length} طالبًا بأسمائهم في حلقاتهم من السجل؟${held ? ` ويبقى ${held} في القائمة لمراجعتهم واحدًا واحدًا (بالاسم نفسه طالب في الحلقة أو المكان نفسه، أو لا تُعرف حلقتهم).` : ''} احفظ نسخة احتياطية قبلها.`, () => {
       const ids = new Set();
-      picks.forEach(({ x, h }) => { create(x, h || { id: '' }); ids.add(x.id); });
+      picks.forEach(({ x, h }) => { create(x, h); ids.add(x.id); });
       db.payroll.settings.dup_students = list().filter(x => !ids.has(x.id));
       save(); render();
       const left = list().length;
-      toast(`أُضيف ${ids.size} طالبًا${left ? ` — بقي ${left} من ملف الدفعات (زر «إصلاح»)` : ' — القائمة فارغة ✓'}`);
+      toast(`أُضيف ${ids.size} طالبًا${left ? ` — بقي ${left} في القائمة للمراجعة` : ' — القائمة فارغة ✓'}`);
     });
   }
   function allDialog() {

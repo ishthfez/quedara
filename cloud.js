@@ -11,7 +11,10 @@ const DEF = {
   fn: 'dynamic-worker'
 };
 let CFG = DEF;
-try { const o = JSON.parse(localStorage.getItem('qcloud_cfg') || 'null'); if (o && o.url && o.key) CFG = { ...DEF, ...o }; } catch (e) { /* ignore */ }
+/* تغيير عنوان الخادم من التخزين المحلي للتطوير على الجهاز وحده: على الموقع المنشور كان أي كود محقون يستطيع
+   تحويل كل عمليات الدخول القادمة (ومعها كلمات المرور) إلى خادم آخر بسطر واحد في localStorage */
+const DEV_HOST = /^(localhost|127\.0\.0\.1|\[::1\])$|\.localhost$/i.test(location.hostname);
+try { const o = DEV_HOST ? JSON.parse(localStorage.getItem('qcloud_cfg') || 'null') : null; if (o && o.url && o.key) CFG = { ...DEF, ...o }; } catch (e) { /* ignore */ }
 if (/[?&]local=1/.test(location.search)) CFG = { ...CFG, url: '' };
 
 const LS = {
@@ -127,9 +130,17 @@ async function reauth(email, password) {
   emit();
   return auth;
 }
-async function signOut() {
+/* wipe: الخروج بزر «خروج» يمسح نسخة هذا الحساب من الجهاز (البيانات كاملة كانت تبقى في المتصفح بعد الخروج،
+   فيقرؤها أي أحد على جهاز مشترك: الرواتب والأرقام القومية والهواتف). انتهاء الجلسة وحده لا يمسح شيئًا */
+async function signOut(opts = {}) {
+  const uid = auth?.uid;
   try { if (auth) await req('/auth/v1/logout', { method: 'POST', retry: false }); } catch (e) { /* ignore */ }
-  auth = null; snap = null; LS.del(AKEY); resetSync(); emit();
+  auth = null; snap = null; LS.del(AKEY); resetSync();
+  if (opts.wipe && uid) {
+    ['qcloud_db_', 'qcloud_snap_', 'qcloud_raw_'].forEach(p => { const k = p + uid; pendingW.delete(k); LS.del(k); IDB.del(k).catch(() => null); });
+    LS.del('qcloud_legacy_pins');
+  }
+  emit();
 }
 /* «المدير العام»: على الخادم نوع حساب مستقل (role = 'gmanager'، supabase/gmanager_role.sql)، وفي واجهة التطبيق
    «مشرف نطاقه الكل» كما كان (info.scope = 'all') فتبقى كل صفحات المشرف وفحوصه كما هي. الترجمة بينهما هنا وحدها:
@@ -207,7 +218,7 @@ function groups(db) {
   add('students', 'members', ['id'], (db.students || []).map(m => memberRow(m, 'student')));
   add('member_admin', 'member_admin', ['member_id'], (db.teachers || []).filter(t => t.admin && Object.keys(t.admin).length).map(t => ({ member_id: t.id, data: t.admin })));
   add('attendance', 'attendance', ['id'], (db.attendance || []).map(a => ({ id: a.id, student_id: a.studentId, date: a.date, status: a.status })), 'student_id,date');
-  add('records', 'records', ['id'], (db.records || []).map(r => ({ id: r.id, student_id: r.studentId, date: r.date, type: r.type, surah: +r.surah, from_ayah: +r.from, to_ayah: +r.to, grade: r.grade || null, note: r.note || '' })));
+  add('records', 'records', ['id'], (db.records || []).map(r => ({ id: r.id, student_id: r.studentId, date: r.date, type: r.type, surah: +r.surah, from_ayah: +r.from, to_ayah: +r.to, grade: r.grade || null, note: r.note || '', ...(r.plan != null ? { plan: !!r.plan } : {}) })));   // plan: منهج الكرّاسة قبل تسميعه (يُرسل فقط إن عُرف، فلا تُعاد كل التسجيلات القديمة)
   /* أهمية الإعلان ومدته تُرسل متى وُجد عموداها على الخادم (supabase/news_ext.sql)، وقبل ذلك يُرسل الإعلان كما كان */
   add('news', 'news', ['id'], (db.news || []).map(n => ({ id: n.id, text: n.text, audience: n.audience || 'all', date: n.date, ...(newsExt ? { prio: n.prio || '', until: n.until || null } : {}) })));
   /* اشتراكات الطلاب (للمدير)؛ لا تُرسل إن لم يُنشأ جدولها على الخادم بعد */
@@ -393,7 +404,9 @@ async function pullInner() {
     if (!scoped) mode = Date.now() - lastFull < FULL_EVERY ? 'inc' : 'full';
     else if (chk.hal && (!sameSet(chk.hal, raw.hal) || !sameSet(chk.stu, raw.stu))) mode = 'full'; // تغيّر نطاقه: حلقة جديدة أو طالب انتقل
     else if (!chk.tables.length) mode = 'none';
-    else mode = role === 'admin' && Date.now() - lastFull >= FULL_EVERY ? 'full' : 'inc';
+    /* من لا يعيد له الخادم نطاقه (hal/stu، مثل الإداري) لا يعرف أن طالبًا خرج من نطاقه، فيبقى عنده ويُعدّ:
+       يُجلب له كل نطاقه مرة كل ساعتين على الأكثر حين يتغيّر شيء (المدير كل نصف ساعة كما كان) */
+    else mode = Date.now() - lastFull >= FULL_EVERY && (role === 'admin' || (!chk.hal && Date.now() - lastFull >= 4 * FULL_EVERY)) ? 'full' : 'inc';
   }
   if (mode === 'none') { lastChanged = false; since = backMinute(chk.now); }
   else if (mode === 'inc') {
@@ -436,7 +449,7 @@ async function pullInner() {
   if (becameGM) { auth.member = { ...auth.member, srvRole: 'gmanager' }; LS.set(AKEY, auth); }
   db.halaqat = halaqat.map(h => ({ id: h.id, name: h.name || '', teacherId: h.teacher_id || '', supervisorId: h.supervisor_id || '', placeId: h.place_id || '', time: h.time || undefined }));
   db.attendance = attendance.map(a => ({ id: a.id, studentId: a.student_id, date: a.date, status: a.status }));
-  db.records = records.map(r => ({ id: r.id, studentId: r.student_id, date: r.date, type: r.type, surah: r.surah, from: r.from_ayah, to: r.to_ayah, grade: r.grade || '', note: r.note || '' }));
+  db.records = records.map(r => ({ id: r.id, studentId: r.student_id, date: r.date, type: r.type, surah: r.surah, from: r.from_ayah, to: r.to_ayah, grade: r.grade || '', note: r.note || '', ...(r.plan ? { plan: true } : {}) }));
   /* الإعلانات بترتيب إنشائها (الأقدم أولًا، وتعرضها الواجهة معكوسة فيظهر الأحدث أولًا) */
   db.news = news.slice().sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))).map(n => ({ id: n.id, text: n.text, audience: n.audience, date: n.date, author: n.author || '', authorId: n.author_id || '', prio: n.prio || '', until: n.until || '' }));
   fields.forEach(f => { (db.fields[f.kind] = db.fields[f.kind] || []).push({ key: f.key, label: f.label, type: f.type }); });
@@ -566,15 +579,41 @@ function diff(db) {
 }
 const pendingCount = db => (auth && snap && db ? diff(db).reduce((a, g) => a + g.up.length + g.del.length, 0) : 0);
 function enc(v) { return '"' + String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+/* رفض من الخادم لسطر بعينه (صلاحية أو قيد) لا انقطاع اتصال */
+const isReject = e => e instanceof HttpError && e.status >= 400 && e.status < 500 && e.status !== 401;
+async function delKeys(gr, part) {
+  if (gr.pk.length === 1) return req(`/rest/v1/${gr.table}?${gr.pk[0]}=in.(${part.map(enc).join(',')})`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+  const cond = part.map(k => { const vs = k.split('|'); return 'and(' + gr.pk.map((p, j) => `${p}.eq.${enc(vs[j])}`).join(',') + ')'; }).join(',');
+  return req(`/rest/v1/${gr.table}?or=(${encodeURIComponent(cond)})`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+}
+/* يعيد المفاتيح التي رفض الخادم حذفها؛ الدفعة المرفوضة تُعاد سطرًا سطرًا فيُحذف ما يقبله الخادم منها */
 async function doDelete(gr, keys) {
+  const bad = [];
   for (let i = 0; i < keys.length; i += 100) {
     const part = keys.slice(i, i + 100);
-    if (gr.pk.length === 1) await req(`/rest/v1/${gr.table}?${gr.pk[0]}=in.(${part.map(enc).join(',')})`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
-    else {
-      const cond = part.map(k => { const vs = k.split('|'); return 'and(' + gr.pk.map((p, j) => `${p}.eq.${enc(vs[j])}`).join(',') + ')'; }).join(',');
-      await req(`/rest/v1/${gr.table}?or=(${encodeURIComponent(cond)})`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+    try { await delKeys(gr, part); }
+    catch (e) {
+      if (!isReject(e)) throw e;
+      for (const k of part) { try { await delKeys(gr, [k]); } catch (e2) { if (!isReject(e2)) throw e2; bad.push({ k, e: e2 }); } }
     }
   }
+  return bad;
+}
+/* يرسل الصفوف دفعات؛ الدفعة المرفوضة تُعاد سطرًا سطرًا: يُحفظ ما يقبله الخادم، ويُعاد ما يرفضه وحده.
+   كان سطر واحد مرفوض (اسم بلا صلاحية تعديله مثلًا) يُسقط الدفعة كلها وما بعدها، ثم يستبدل السحبُ بيانات الجهاز
+   فتضيع كل التعديلات التي لم تُرسل (حضور ودفعات سُجّلت دون إنترنت) */
+async function upsertRows(gr, list, conflict) {
+  const bad = [];
+  const send = rows => req(`/rest/v1/${gr.table}?on_conflict=${conflict}`, { method: 'POST', body: rows, headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } });
+  for (let i = 0; i < list.length; i += 500) {
+    const chunk = list.slice(i, i + 500);
+    try { await send(chunk); }
+    catch (e) {
+      if (!isReject(e) || chunk.length === 1) { if (isReject(e)) { bad.push({ r: chunk[0], e }); continue; } throw e; }
+      for (const r of chunk) { try { await send([r]); } catch (e2) { if (!isReject(e2)) throw e2; bad.push({ r, e: e2 }); } }
+    }
+  }
+  return bad;
 }
 /* ما أُرسل بنجاح يُسجَّل في نسخة صفوف الخادم على الجهاز (raw)، فلا يعيد السحب التالي بناء البيانات من النسخة السابقة له */
 function patchRaw(gr, rows, dels) {
@@ -590,16 +629,17 @@ async function push(db) {
   try {
     await probeGM();
     const role = auth.member?.role;
-    const ds = diff(db);
+    const ds = diff(db), refused = [];
     for (const gr of ds) {
       /* صف يعرفه الخادم يُحدَّث بمعرّفه (ولو تغيّر صاحبه بالدمج)، والصف الجديد بمفتاحه الطبيعي (الموظف والشهر) */
       const prev = snap[gr.name] || {}, pk = gr.pk.join(',');
       const parts = [[gr.up.filter(r => rowKey(gr.pk, r) in prev), pk], [gr.up.filter(r => !(rowKey(gr.pk, r) in prev)), gr.conflict || pk]];
-      for (const [list, conflict] of parts) for (let i = 0; i < list.length; i += 500) {
-        await req(`/rest/v1/${gr.table}?on_conflict=${conflict}`, { method: 'POST', body: list.slice(i, i + 500), headers: { Prefer: 'resolution=merge-duplicates,return=minimal' } });
-      }
-      gr.up.forEach(r => { snap[gr.name] = snap[gr.name] || {}; snap[gr.name][rowKey(gr.pk, r)] = JSON.stringify(r); });
-      patchRaw(gr, gr.up, []);
+      const badRows = new Set();
+      for (const [list, conflict] of parts) (await upsertRows(gr, list, conflict)).forEach(b => { badRows.add(b.r); refused.push(b.e); });
+      /* المقبول وحده يُسجَّل «مُرسلًا»؛ المرفوض يبقى فرقًا فيُعاد من الخادم بالسحب التالي */
+      const ok = gr.up.filter(r => !badRows.has(r));
+      ok.forEach(r => { snap[gr.name] = snap[gr.name] || {}; snap[gr.name][rowKey(gr.pk, r)] = JSON.stringify(r); });
+      patchRaw(gr, ok, []);
     }
     /* الصور تُرسل وحدها وفقط إن تغيّرت فعلًا؛ وصورة لم تُحمَّل بعد لا تُمسح أبدًا */
     if (role === 'admin' || (db.myPerms || []).includes('students.edit')) for (const m of db.students || []) {
@@ -610,9 +650,11 @@ async function push(db) {
       photoSent.set(m.id, hv); photoCache.set(m.id, cur);
     }
     for (const gr of ds.slice().reverse()) {
-      if (gr.del.length) await doDelete(gr, gr.del);
-      gr.del.forEach(k => { delete snap[gr.name][k]; });
-      patchRaw(gr, [], gr.del);
+      const bad = gr.del.length ? await doDelete(gr, gr.del) : [], badK = new Set(bad.map(b => b.k));
+      bad.forEach(b => refused.push(b.e));
+      const done = gr.del.filter(k => !badK.has(k));
+      done.forEach(k => { delete snap[gr.name][k]; });
+      patchRaw(gr, [], done);
     }
     // المعلم يعدّل بياناته الشخصية والفنية عبر دالة مخصّصة (لا يملك تعديل جدول الأعضاء)
     if (role === 'teacher') {
@@ -627,6 +669,8 @@ async function push(db) {
     }
     persist(snapKey(), snap);
     lastSync = new Date(); lastError = ''; pushFails = 0;
+    /* ما رفضه الخادم: يُبلَّغ كما كان (فيُعاد سحب حقيقة الخادم لتلك الصفوف وحدها، بعد أن وصل كل ما قُبل) */
+    if (refused.length) throw refused[0];
   } catch (e) {
     lastError = e.message || String(e);
     if (e instanceof HttpError && e.status >= 400 && e.status < 500 && e.status !== 401) {
@@ -666,7 +710,7 @@ const IDB = (() => {
     const t = d.transaction('kv', mode), q = fn(t.objectStore('kv'));
     t.oncomplete = () => ok(q.result); t.onerror = t.onabort = () => no(t.error);
   }));
-  return { get: k => tx('readonly', s => s.get(k)), set: (k, v) => tx('readwrite', s => s.put(v, k)) };
+  return { get: k => tx('readonly', s => s.get(k)), set: (k, v) => tx('readwrite', s => s.put(v, k)), del: k => tx('readwrite', s => s.delete(k)) };
 })();
 /* الكتابة بالترتيب، وكل مفتاح يُكتب بأحدث قيمة له (الضغطات المتتالية تُجمع في كتابة واحدة) */
 const pendingW = new Map(); let writing = false;

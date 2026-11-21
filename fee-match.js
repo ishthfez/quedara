@@ -34,8 +34,11 @@
   var markDone = function () { db.settings.priv_fees = Object.assign({}, db.settings.priv_fees || {}, { _feeSetupApplied: true }); };
   function setPrices(list) {
     var cfg = JSON.parse(JSON.stringify(db.settings.priv_fees || {})), k = yearKey(cfg);
-    var targets = [cfg.places = (cfg.places && typeof cfg.places === 'object') ? cfg.places : {}];
-    if (k) { cfg.years[k] = cfg.years[k] || {}; targets.push(cfg.years[k].places = cfg.years[k].places || {}); }
+    /* السعر يُكتب في الفترة الحالية وحدها إن وُجدت فترات (كان يُكتب في الأسعار الأساسية أيضًا، فتتغيّر مستحقات
+       السنوات السابقة التي لا فترة خاصة لها، ومعها المتأخرات) */
+    var targets;
+    if (k) { cfg.years[k] = cfg.years[k] || {}; targets = [cfg.years[k].places = cfg.years[k].places || {}]; }
+    else targets = [cfg.places = (cfg.places && typeof cfg.places === 'object') ? cfg.places : {}];
     list.forEach(function (x) { targets.forEach(function (P) { var o = P[x.pid] || { general: null, general3: null }; o[x.sys === '3' ? 'general3' : 'general'] = x.best; P[x.pid] = o; }); });
     db.settings.priv_fees = cfg;
   }
@@ -46,12 +49,15 @@
     if (hi < 0) return { err: 'لم أجد عمود «رقم الطالب القديم». استخدم ملف «مرجع مطابقة الاشتراكات».' };
     var H = grid[hi], C = { id: H.indexOf('معرف الطالب'), code: H.indexOf('رقم الطالب القديم'), name: H.indexOf('اسم الطالب'), lv: H.indexOf('المكان والمستوى'), sys: H.indexOf('نظام الحضور'), fee: H.indexOf('المقرر') };
     if (C.sys < 0 || C.fee < 0) return { err: 'لم أجد عمودي «نظام الحضور» و«المقرر».' };
-    var byOld = new Map();
-    db.students.forEach(function (s) { var c = dg((s.info || {}).oldCode); if (c) byOld.set(c, s); });
+    /* الكود القديم: «007» = «7»، والكود المكرر لأكثر من طالب لا يُطابَق (كان يذهب لآخرهم) */
+    var code0 = function (v) { var c = dg(v); return /^\d+$/.test(c) ? String(+c) : c; };
+    var byOld = new Map(), oldDup = new Set();
+    db.students.forEach(function (s) { var c = code0((s.info || {}).oldCode); if (!c) return; if (byOld.has(c) && byOld.get(c).id !== s.id) oldDup.add(c); byOld.set(c, s); });
+    oldDup.forEach(function (c) { byOld.delete(c); });
     var out = { total: 0, matched: 0, off: 0, none: [], sys: [], fee: [], noPrice: 0, groups: {}, prices: [] };
     var rows = [], votes = {};
     grid.slice(hi + 1).forEach(function (r) {
-      var code = dg(r[C.code]), sid = C.id >= 0 ? dg(r[C.id]) : ''; if (!code && !sid) return;
+      var code = code0(r[C.code]), sid = C.id >= 0 ? dg(r[C.id]) : ''; if (!code && !sid) return;
       out.total++;
       var s = (sid && byId(db.students, sid)) || (code && byOld.get(code)) || null;
       if (!s) { out.none.push(r[C.name] || code); return; }
@@ -62,7 +68,8 @@
       if (fFee > 0) fSys = fFee < SYS6_FROM ? '3' : '6';
       if (aSys !== fSys) out.sys.push({ s: s, a: aSys, f: fSys, lv: r[C.lv] || '' });
       var h0 = byId(db.halaqat, s.halaqaId), pid = h0 && h0.placeId;
-      if (pid) { var vk = pid + '|' + fSys; votes[vk] = votes[vk] || {}; votes[vk][fFee] = (votes[vk][fFee] || 0) + 1; }
+      /* المقرر الفارغ أو الصفر لا يُصوَّت به: كان يجعل السعر المقترح للمكان صفرًا، والصفر سعر حقيقي (إعفاء الجميع) */
+      if (pid && fFee > 0) { var vk = pid + '|' + fSys; votes[vk] = votes[vk] || {}; votes[vk][fFee] = (votes[vk][fFee] || 0) + 1; }
       rows.push({ s: s, r: r, fSys: fSys, fFee: fFee });
     });
     /* السعر المقترح لكل مكان ونظام: المقرر الأكثر شيوعًا بين طلابه */

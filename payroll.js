@@ -31,18 +31,38 @@ function P() {
   const p = db.payroll;
   p.settings = { ...DEF, ...(p.settings || {}) };
   ['employees', 'rows', 'absences', 'closed'].forEach(k => { if (!Array.isArray(p[k])) p[k] = []; });
+  /* الشهور المغلقة قبل تثبيت القواعد: تُثبَّت مرة واحدة بالقواعد الحالية (وهي ما تُحسب به الآن)، فلا يغيّرها تعديل لاحق */
+  if (session?.role === 'admin' && p.closed.some(k => !(p.settings.monthCfg || {})[k])) {
+    const mc = { ...(p.settings.monthCfg || {}) };
+    p.closed.forEach(k => { if (!mc[k]) mc[k] = rateSnap(p.settings); });
+    p.settings.monthCfg = mc;
+  }
   return p;
+}
+/* قواعد الخصم والتقريب تُثبَّت مع الشهر عند إغلاقه: تعديل «قواعد الحساب» بعده لا يغيّر رواتب الشهور المغلقة */
+const RATE_KEYS = ['perm', 'noperm', 'mperm', 'mnoperm', 'round', 'absMode', 'absDayHours'];
+const rateSnap = s => Object.fromEntries(RATE_KEYS.map(k => [k, s[k]]));
+/* شهر أُغلق قبل وجود خيار الخصم التلقائي: يبقى «يدويًا» كما حُسب يومها */
+const rateOf = (y, m) => { const s = P().settings, f = (s.monthCfg || {})[key(y, m)]; return f ? { ...s, absMode: 'manual', ...f } : s; };
+/* الخصم التلقائي (اختياري من «قواعد الحساب»): كل يوم غياب مسجَّل بإثبات «خصم» في شهر الكشف = ساعات يوم الغياب
+   × خصم الساعة بإذن أو بغير إذن حسب تسجيله. يُضاف إلى ما يُكتب يدويًا في خانتي الغياب */
+function autoAbs(r, s) {
+  if (s.absMode !== 'auto' || !(num(s.absDayHours) > 0)) return { days: 0, amt: 0 };
+  const L = P().absences.filter(a => a.eid === r.eid && a.y === r.y && a.m === r.m && a.proof === 'خصم');
+  return { days: L.length, amt: Math.round(L.reduce((t, a) => t + num(s.absDayHours) * (a.perm === 'بإذن' ? s.perm : s.noperm), 0)) };
 }
 /* نفس معادلات ملف الرواتب: الخصم بالساعة وبالمرة، والتقريب لأقرب (5) */
 function calc(r) {
-  const s = P().settings;
+  const s = rateOf(r.y, r.m);
   const ot = num(r.extra) + num(r.exc), total = num(r.base) + ot, actual = total - num(r.absP) - num(r.absN);
   const otAmt = Math.round(ot * num(r.rate));
-  const absDed = Math.round(num(r.absP) * s.perm + num(r.absN) * s.noperm) + num(r.mtgP) * s.mperm + num(r.mtgN) * s.mnoperm;
+  const absDed = Math.round(num(r.absP) * s.perm + num(r.absN) * s.noperm) + num(r.mtgP) * s.mperm + num(r.mtgN) * s.mnoperm + autoAbs(r, s).amt;
   const ded = absDed + num(r.dTest) + num(r.dRec) + num(r.dBooks);
   const net = Math.round((num(r.basic) + otAmt + num(r.incentive) + num(r.transport) - ded) / (num(s.round) || 1)) * (num(s.round) || 1);
   return { ot, total, actual, otAmt, ded, net };
 }
+/* أكبر رقم في أكواد الموظفين (م012 ← 12): الكود الجديد بعده. كان «عدد الموظفين + 1» فيتكرر الكود بعد أي حذف */
+const maxCode = p => p.employees.reduce((a, e) => { const n = +(String(e.code || '').match(/\d+/) || [0])[0]; return n > a ? n : a; }, 0);
 const monthRows = (y, m) => P().rows.filter(r => r.y === y && r.m === m);
 const isClosed = (y, m) => P().closed.includes(key(y, m));
 const emp = id => P().employees.find(e => e.id === id);
@@ -75,9 +95,15 @@ const V = {
     if (!rows.length) return `<div class="card">${bar1}${bar2}${empty('لا يوجد كشف لهذا الشهر بعد. «إنشاء الشهر» يجهّز صفًا لكل موظف نشط بأسعاره الحالية، وينقل الساعات الإضافية من الشهر السابق.')}</div>`;
     const g1 = GROUPS.map(([g, l]) => `<th colspan="${IN.filter(x => x[2] === g).length}">${l}</th>`).join('');
     const g2 = IN.map(([, l]) => `<th>${l}</th>`).join('');
+    /* الغياب المسجَّل لكل موظف في شهر الكشف (من «غياب المعلمين»): يظهر تحت اسمه ليُراجَع مع خانتي الغياب،
+       فكان غياب بإثبات «خصم» يُسجَّل ولا يصل إلى الكشف إلا إن كتبه أحد يدويًا */
+    const absBy = new Map();
+    P().absences.filter(a => a.y === st.y && a.m === st.m).forEach(a => { const o = absBy.get(a.eid) || { n: 0, ded: 0, np: 0 }; o.n++; if (a.proof === 'خصم') o.ded++; if (a.perm === 'بغير إذن') o.np++; absBy.set(a.eid, o); });
+    const autoOn = rateOf(st.y, st.m).absMode === 'auto';
+    const absNote = eid => { const o = absBy.get(eid); return o ? `<br><small class="${o.ded && !autoOn ? 'tag tag-no' : 'muted'}" title="من سجل غياب المعلمين لهذا الشهر">غياب مسجَّل: ${o.n} يوم${o.np ? ` (${o.np} بغير إذن)` : ''}${o.ded ? ` · ${o.ded} ${autoOn ? 'مخصوم تلقائيًا ضمن الخصم' : 'للخصم من المرتب (اكتبه في خانتي الغياب)'}` : ''}</small>` : ''; };
     const tr = rows.map((r, i) => {
       const c = calc(r);
-      return `<tr data-row="${esc(r.id)}"><td>${i + 1}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.role || '')}</td>${IN.map(([f]) => `<td>${closed ? fmt(r[f]) : `<input class="num" type="number" step="any" inputmode="decimal" data-pay="cell" data-r="${esc(r.id)}" data-f="${f}" value="${r[f] ?? ''}">`}</td>`).join('')}<td data-o="actual">${fmt(c.actual)}</td><td data-o="otAmt">${fmt(c.otAmt)}</td><td data-o="ded">${fmt(c.ded)}</td><td data-o="net" class="net">${fmt(c.net)}</td><td class="noprint">${closed ? '' : statSel(r.eid)}</td></tr>`;
+      return `<tr data-row="${esc(r.id)}"><td>${i + 1}</td><td class="nm">${esc(r.name)}${absNote(r.eid)}</td><td>${esc(r.role || '')}</td>${IN.map(([f]) => `<td>${closed ? fmt(r[f]) : `<input class="num" type="number" min="0" step="any" inputmode="decimal" data-pay="cell" data-r="${esc(r.id)}" data-f="${f}" value="${r[f] ?? ''}">`}</td>`).join('')}<td data-o="actual">${fmt(c.actual)}</td><td data-o="otAmt">${fmt(c.otAmt)}</td><td data-o="ded">${fmt(c.ded)}</td><td data-o="net" class="net"${c.net < 0 ? ' style="color:var(--red,#b3372f)" title="الخصم أكبر من الراتب: راجع الغياب والخصومات"' : ''}>${c.net < 0 ? '−' + fmt(-c.net) : fmt(c.net)}</td><td class="noprint">${closed ? '' : statSel(r.eid)}</td></tr>`;
     }).join('');
     return `<div class="card">${bar1}${bar2}
       <h2 class="print-only">كشف رواتب معلمي القرآن الكريم - شهر (${st.m}) ${st.y}</h2>
@@ -118,8 +144,8 @@ const V = {
     const s = P().settings, p = P();
     const rows = [['perm', 'خصم ساعة الغياب بإذن'], ['noperm', 'خصم ساعة الغياب بدون إذن'], ['mperm', 'خصم غياب الاجتماع بإذن (للمرة)'], ['mnoperm', 'خصم غياب الاجتماع بغير إذن (للمرة)'], ['round', 'تقريب الراتب لأقرب'], ['lv3', 'رصيد إجازات نظام (3) أيام'], ['lv6', 'رصيد إجازات نظام (6) أيام'], ['hours', 'الساعات الأساسية الافتراضية']];
     return `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">قواعد الحساب</h2><button class="btn primary" data-act="paySet">تعديل</button></div>
-      <div class="tbl"><table>${rows.map(([k, l]) => `<tr><th style="width:55%">${l}</th><td>${s[k]}</td></tr>`).join('')}<tr><th>رمز قسم المرتبات</th><td>${s.pin ? 'مفعّل' : 'غير مفعّل'}</td></tr></table></div>
-      <div class="note" style="margin-top:1rem">تغيير القواعد يعيد حساب الشهور المفتوحة والمغلقة معًا؛ لذلك لا تغيّرها إلا عند بدء العمل بقاعدة جديدة.</div></div>
+      <div class="tbl"><table>${rows.map(([k, l]) => `<tr><th style="width:55%">${l}</th><td>${s[k]}</td></tr>`).join('')}<tr><th>غياب المعلمين بإثبات «خصم»</th><td>${s.absMode === 'auto' ? `يُخصم تلقائيًا (${num(s.absDayHours)} ساعة لليوم)` : 'يُكتب في الكشف يدويًا'}</td></tr><tr><th>رمز قسم المرتبات</th><td>${s.pin ? 'مفعّل' : 'غير مفعّل'}</td></tr></table></div>
+      <div class="note" style="margin-top:1rem">تغيير القواعد يعيد حساب الشهور المفتوحة فقط؛ الشهر المغلق يبقى بالقواعد التي أُغلق بها.</div></div>
       <div class="card"><h2>نقل البيانات</h2><div class="bar">
       <label class="btn" style="margin:0">استيراد بيانات المرتبات (JSON)<input type="file" accept="application/json,.json" data-pay="import" hidden></label>
       <button class="btn" data-act="payExport">تصدير بيانات المرتبات</button></div>
@@ -245,7 +271,7 @@ function absRead() {
 const empOpts = list => list.map(e => ({ v: e.id, l: (e.code ? e.code + ' — ' : '') + e.name }));
 function empForm(e) {
   const { openForm, uid } = Q(), p = P(), isNew = !e;
-  e = e || { id: uid(), code: 'م' + String(p.employees.length + 1).padStart(3, '0'), status: 'نشط', hours: p.settings.hours, role: 'معلم' };
+  e = e || { id: uid(), code: 'م' + String(maxCode(p) + 1).padStart(3, '0'), status: 'نشط', hours: p.settings.hours, role: 'معلم' };
   openForm(isNew ? 'موظف جديد' : 'تعديل: ' + e.name, [
     { name: 'code', label: 'الكود', value: e.code }, { name: 'name', label: 'الاسم', value: e.name || '', required: true },
     { name: 'role', label: 'الوظيفة', type: 'select', value: e.role, options: ROLES.map(x => ({ v: x, l: x })) },
@@ -295,7 +321,7 @@ const act = {
     Q().openForm('إضافة موظف لشهر (' + st.m + ')', [{ name: 'eid', label: 'الموظف', type: 'select', options: empOpts(list) }], v => { p.rows.push(rowFrom(emp(v.eid), st.y, st.m, prevMonthRows(st.y, st.m))); });
   },
   payDelRow: d => Q().ask('حذف هذا الصف من الشهر؟', () => { const p = P(); p.rows = p.rows.filter(r => r.id !== d.id); Q().save(); Q().render(); }),
-  payClose: () => Q().ask(`إغلاق شهر (${st.m}) ${st.y}؟ لن يمكن تعديله إلا بإعادة فتحه.`, () => { const p = P(), k = key(st.y, st.m); if (!p.closed.includes(k)) p.closed.push(k); Q().save(); Q().render(); }),
+  payClose: () => Q().ask(`إغلاق شهر (${st.m}) ${st.y}؟ لن يمكن تعديله إلا بإعادة فتحه، وتُثبَّت معه قواعد الخصم الحالية.`, () => { const p = P(), k = key(st.y, st.m); if (!p.closed.includes(k)) p.closed.push(k); if (!(p.settings.monthCfg || {})[k]) p.settings.monthCfg = { ...(p.settings.monthCfg || {}), [k]: rateSnap(p.settings) }; Q().save(); Q().render(); }),
   payReopen: () => Q().ask('إعادة فتح الشهر للتعديل؟', () => { const p = P(); p.closed = p.closed.filter(k => k !== key(st.y, st.m)); Q().save(); Q().render(); }),
   payDelMonth: () => Q().ask(`حذف كشف شهر (${st.m}) ${st.y} بالكامل؟`, () => { const p = P(); p.rows = p.rows.filter(r => !(r.y === st.y && r.m === st.m)); Q().save(); Q().render(); }),
   payPrint: () => Q().printTable(document.querySelector('.paytbl table')),
@@ -341,8 +367,17 @@ const act = {
   payDelAbs: d => Q().ask('حذف سجل الغياب؟', () => { const p = P(); p.absences = p.absences.filter(a => a.id !== d.id); Q().save(); Q().render(); }),
   paySet: () => {
     const s = P().settings, L = { perm: 'خصم ساعة الغياب بإذن', noperm: 'خصم ساعة الغياب بدون إذن', mperm: 'خصم غياب الاجتماع بإذن (للمرة)', mnoperm: 'خصم غياب الاجتماع بغير إذن (للمرة)', round: 'تقريب الراتب لأقرب', lv3: 'رصيد إجازات نظام (3) أيام', lv6: 'رصيد إجازات نظام (6) أيام', hours: 'الساعات الأساسية الافتراضية' };
-    Q().openForm('قواعد الحساب', [...Object.entries(L).map(([k, l]) => ({ name: k, label: l, type: 'number', value: s[k], required: true })), { name: 'pin', label: 'رمز قسم المرتبات (اتركه فارغًا لإلغائه)', value: s.pin }],
-      v => { Object.keys(L).forEach(k => { s[k] = +v[k]; }); if (!(s.round > 0)) return 'التقريب يجب أن يكون أكبر من صفر'; s.pin = v.pin.trim(); st.unlocked = true; });
+    Q().openForm('قواعد الحساب', [...Object.entries(L).map(([k, l]) => ({ name: k, label: l, type: 'number', value: s[k], required: true })),
+      { name: 'absMode', label: 'غياب المعلمين المسجَّل بإثبات «خصم»', type: 'select', value: s.absMode || 'manual', options: [{ v: 'manual', l: 'يُكتب في الكشف يدويًا (ويظهر تنبيه تحت اسم الموظف)' }, { v: 'auto', l: 'يُخصم تلقائيًا من المرتب' }] },
+      { name: 'absDayHours', label: 'ساعات يوم الغياب (للخصم التلقائي)', type: 'number', value: s.absDayHours ?? '' },
+      { name: 'pin', label: 'رمز قسم المرتبات (اتركه فارغًا لإلغائه)', value: s.pin }],
+      v => {
+        if (v.absMode === 'auto' && !(+v.absDayHours > 0)) return 'حدد ساعات يوم الغياب للخصم التلقائي';
+        if ([...Object.keys(L), 'absDayHours'].some(k => v[k] !== '' && v[k] != null && +v[k] < 0)) return 'القيم لا تكون سالبة';
+        Object.keys(L).forEach(k => { s[k] = +v[k]; }); if (!(s.round > 0)) return 'التقريب يجب أن يكون أكبر من صفر';
+        s.absMode = v.absMode === 'auto' ? 'auto' : 'manual'; s.absDayHours = +v.absDayHours || 0;
+        s.pin = v.pin.trim(); st.unlocked = true;
+      });
   },
   payExport: () => {
     const a = document.createElement('a');
@@ -407,7 +442,7 @@ async function importPayrollXlsx(file) {
   const nNew = list.filter(isNew).length, nUpd = list.length - nNew;
   const missing = p.employees.filter(e => !list.some(x => norm(x.name) === norm(e.name)));
   ask(`استيراد ${list.length} موظفًا من شيت «خلاصة»: ${nNew} جديد، و${nUpd} موجود ستُحدَّث بياناته.${missing.length ? ` (${missing.length} موظف في التطبيق ليس في الشيت ولن يُمَس.)` : ''}`, () => {
-    let code = p.employees.length;
+    let code = maxCode(p);
     list.forEach(x => {
       const e = p.employees.find(y => norm(y.name) === norm(x.name));
       const vals = Object.fromEntries(Object.entries(x).filter(([k, v]) => v !== null && v !== '' && k !== 'name'));
@@ -422,7 +457,9 @@ async function importPayrollXlsx(file) {
 function refreshRow(r) {
   const tr = document.querySelector(`tr[data-row="${CSS.escape(r.id)}"]`); if (!tr) return;
   const c = calc(r);
-  ['actual', 'otAmt', 'ded', 'net'].forEach(k => { const td = tr.querySelector(`[data-o="${k}"]`); if (td) td.textContent = fmt(c[k]); });
+  ['actual', 'otAmt', 'ded', 'net'].forEach(k => { const td = tr.querySelector(`[data-o="${k}"]`); if (td) td.textContent = k === 'net' && c.net < 0 ? '−' + fmt(-c.net) : fmt(c[k]); });
+  /* صافٍ سالب (الخصم أكبر من الراتب) يظهر بالأحمر ليُراجَع */
+  const nt = tr.querySelector('[data-o="net"]'); if (nt) { nt.style.color = c.net < 0 ? 'var(--red,#b3372f)' : ''; nt.title = c.net < 0 ? 'الخصم أكبر من الراتب: راجع الغياب والخصومات' : ''; }
   const tot = monthRows(r.y, r.m).reduce((a, x) => a + calc(x).net, 0);
   document.querySelectorAll('[data-pay-total]').forEach(el => { el.textContent = fmt(tot); });
 }
@@ -506,6 +543,8 @@ function onInput(e) {
   if (el.dataset.pay === 'absEmpQ') { const f = document.getElementById('absform'); f.querySelector('[name=eid]').value = ''; absShow(el.value); absRead(); return; }
   if (el.dataset.pay !== 'cell') return;
   const r = P().rows.find(x => x.id === el.dataset.r); if (!r || isClosed(r.y, r.m)) return;
+  /* كل الخانات موجبة (الخصومات تُكتب مبالغ موجبة): «-500» في خصم كانت تزيد الراتب 500 */
+  if (el.value !== '' && +el.value < 0) { el.value = ''; try { toast('القيم لا تكون سالبة؛ الخصم يُكتب مبلغًا موجبًا'); } catch (e) { /* ignore */ } }
   r[el.dataset.f] = el.value === '' ? null : +el.value;
   refreshRow(r);
 }

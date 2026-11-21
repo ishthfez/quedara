@@ -140,7 +140,8 @@
         else if (g0) g = String(Math.round(+g0 * 100) / 100);
         else if (P[k].grade === CONF || P[k].grade === 'يعاد') g = '';   // أُلغي «تأكيد» بلا درجة
         else return;   // فارغ: تبقى درجته كما هي
-        if ((P[k].grade || '') !== g) { P[k].grade = g; n++; }
+        /* بالدرجة يصير المنهج تسميعًا فعليًا (تزول علامة الخطة)، وبمسحها يعود خطة */
+        if ((P[k].grade || '') !== g) { P[k].grade = g; if (P[k].plan || !g) P[k].plan = !g; n++; }
       });
       /* 2) منهج اليوم (ومعه الملاحظات على أول تسجيل منه) */
       let noted = false;
@@ -149,7 +150,7 @@
         if (!p) { if (r && !r.grade) { db.records = db.records.filter(x => x !== r); n++; } return; }   // مُسح منهج اليوم: يُحذف تسجيله غير المقدَّر
         const nt = noted ? (r?.note || '') : note; noted = true;
         if (r) { if (r.surah !== p.surah || r.from !== p.from || r.to !== p.to || (r.note || '') !== nt) { Object.assign(r, p, { note: nt }); n++; } }
-        else { db.records.push({ id: uid(), studentId: sid, date: today(), type: k, surah: p.surah, from: p.from, to: p.to, grade: '', note: nt }); n++; }
+        else { db.records.push({ id: uid(), studentId: sid, date: today(), type: k, surah: p.surah, from: p.from, to: p.to, grade: '', note: nt, plan: true }); n++; }
       });
       if (!n) { toast('لا تغيير'); return; }
       save(); done(); try { render(); } catch (e) { /* ignore */ }
@@ -228,8 +229,9 @@
     /* الإشعارات من «الرئيسية» الأصلية (home.js، وفيها سطر «الحصة» أولًا)، بلا مربع عداداتها القديم */
     const t = document.createElement('template'); t.innerHTML = baseHtml; t.content.querySelectorAll('.qhomecnt').forEach(x => x.remove());
     /* العدادات: حضور الشهر وغيابه، وآخر حفظ (طويل فيأخذ سطرًا وحده) */
-    const mon = today().slice(0, 7), att = new Map(); (db.attendance || []).forEach(a => { if (a.studentId === s.id && String(a.date).startsWith(mon)) att.set(a.date, a); });
-    const A = [...att.values()], ok = A.filter(a => a.status === 'present' || a.status === 'late').length, abs = A.filter(a => a.status === 'absent').length;
+    /* بقاعدة الغياب الضمني (attDaysOf في app.js) */
+    const mon = today().slice(0, 7), A = [...attDaysOf(s, mon + '-01', mon + '-31').days.values()];
+    const ok = A.filter(a => a === 'present' || a === 'late').length, abs = A.filter(a => a === 'absent').length;
     let last = '—'; try { last = lastHifz(s.id) || '—'; } catch (e) { /* ignore */ }
     const pct = A.length ? Math.round(ok / A.length * 100) : null;
     const cnt = `<div class="card qscnt"><h3>هذا الشهر</h3><div class="qfrow">

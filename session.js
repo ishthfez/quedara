@@ -72,6 +72,8 @@
       <button type="button" class="btn" data-lockout>تسجيل الخروج (مستخدم آخر)</button>
       ${n ? `<div class="warn">على هذا الجهاز ${n} تغيير لم يُرسل إلى الخادم بعد. سجّل الدخول ليُرسل، ولا تسجّل الخروج قبل ذلك.</div>` : ''}</div>`;
     document.body.appendChild(el);
+    /* الصفحة خلف القفل تُفرَّغ: كانت كاملة تحته، فحذف شاشة القفل من أدوات المطوّر يكشف البيانات. تُرسم من جديد بعد الدخول */
+    const app = document.getElementById('app'); if (app) app.innerHTML = '';
     setTimeout(() => el.querySelector('[data-lockpw]')?.focus(), 50);
   }
   async function unlock(btn) {
@@ -87,7 +89,7 @@
       else await C().signIn(email, pw);
       if (session && !C()?.auth?.member) C().setMember(session);   // دخول جديد بلا عضو محفوظ فقط (لا يُمسّ العضو أثناء «العمل بصفة…»)
     } catch (e) { toast(/fetch|network/i.test(e.message || '') ? 'تعذّر الاتصال بالخادم، أعد المحاولة' : 'كلمة المرور غير صحيحة'); return; }
-    markLogin(); lockEmail = null; locked = false; el.remove(); toast('مرحبًا بعودتك');
+    markLogin(); lockEmail = null; locked = false; el.remove(); try { render(); } catch (e) { /* ignore */ } toast('مرحبًا بعودتك');
     try { cloudRefresh(true); } catch (e) { /* ignore */ }
   }
   document.addEventListener('click', e => {
@@ -104,7 +106,11 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
   window.addEventListener('focus', check);
   /* بعد كل عرض للصفحة (ومنه أول فتح للتطبيق) */
-  new MutationObserver(() => { if (!locked && document.querySelector('.shell')) check(); }).observe(document.getElementById('app') || document.body, { childList: true });
+  /* وأي رسم أثناء القفل (مزامنة أو مؤقت) يُفرَّغ فورًا فلا تظهر البيانات خلف شاشة القفل */
+  new MutationObserver(() => {
+    if (locked) { const app = document.getElementById('app'); if (app && app.firstChild && document.getElementById('qlock')) app.innerHTML = ''; return; }
+    if (document.querySelector('.shell')) check();
+  }).observe(document.getElementById('app') || document.body, { childList: true });
 
   /* ===== «الإعدادات» (للمدير): بطاقة «مدة بقاء تسجيل الدخول» ===== */
   const baseSettings = adminViews.settings;

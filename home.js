@@ -118,8 +118,12 @@
     : `<h3 style="margin:0 0 .8rem">${esc(cur ? dayLabel(cur) : 'اليوم')}</h3>`;
   document.addEventListener('change', e => { if (e.target.matches?.('[data-qday]')) { qday = e.target.value; render(); } });
   /* حضور اليوم المختار (كما في لوحة المدير: الحاضر والمتأخر من المسجَّلين)، والتسجيلات منذ سبعة أيام قبله حتى نهايته (الحساب نفسه في app.js) */
-  const dayStats = d => { const att = (db.attendance || []).filter(a => a.date === d), ok = att.filter(a => a.status === 'present' || a.status === 'late').length, from = shiftDay(d, -7);
-    return { pct: att.length ? Math.round(ok * 100 / att.length) : null, week: (db.records || []).filter(r => r.date >= from && r.date <= d).length }; };
+  /* طلاب المؤسسة الحقيقيون: بلا الحسابات المؤقتة لطلاب الدورات الخارجيين (info.temp)، فهي ليست طلاب حلقات
+     (كانت تُعدّ «منتظمين» ثم «منقطعين» بعد انتهاء كل دورة، وتدخل في الاشتراكات المتوقعة) */
+  const realStu = () => (db.students || []).filter(s => !(s.info && s.info.temp));
+  /* الحضور بقاعدة الغياب الضمني (attOnDay في app.js): من لم يُسجَّل في حلقة سجّلت يومها غائب */
+  const dayStats = d => { const A = attOnDay(db.students, d), from = shiftDay(d, -6);   // سبعة أيام بما فيها اليوم
+    return { pct: A.pct, week: (db.records || []).filter(r => r.date >= from && r.date <= d && !isPlan(r)).length }; };
   function scopeData(onDay) {
     const H = scopeHal(), ids = new Set(H.map(h => h.id));
     const S = db.students.filter(s => ids.has(s.halaqaId)), on = S.filter(s => !stOff(s)), onIds = new Set(on.map(s => s.id));
@@ -129,9 +133,12 @@
     const attT = [...day.values()];
     const here = attT.filter(a => a.status === 'present' || a.status === 'late').length;
     const halDone = H.filter(h => attT.some(a => byId(db.students, a.studentId)?.halaqaId === h.id)).length;
-    const recT = (db.records || []).filter(r => r.date === t && onIds.has(r.studentId)).length;
-    const absM = (db.attendance || []).filter(a => a.status === 'absent' && String(a.date).startsWith(mon) && onIds.has(a.studentId)).length;
-    return { H, S, on, attT, here, pct: on.length ? Math.round(here / on.length * 100) : 0, notYet: on.filter(s => !day.has(s.id)).length, halDone, recT, absM, mon };
+    const recT = (db.records || []).filter(r => r.date === t && onIds.has(r.studentId) && !isPlan(r)).length;
+    /* غياب الشهر: المسجَّل غائبًا، ومن لم يُسجَّل في يوم سجّلت فيه حلقته (الغياب الضمني) */
+    const absM = on.reduce((n, s) => n + [...attDaysOf(s, mon + '-01', mon + '-31').days.values()].filter(x => x === 'absent').length, 0);
+    /* النسبة من طلاب الحلقات التي سجّلت اليوم؛ و«لم يُسجَّل بعد» من حلقات لم تسجّل اليوم */
+    const AD = attOnDay(on, t);
+    return { H, S, on, attT, here, pct: AD.pct, notYet: on.filter(s => !day.has(s.id) && !halRecorded(s.halaqaId, t)).length, halDone, recT, absM, mon };
   }
   const trs = () => (window.QLTransfers?.list?.() || []);
   /* كشوف التحصيل بانتظار المراجعة (للمحاسب): من الخادم كل دقيقة على الأكثر */
@@ -144,32 +151,36 @@
   function counters(r) {
     if (r === 'student') {
       const me = session.id, t = today(), mon = t.slice(0, 7);
-      const byDay = new Map(); (db.attendance || []).forEach(a => { if (a.studentId === me && String(a.date).startsWith(mon)) byDay.set(a.date, a); });
-      const att = [...byDay.values()];
-      const ok = att.filter(a => a.status === 'present' || a.status === 'late').length, abs = att.filter(a => a.status === 'absent').length;
-      const rec = (db.records || []).filter(x => x.studentId === me && String(x.date).startsWith(mon)).length;
+      const att = [...attDaysOf(byId(db.students, me) || { id: me }, mon + '-01', mon + '-31').days.values()];
+      const ok = att.filter(a => a === 'present' || a === 'late').length, abs = att.filter(a => a === 'absent').length;
+      const rec = (db.records || []).filter(x => x.studentId === me && String(x.date).startsWith(mon) && !isPlan(x)).length;
       let last = '—'; try { last = lastHifz(me) || '—'; } catch (e) { /* ignore */ }
       return card('هذا الشهر', [att.length ? pctRow('نسبة حضوري', Math.round(ok / att.length * 100)) : row('fr-plain', 'نسبة حضوري', '—'), row(abs ? 'fr-no' : 'fr-ok', 'أيام الغياب', abs), row('fr-info', 'تسميعاتي', rec)], [row('fr-plain', 'آخر حفظ', last)]);
     }
     if (r === 'accountant') {
-      const on = db.students.filter(s => !stOff(s)).length;
+      const on = realStu().filter(s => !stOff(s)).length;
       inbox();
-      let fee = ''; try { fee = window.QLFeeSummary ? window.QLFeeSummary(db.students) : ''; } catch (e) { fee = ''; }
+      let fee = ''; try { fee = window.QLFeeSummary ? window.QLFeeSummary(realStu()) : ''; } catch (e) { fee = ''; }
       return card('الطلاب', [row('fr-plain', 'الطلاب المنتظمون', on),
         ...(window.QLStuPerm?.can?.('accbtn') === false ? [] : [row(INB.n ? 'fr-no' : 'fr-ok', 'كشوف بانتظار المراجعة', INB.n == null ? '…' : INB.n)])]) + fee;
     }
     const d = scopeData(), T = trs(), wait = T.filter(x => x.canDecide).length;
-    const att = d.on.length ? pctRow('حضور اليوم', d.pct) : row('fr-plain', 'حضور اليوم', '—');
+    /* قبل أن تسجّل أي حلقة حضور اليوم: «—» لا 0% */
+    const att = d.on.length && d.pct != null ? pctRow('حضور اليوم', d.pct) : row('fr-plain', 'حضور اليوم', '—');
     if (r === 'teacher') {
       return card('حلقاتي', [row('fr-plain', 'الطلاب المنتظمون', d.on.length), att, row(d.notYet ? 'fr-no' : 'fr-ok', 'لم يُسجَّل حضورهم اليوم', d.notYet)],
         [row('fr-info', 'تسميع اليوم', d.recT), row('fr-plain', 'غياب هذا الشهر', d.absM), ...(T.length ? [row('fr-info', 'بانتظار موافقة النقل', T.length)] : [])]);
     }
     if (r === 'supervisor') {
-      const ab = ((db.payroll || {}).absences || []).filter(a => String(a.date || '').startsWith(d.mon)).length;
+      /* غياب المعلمين هذا الشهر: المشرف يرى غياب معلمي حلقاته وحدهم (بالاسم، فسجل الغياب لا يحمل معرّف العضو)،
+         والمدير العام ومن نطاقه «الكل» يرى غياب الجميع. كان المشرف يرى عدد المؤسسة كلها */
+      const allScope = isGM() || me()?.info?.scope === 'all';
+      const myT = new Set(d.H.map(h => byId(db.teachers || [], h.teacherId)?.name).filter(Boolean).map(n => norm(n)));
+      const ab = ((db.payroll || {}).absences || []).filter(a => String(a.date || '').startsWith(d.mon) && (allScope || myT.has(norm(a.name || '')))).length;
       /* المدير العام: مربعات كما عند Admin («الحلقات» و«الطلاب» و«اليوم») على نطاقه (كل الحلقات) */
-      if (isGM() || me()?.info?.scope === 'all') {
+      if (allScope) {
         const D = dataDays(), cur = curDay(D), g = cur ? scopeData(cur) : d;
-        const gatt = g.attT.length ? pctRow('حضور اليوم', Math.round(g.here / g.attT.length * 100)) : row('fr-plain', 'حضور اليوم', '—');
+        const gatt = g.pct != null ? pctRow('حضور اليوم', g.pct) : row('fr-plain', 'حضور اليوم', '—');
         const offN = d.S.length - d.on.length, ids = new Set(d.H.map(h => h.teacherId).filter(Boolean)), sups = new Set(d.H.map(h => h.supervisorId).filter(Boolean));
         const tN = (db.teachers || []).filter(x => ids.has(x.id) && (x.admin || {}).status !== 'موقوف').length || ids.size;
         const b = (title, rows) => `<div class="card qdashcard qhomecnt"><h3 style="margin:0 0 .8rem">${esc(title)}</h3><div class="qfrow">${rows.join('')}</div></div>`;
@@ -210,7 +221,7 @@
       const t = document.createElement('template'); t.innerHTML = h;
       [...t.content.children].filter(c => c.classList.contains('card') && !c.classList.contains('qnhome') && [...c.children].some(x => x.tagName === 'H2' && x.textContent.trim() === 'الإعلانات')).forEach(c => c.remove());
       /* «الحلقات والطلاب»: الطلاب المنتظمون وحدهم، والمعلمون العاملون وحدهم */
-      const SET = { 'المعلمون': ['المعلمون العاملون', (db.teachers || []).filter(x => (x.admin || {}).status !== 'موقوف').length], 'الطلاب': ['الطلاب المنتظمون', db.students.filter(x => !stOff(x)).length] };
+      const SET = { 'المعلمون': ['المعلمون العاملون', (db.teachers || []).filter(x => (x.admin || {}).status !== 'موقوف').length], 'الطلاب': ['الطلاب المنتظمون', realStu().filter(x => !stOff(x)).length] };
       t.content.querySelectorAll('.qdashcard .feerow').forEach(f => { const sp = f.querySelector('span'), b = f.querySelector('b'), v = sp && SET[sp.textContent.trim()]; if (v && b) { sp.textContent = v[0]; b.textContent = v[1]; } });
       /* كل مجموعة عدادات في مربع: «الحلقات» (المعلمون والمشرفون والحلقات والأماكن)، و«الطلاب» (منتظمون ومنقطعون وبرنامج الإتقان)،
          و«اليوم» (حضور اليوم وتسجيلات الأسبوع كما كانت) */
@@ -218,7 +229,7 @@
       if (old) {
         const keep = l => [...old.querySelectorAll('.feerow')].find(f => f.querySelector('span')?.textContent.trim() === l)?.outerHTML || '';
         const box3 = (title, rows) => `<div class="card qdashcard qhomecnt"><h3 style="margin:0 0 .8rem">${esc(title)}</h3><div class="qfrow">${rows.join('')}</div></div>`;
-        const offN = db.students.filter(x => stOff(x)).length;
+        const offN = realStu().filter(x => stOff(x)).length;
         const grid = document.createElement('div'); grid.className = 'qhgrid';
         grid.innerHTML = box3('الحلقات', [row('fr-plain', 'المعلمون', SET['المعلمون'][1]), row('fr-plain', 'المشرفون', (db.supervisors || []).length), row('fr-plain', 'الحلقات', db.halaqat.length), row('fr-plain', 'الأماكن', db.places.length)])
           + box3('الطلاب', [row('fr-ok', 'منتظمون', SET['الطلاب'][1]), row(offN ? 'fr-no' : 'fr-plain', 'منقطعون', offN), row('fr-plain qsoon', 'برنامج الإتقان', '—')])

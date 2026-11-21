@@ -97,6 +97,10 @@ async function fetchSheet(url) {
 /* مفاتيح مطابقة اسم الحلقة في الملفات: «حلقة فلان» أو «فلان» (اسم المعلم) أو الاسم القديم */
 const halaqaKeys = h => [halaqaLabel(h), h.name, byId(db.teachers, h.teacherId)?.name].filter(Boolean).map(norm);
 const halaqaQKeys = v => [norm(v), norm(String(v).replace(/^\s*حلقة\s+/, ''))];
+/* المفتاح ← كل الحلقات التي يطابقها. معلم له حلقتان (في مسجدين مثلًا) يجعل «حلقة فلان» تطابق الاثنتين:
+   كان الاستيراد يضع الطلاب كلهم في آخرهما (وقد تكون في مكان آخر باشتراك آخر)؛ الآن يُترك بلا حلقة ليُحدَّد يدويًا */
+const halaqaIndex = () => { const M = new Map(); db.halaqat.forEach(h => halaqaKeys(h).forEach(k => { if (!M.has(k)) M.set(k, new Set()); M.get(k).add(h.id); })); return M; };
+const halaqaMatch = (M, v) => { const ids = new Set(); halaqaQKeys(v).forEach(k => (M.get(k) || []).forEach(id => ids.add(id))); return [...ids]; };
 
 /* الحقول التي يمكن أن تكون «نظيرًا» لعمود في الملف المستورد */
 function fieldTargets(kind) {
@@ -113,7 +117,14 @@ function fieldTargets(kind) {
 }
 /* خلية تاريخ في Excel تُقرأ رقمًا تسلسليًا (مثل 40544 = 2011-01-01): يُحوَّل في حقول التاريخ وحدها.
    خمسة أرقام فقط (1927 فما بعد)، فسنة الميلاد المكتوبة وحدها (مثل 1990) تبقى كما هي */
-const xlDate = v => (/^\d{5}(\.\d+)?$/.test(String(v).trim()) ? new Date(Date.UTC(1899, 11, 30) + Math.floor(+v) * 864e5).toISOString().slice(0, 10) : v);
+/* والتاريخ المكتوب نصًا يوم/شهر/سنة (15/03/2010 أو 15-3-2010) يُحوَّل أيضًا إن كان صالحًا، وإلا يبقى كما هو */
+const xlDate = v => {
+  const s = String(v).trim();
+  if (/^\d{5}(\.\d+)?$/.test(s)) return new Date(Date.UTC(1899, 11, 30) + Math.floor(+s) * 864e5).toISOString().slice(0, 10);
+  const a = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
+  if (a) { const d = new Date(Date.UTC(+a[3], +a[2] - 1, +a[1])); if (d.getUTCMonth() === +a[2] - 1 && d.getUTCDate() === +a[1]) return d.toISOString().slice(0, 10); }
+  return v;
+};
 const isDateField = id => { const [t, a, b] = id.split(':'); return id === 'info:birth' || (t === 'prof' && (PROF[a]?.fields || []).some(f => f[0] === b && f[2] === 'date')); };
 function setField(m, id, v) {
   if (isDateField(id)) v = xlDate(v);
@@ -167,7 +178,9 @@ function openImport(kind) {
   <div class="row"><button type="button" class="btn primary" id="imok" disabled>استيراد</button><button type="button" class="btn" data-close>إغلاق</button></div></div>`;
   document.body.appendChild(ov);
   const $ = s => ov.querySelector(s);
-  let parsed = [], cols = [], loose = [], createH = true;
+  /* إنشاء الحلقات غير الموجودة: باختيار صريح (كان مفعّلًا، فاسم مكتوب بطريقة أخرى، مثل «الشيخ أحمد علي» بدل «حلقة أحمد علي»،
+     يُنشئ حلقة جديدة بلا مكان ولا مشرف) */
+  let parsed = [], cols = [], loose = [], createH = false;
   $('[data-close]').onclick = () => ov.remove();
 
   const msg = (t, bad) => {
@@ -176,13 +189,16 @@ function openImport(kind) {
   };
   function preview() {
     const fresh = parsed.filter(r => !r.dup), dups = parsed.length - fresh.length;
-    const known = new Set(db.halaqat.flatMap(halaqaKeys));
-    const newH = isS ? new Set(fresh.filter(r => r.halaqa && !halaqaQKeys(r.halaqa).some(k => known.has(k))).map(r => norm(r.halaqa))) : new Set();
+    const HI = halaqaIndex();
+    const newH = isS ? new Set(fresh.filter(r => r.halaqa && !r.hid && !halaqaMatch(HI, r.halaqa).length).map(r => norm(r.halaqa))) : new Set();
+    const amb = isS ? fresh.filter(r => r.halaqa && !r.hid && halaqaMatch(HI, r.halaqa).length > 1) : [];
+    const ambNames = [...new Set(amb.map(r => r.halaqa))];
     const chip = t => `<span class="chip">${esc(t)}</span>`;
     $('#imprev').innerHTML = `<p style="margin:.2rem 0 .6rem"><b>${fresh.length}</b> جاهز للاستيراد${dups ? ` — ${dups} مكرر سيُتجاهل` : ''}</p>
+    ${amb.length ? `<div class="note" style="color:var(--red,#b3372f)">${amb.length} طالبًا اسم حلقتهم يطابق أكثر من حلقة (معلم له أكثر من حلقة): ${ambNames.slice(0, 6).map(chip).join(' ')}<br>سيُستوردون <b>بلا حلقة</b> لتحددها لهم من «الأعضاء ← غير مصنف»، أو أضف عمود «معرف الحلقة» في الملف.</div>` : ''}
     ${cols.length ? `<div class="note ok">أعمدة لها نظير وستُستورد في مكانها: ${cols.map(c => chip(c.header === c.label ? c.label : `${c.header} ← ${c.label}`)).join(' ')}</div>` : ''}
     ${loose.length ? `<div class="note">أعمدة ليس لها نظير (${loose.length}): ${loose.map(l => chip(l.header)).join(' ')}<br>ستُحفظ قيمها في تبويب «بيانات معلّقة» لتراجعها وتعدّلها، ثم تعتمد إنشاء حقل لكل منها.</div>` : ''}
-    ${newH.size ? `<label style="display:flex;gap:.5rem;align-items:center;color:var(--text)"><input type="checkbox" id="imh" style="width:auto;margin:0" ${createH ? 'checked' : ''}> إنشاء ${newH.size} حلقة غير موجودة تلقائيًا</label>` : ''}
+    ${newH.size ? `<label style="display:flex;gap:.5rem;align-items:center;color:var(--text)"><input type="checkbox" id="imh" style="width:auto;margin:0" ${createH ? 'checked' : ''}> إنشاء ${newH.size} حلقة غير موجودة تلقائيًا: ${[...new Set(fresh.filter(r => r.halaqa && newH.has(norm(r.halaqa))).map(r => r.halaqa))].slice(0, 6).map(chip).join(' ')}<br><small class="muted">إن لم تُحدَّد يُستورد طلابها بلا حلقة. تأكد أن الاسم ليس حلقة موجودة مكتوبة بطريقة أخرى.</small></label>` : ''}
     <div class="tbl"><table><tr><th>الاسم</th>${isS ? '<th>الحلقة</th>' : ''}<th>الجوال</th><th>الحالة</th></tr>${parsed.slice(0, 8).map(r => `<tr><td>${esc(r.name)}</td>${isS ? `<td>${esc(r.halaqa || '—')}</td>` : ''}<td>${esc(r.vals['core:phone'] || '—')}</td><td>${r.dup ? '<span class="tag" style="background:#fbeceb;color:var(--red)">مكرر</span>' : '<span class="tag">جديد</span>'}</td></tr>`).join('')}</table></div>
     ${parsed.length > 8 ? `<p class="muted" style="margin:.4rem 0 0">… و${parsed.length - 8} صفوف أخرى</p>` : ''}`;
     const cb = $('#imh'); if (cb) cb.onchange = () => { createH = cb.checked; };
@@ -224,20 +240,22 @@ function openImport(kind) {
     a.download = isS ? 'قالب-الطلاب.csv' : 'قالب-المعلمين.csv'; a.click(); URL.revokeObjectURL(a.href);
   };
   $('#imok').onclick = () => {
-    const hmap = new Map(db.halaqat.flatMap(h => halaqaKeys(h).map(k => [k, h.id])));
-    let n = 0, nh = 0, np = 0;
+    const HI = halaqaIndex(), made1 = new Map();   // حلقات أُنشئت في هذا الاستيراد: اسم الملف ← معرّفها
+    let n = 0, nh = 0, np = 0, na = 0;
     const made = [];
     parsed.filter(r => !r.dup).forEach(r => {
       /* الحلقة بالمعرّف (importx.js) تُستعمل كما هي: الرجوع إلى اسمها كان يخلطها بحلقات أخرى بالاسم نفسه (مثل كل «حلقة بلا معلم») */
       let hid = isS && r.hid && byId(db.halaqat, r.hid) ? r.hid : '';
       if (!hid && isS && r.halaqa) {
-        const k = halaqaQKeys(r.halaqa).find(x => hmap.has(x));
-        if (k) hid = hmap.get(k);
+        const ids = halaqaMatch(HI, r.halaqa), mk = norm(r.halaqa);
+        if (ids.length === 1) hid = ids[0];
+        else if (ids.length > 1) na++;   // يطابق أكثر من حلقة: بلا حلقة (لا تخمين)
+        else if (made1.has(mk)) hid = made1.get(mk);
         else if (createH) {
-          /* حلقة جديدة: إن وُجد معلم بالاسم نفسه رُبطت به فتُسمّى باسمه */
-          const t = db.teachers.find(x => halaqaQKeys(r.halaqa).includes(norm(x.name)));
+          /* حلقة جديدة: إن وُجد معلم واحد بالاسم نفسه رُبطت به فتُسمّى باسمه */
+          const ts = db.teachers.filter(x => halaqaQKeys(r.halaqa).includes(norm(x.name))), t = ts.length === 1 ? ts[0] : null;
           hid = uid(); db.halaqat.push({ id: hid, name: t ? '' : (/^\s*حلقة/.test(r.halaqa) ? r.halaqa : 'حلقة ' + r.halaqa), teacherId: t ? t.id : '', supervisorId: '', placeId: '' });
-          halaqaQKeys(r.halaqa).forEach(x => hmap.set(x, hid)); nh++;
+          made1.set(mk, hid); nh++;
         }
       }
       const id = uid(), given = r.vals['core:pin'], pin = given || genPass();
@@ -252,7 +270,7 @@ function openImport(kind) {
       if (values.length) { db.pending.push({ id: uid(), kind, header: l.header, values, date: today() }); np++; }
     });
     ov.remove(); save(); render();
-    toast(`تم استيراد ${n} ${isS ? 'طالب' : 'معلم'}${nh ? ` وإنشاء ${nh} حلقة` : ''}${np ? ` — ${np} عمود في «بيانات معلّقة»` : ''}`);
+    toast(`تم استيراد ${n} ${isS ? 'طالب' : 'معلم'}${nh ? ` وإنشاء ${nh} حلقة` : ''}${na ? ` — ${na} بلا حلقة (اسم حلقتهم يطابق أكثر من حلقة)` : ''}${np ? ` — ${np} عمود في «بيانات معلّقة»` : ''}`);
   };
 }
 
@@ -294,7 +312,7 @@ function studentForm(st) {
   ov.className = 'overlay';
   ov.innerHTML = `<div class="modal wide sform"><h2>${isNew ? 'استمارة تقديم' : 'تعديل بيانات: ' + esc(st.name)}</h2>
     <div class="sf-top">
-      <div class="ph"><img data-ph alt="" ${photo ? `src="${photo}"` : 'hidden'}><span data-ph0 class="ph0" ${photo ? 'hidden' : ''}>${TAB_ICONS.profile}</span>
+      <div class="ph"><img data-ph alt="" ${safePhoto(photo) ? `src="${esc(safePhoto(photo))}"` : 'hidden'}><span data-ph0 class="ph0" ${safePhoto(photo) ? 'hidden' : ''}>${TAB_ICONS.profile}</span>
         <div class="ph-btns"><label class="btn sm" style="margin:0">صورة<input type="file" accept="image/*" data-sfphoto hidden></label><button type="button" class="btn sm" data-sfnophoto>إزالة</button></div></div>
       <div class="sf-main">
         <div class="seg"><label><input type="radio" name="cat" value="child" ${st.cat !== 'adult' ? 'checked' : ''}><span>صغير — له ولي أمر</span></label><label><input type="radio" name="cat" value="adult" ${st.cat === 'adult' ? 'checked' : ''}><span>كبير</span></label></div>
