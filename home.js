@@ -206,7 +206,7 @@
     const V = window.QLStuView;
     return V?.scoped ? V.scoped(() => window.QLFeeSummary(db.students)) : '';
   };
-  const homeView = r => { let c = ''; try { c = counters(r); } catch (e) { console.error('home counters:', e); } try { c += staffFee(r); } catch (e) { console.error('home fees:', e); } return box(r) + c; };
+  const homeView = r => { let c = ''; try { c = counters(r); } catch (e) { console.error('home counters:', e); } try { c += staffFee(r); } catch (e) { console.error('home fees:', e); } let L = ''; try { L = links(); } catch (e) { console.error('home links:', e); } return box(r) + L + c; };
   /* الطالب: تُضاف قبل أن يرتّب nav.js القوائم (فيحفظها صفحة البداية)، ثم تُعاد أول القائمة بعد ترتيبه.
      (العاملون يضعها stuview.js أول قائمتهم) */
   try { if (TABS.student && !TABS.student.some(t => t[0] === 'home')) TABS.student.unshift(['home', 'الرئيسية']); } catch (e) { /* ignore */ }
@@ -237,12 +237,118 @@
             return `<div class="card qdashcard qhomecnt">${dayHead(D, cur)}<div class="qfrow">${s.pct == null ? row('fr-plain', 'حضور اليوم', '—') : pctRow('حضور اليوم', s.pct)}${row('fr-plain', 'تسجيلات الأسبوع', s.week)}</div></div>`; })();
         old.replaceWith(grid);
       }
-      return box('admin') + t.innerHTML;
+      let L = ''; try { L = links(); } catch (e) { console.error('home links:', e); }
+      return box('admin') + L + t.innerHTML;
     };
   });
 
+  /* ===== أزرار «الرئيسية» تحت الإعلانات =====
+     يحددها المدير من «الإعدادات ← أزرار الرئيسية»: لكل زر نصه، والقسم، وقسم داخلي فيه (اختياري)، والفئات التي يظهر لها.
+     تُحفظ في db.settings.home_links فتصل لكل الأجهزة، ولا يظهر لفئة زرٌّ لقسم ليس من أقسامها. */
+  const HL_ROLES = [['admin', 'المدير'], ['gmanager', 'المدير العام'], ['supervisor', 'المشرف'], ['teacher', 'المعلم'], ['accountant', 'المحاسب'], ['placeadmin', 'الإداري'], ['student', 'الطالب']];
+  const hlRoleOf = () => { const r = session?.role; if (r === 'supervisor' && (isGM() || me()?.info?.scope === 'all')) return 'gmanager'; return r || ''; };
+  const hlTabsOf = rk => (TABS[rk === 'gmanager' ? 'supervisor' : rk] || []).map(t => t[0]);
+  const hlList = () => (Array.isArray(db.settings?.home_links) ? db.settings.home_links : []);
+  /* كل أقسام التطبيق (من قوائم كل الفئات) واسم كل منها */
+  const hlAllTabs = () => { const M = new Map(); Object.values(TABS || {}).forEach(L => (L || []).forEach(([k, l]) => { if (!M.has(k) && k !== 'home' && k !== 'dash') M.set(k, l); })); return M; };
+  /* الأقسام الداخلية: تُلتقط أسماؤها حين يُفتح القسم (أزرار شريطه)، فتُقترح عند إضافة زر */
+  const HL_SUBS_KEY = 'qhl_subs';
+  const subsSeen = () => { try { return JSON.parse(localStorage.getItem(HL_SUBS_KEY) || '{}') || {}; } catch (e) { return {}; } };
+  const clean = s => String(s || '').replace(/[\d٠-٩()]+/g, '').replace(/\s+/g, ' ').trim();
+  const subButtons = () => [...document.querySelectorAll('main .subnav button, main .subnav a, main [data-act="msub"], main [role="tab"]')];
+  new MutationObserver(() => {
+    try {
+      if (!ui?.tab || ui.tab === 'home' || ui.tab === 'dash') return;
+      const labels = [...new Set(subButtons().map(b => clean(b.textContent)).filter(x => x && x.length < 40))];
+      if (!labels.length) return;
+      const S = subsSeen(), cur = new Set(S[ui.tab] || []); let n = cur.size; labels.forEach(l => cur.add(l));
+      if (cur.size !== n) { S[ui.tab] = [...cur].slice(0, 40); try { localStorage.setItem(HL_SUBS_KEY, JSON.stringify(S)); } catch (e) { /* ignore */ } }
+    } catch (e) { /* ignore */ }
+  }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
+
+  function links() {
+    const rk = hlRoleOf(), mine = hlTabsOf(rk);
+    const L = hlList().filter(x => x && x.tab && (x.roles || []).includes(rk) && mine.includes(x.tab));
+    if (!L.length) return '';
+    return `<div class="card qhlinks"><div class="qhl-grid">${L.map(x => `<button type="button" class="btn qhl-b" data-qhl="${esc(x.id)}">${esc(x.label || hlAllTabs().get(x.tab) || x.tab)}</button>`).join('')}</div></div>`;
+  }
+  /* الضغط: يفتح القسم، ثم القسم الداخلي إن حُدد (يُبحث عن زره في شريط القسم بعد رسمه) */
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-qhl]'); if (!b) return;
+    const x = hlList().find(y => y.id === b.dataset.qhl); if (!x) return;
+    A.tab({ v: x.tab });
+    if (!x.sub) return;
+    const want = clean(x.sub);
+    let tries = 0;
+    const go = () => {
+      const t = subButtons().find(el => clean(el.textContent) === want) || subButtons().find(el => clean(el.textContent).startsWith(want));
+      if (t) { if (!t.classList.contains('on')) t.click(); return; }
+      if (++tries < 15) setTimeout(go, 100); else toast(`لم أجد «${x.sub}» داخل القسم؛ عدّل الزر من الإعدادات`);
+    };
+    setTimeout(go, 50);
+  });
+
+  /* ===== «الإعدادات»: بطاقة إدارة الأزرار (للمدير) ===== */
+  function hlForm(x) {
+    const T = hlAllTabs(), isNew = !x;
+    x = x || { id: uid(), label: '', tab: '', sub: '', roles: [] };
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    const tabOpts = [...T].map(([k, l]) => `<option value="${esc(k)}" ${k === x.tab ? 'selected' : ''}>${esc(l)}</option>`).join('');
+    ov.innerHTML = `<div class="modal"><h2>${isNew ? 'زر جديد في الرئيسية' : 'تعديل زر'}</h2>
+      <label>القسم<select data-hl="tab"><option value="">— اختر —</option>${tabOpts}</select></label>
+      <label>القسم الداخلي (اختياري)<input data-hl="sub" list="qhl-subs" value="${esc(x.sub || '')}" placeholder="مثل: الطلاب، كشف الشهر…"><datalist id="qhl-subs"></datalist></label>
+      <p class="muted" style="font-size:.82rem;margin:-.3rem 0 .6rem">تظهر هنا اقتراحات أقسام القسم الداخلية بعد أن تفتحه مرة. اكتب الاسم كما يظهر على زره.</p>
+      <label>نص الزر<input data-hl="label" value="${esc(x.label || '')}" placeholder="يُترك فارغًا فيُكتب اسم القسم"></label>
+      <div class="lbl-s" style="margin:.4rem 0 .3rem">يظهر لـ</div>
+      <div data-hl="roles" style="display:flex;flex-wrap:wrap;gap:.3rem .9rem">${HL_ROLES.map(([k, l]) => `<label class="chk" style="margin:0"><input type="checkbox" value="${k}" ${(x.roles || []).includes(k) ? 'checked' : ''}> <span>${l}</span></label>`).join('')}</div>
+      <p class="muted" data-hl="warn" style="font-size:.82rem;margin:.5rem 0 0"></p>
+      <div class="row"><button type="button" class="btn primary" data-hl="save">حفظ</button><button type="button" class="btn" data-close>إلغاء</button></div></div>`;
+    document.body.appendChild(ov);
+    const $ = s => ov.querySelector(`[data-hl="${s}"]`);
+    ov.querySelector('[data-close]').onclick = () => ov.remove();
+    /* عند اختيار القسم: اقتراحات أقسامه الداخلية، والفئات التي لها هذا القسم (الأخرى لن يظهر لها الزر) */
+    const upd = (first) => {
+      const tab = $('tab').value, S = subsSeen()[tab] || [];
+      ov.querySelector('#qhl-subs').innerHTML = S.map(s => `<option value="${esc(s)}">`).join('');
+      const has = HL_ROLES.filter(([k]) => hlTabsOf(k).includes(tab)).map(([k]) => k);
+      $('roles').querySelectorAll('input').forEach(c => { const ok = has.includes(c.value); c.disabled = !!tab && !ok; if (!ok) c.checked = false; else if (first && isNew) c.checked = true; c.closest('label').style.opacity = c.disabled ? '.45' : ''; });
+      $('warn').textContent = tab ? (has.length ? 'الفئات الباهتة ليس لها هذا القسم، فلا يظهر لها الزر.' : 'لا توجد فئة لها هذا القسم.') : '';
+    };
+    $('tab').onchange = () => upd(true); upd(false);
+    $('save').onclick = () => {
+      const tab = $('tab').value, roles = [...$('roles').querySelectorAll('input:checked')].map(c => c.value);
+      if (!tab) { toast('اختر القسم'); return; }
+      if (!roles.length) { toast('اختر فئة واحدة على الأقل'); return; }
+      const y = { id: x.id, tab, sub: $('sub').value.trim(), label: $('label').value.trim(), roles };
+      const L = hlList().slice(), i = L.findIndex(z => z.id === y.id);
+      if (i >= 0) L[i] = y; else L.push(y);
+      db.settings.home_links = L; save(); ov.remove(); render(); toast('حُفظ الزر');
+    };
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    const baseSettings = adminViews.settings;
+    adminViews.settings = function () {
+      const h = baseSettings.apply(this, arguments), T = hlAllTabs(), L = hlList();
+      const rl = k => (HL_ROLES.find(r => r[0] === k) || [, k])[1];
+      const rows = L.map((x, i) => `<tr><td>${i + 1}</td><td><b>${esc(x.label || T.get(x.tab) || x.tab)}</b></td><td>${esc(T.get(x.tab) || x.tab)}${x.sub ? ` ← ${esc(x.sub)}` : ''}</td><td>${(x.roles || []).map(k => `<span class="tag">${esc(rl(k))}</span>`).join(' ')}</td>
+        <td style="white-space:nowrap"><button type="button" class="btn sm" data-hle="${esc(x.id)}">تعديل</button><button type="button" class="btn sm" data-hlu="${esc(x.id)}" ${i ? '' : 'disabled'} title="لأعلى">↑</button><button type="button" class="btn sm danger" data-hld="${esc(x.id)}">حذف</button></td></tr>`).join('');
+      return h + `<div class="card"><div class="bar"><h2 class="grow" style="margin:0">أزرار الرئيسية</h2><button type="button" class="btn primary" data-hla>+ زر</button></div>
+        <p class="muted" style="margin:.3rem 0 .7rem">أزرار تظهر في «الرئيسية» تحت الإعلانات، تفتح قسمًا أو قسمًا داخليًا فيه، ولكل زر الفئات التي يظهر لها.</p>
+        ${L.length ? `<div class="tbl"><table><tr><th>#</th><th>الزر</th><th>يفتح</th><th>يظهر لـ</th><th></th></tr>${rows}</table></div>` : empty('لا توجد أزرار بعد.')}</div>`;
+    };
+  });
+  document.addEventListener('click', e => {
+    if (session?.role !== 'admin') return;
+    if (e.target.closest('[data-hla]')) { hlForm(null); return; }
+    const ed = e.target.closest('[data-hle]'); if (ed) { hlForm(hlList().find(x => x.id === ed.dataset.hle)); return; }
+    const up = e.target.closest('[data-hlu]'); if (up) { const L = hlList().slice(), i = L.findIndex(x => x.id === up.dataset.hlu); if (i > 0) { [L[i - 1], L[i]] = [L[i], L[i - 1]]; db.settings.home_links = L; save(); render(); } return; }
+    const del = e.target.closest('[data-hld]'); if (del) { const x = hlList().find(y => y.id === del.dataset.hld); if (x) ask(`حذف زر «${x.label || hlAllTabs().get(x.tab) || x.tab}»؟`, () => { db.settings.home_links = hlList().filter(y => y.id !== x.id); save(); render(); }); }
+  });
+
   const css = document.createElement('style');
-  css.textContent = `.qnews.qn-imp{border-inline-start:4px solid #d9822b;background:#fdf3e6}
+  css.textContent = `.qhlinks{padding:.8rem}.qhl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.5rem}
+    .qhl-b{justify-content:center;text-align:center;min-height:48px;white-space:normal;line-height:1.35;font-weight:700}
+    .qnews.qn-imp{border-inline-start:4px solid #d9822b;background:#fdf3e6}
     .qnews.qn-urg{border-inline-start:4px solid var(--red,#b3372f);background:#fbeceb}
     .qnews.qn-old{opacity:.55}.qnews.qn-on{outline:2px solid var(--navy,#13294b);outline-offset:2px}
     .qn-tag{font-size:.75rem;margin-inline-end:.35rem}.qn-tag.qn-imp{background:#d9822b;color:#fff}.qn-tag.qn-urg{background:var(--red,#b3372f);color:#fff}
