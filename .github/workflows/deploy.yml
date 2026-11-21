@@ -38,6 +38,7 @@ jobs:
       - name: Deploy (production)
         if: steps.chk.outputs.skip != '1'
         run: |
+          echo "$GITHUB_SHA" > version.txt
           npx --yes vercel@39 pull --yes --environment=production --token="$VERCEL_TOKEN"
           npx --yes vercel@39 build --prod --token="$VERCEL_TOKEN"
           npx --yes vercel@39 deploy --prebuilt --prod --token="$VERCEL_TOKEN"
