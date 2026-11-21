@@ -211,7 +211,7 @@ function groups(db) {
   const g = [];
   const add = (name, table, pk, rows, conflict) => g.push({ name, table, pk, rows, conflict });
   /* priv_*: إعدادات خاصة بالمدير (مثل فئات الاشتراكات وخصوماتها) لا يقرؤها غيره على الخادم */
-  add('settings', 'settings', ['key'], ['org', 'theme', 'logo', 'block_msgs', 'col_labels', 'session_policy', 'priv_fees', 'priv_perms', 'priv_dups', 'icons', 'tests_cfg'].filter(k => db.settings?.[k] !== undefined).map(k => ({ key: k, value: db.settings[k] ?? null })));
+  add('settings', 'settings', ['key'], ['org', 'theme', 'logo', 'block_msgs', 'col_labels', 'session_policy', 'priv_fees', 'priv_perms', 'priv_dups', 'icons', 'tests_cfg', 'home_links'].filter(k => db.settings?.[k] !== undefined).map(k => ({ key: k, value: db.settings[k] ?? null })));
   add('places', 'places', ['id'], (db.places || []).map(p => ({ id: p.id, name: p.name, type: p.type || 'مسجد', address: p.address || '' })));
   add('staff', 'members', ['id'], ['admin', 'supervisor', 'teacher', 'accountant', 'placeadmin'].flatMap(r => (db[ROLE_COLL[r]] || []).map(m => memberRow(m, staffRole(m, r)))));
   add('halaqat', 'halaqat', ['id'], (db.halaqat || []).map(h => ({ id: h.id, name: h.name || '', teacher_id: nz(h.teacherId), supervisor_id: nz(h.supervisorId), place_id: nz(h.placeId), time: h.time || null })));
